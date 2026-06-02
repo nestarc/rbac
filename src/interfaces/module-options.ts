@@ -1,4 +1,4 @@
-import type { ModuleMetadata } from '@nestjs/common';
+import type { FactoryProvider, ModuleMetadata } from '@nestjs/common';
 import type { RbacAuditLogger } from './audit';
 import type { RbacSubjectResolver, RbacTenantResolver } from './resolvers';
 import type { RbacStorage } from './storage';
@@ -19,6 +19,6 @@ export interface RbacModuleOptions {
 }
 
 export interface RbacModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
-  inject?: unknown[];
-  useFactory: (...args: never[]) => RbacModuleOptions | Promise<RbacModuleOptions>;
+  inject?: FactoryProvider<RbacModuleOptions>['inject'];
+  useFactory: FactoryProvider<RbacModuleOptions>['useFactory'];
 }

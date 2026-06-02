@@ -6,7 +6,7 @@ export interface RbacResourceRef {
 }
 
 export interface RbacResourceResolver {
-  resolve(context: ExecutionContext): Promise<RbacResourceRef | undefined>;
+  resolve(context: ExecutionContext): Promise<RbacResourceRef | undefined> | RbacResourceRef | undefined;
 }
 
 export type RbacResourceResolverToken = Type<RbacResourceResolver>;

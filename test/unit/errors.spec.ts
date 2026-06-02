@@ -15,7 +15,15 @@ import {
   mapRbacErrorToHttpException,
 } from '../../src';
 import type {
+  ExecutionContext,
+  FactoryProvider,
+} from '@nestjs/common';
+import type {
+  RbacModuleAsyncOptions,
+  RbacModuleOptions,
   RbacRequirementOptions,
+  RbacResourceRef,
+  RbacResourceResolver,
   RbacResourceResolverFn,
   UpdateRoleInput,
 } from '../../src';
@@ -120,5 +128,35 @@ describe('RBAC public interface types', () => {
     expectTypeOf<RbacResourceResolverFn>().toMatchTypeOf<
       NonNullable<RbacRequirementOptions['resource']>
     >();
+  });
+
+  it('matches Nest factory provider typing for async module options', () => {
+    expectTypeOf<RbacModuleAsyncOptions['inject']>().toEqualTypeOf<
+      FactoryProvider<RbacModuleOptions>['inject']
+    >();
+    expectTypeOf<RbacModuleAsyncOptions['useFactory']>().toEqualTypeOf<
+      FactoryProvider<RbacModuleOptions>['useFactory']
+    >();
+
+    const asyncOptions = {
+      inject: ['RBAC_STORAGE'],
+      useFactory: (storage: RbacModuleOptions['storage']) => ({ storage }),
+    } satisfies RbacModuleAsyncOptions;
+
+    expect(asyncOptions.inject).toEqual(['RBAC_STORAGE']);
+  });
+
+  it('allows class resource resolvers to return synchronously', () => {
+    class SyncResourceResolver implements RbacResourceResolver {
+      resolve(context: ExecutionContext): RbacResourceRef | undefined {
+        void context;
+        return { type: 'project', id: 'project_1' };
+      }
+    }
+
+    expect(new SyncResourceResolver().resolve({} as ExecutionContext)).toEqual({
+      type: 'project',
+      id: 'project_1',
+    });
   });
 });
