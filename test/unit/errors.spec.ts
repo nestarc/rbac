@@ -21,28 +21,36 @@ import type {
 } from '../../src';
 
 describe('RBAC errors', () => {
-  it('stores stable codes, names, safe details, and native causes', () => {
+  it('stores stable codes, names, and direct safe details', () => {
+    const error = new RbacPermissionDeniedError({ permission: 'reports.write' });
+
+    expect(error).toBeInstanceOf(RbacError);
+    expect(error).toBeInstanceOf(RbacPermissionDeniedError);
+    expect(error.name).toBe('RbacPermissionDeniedError');
+    expect(error.code).toBe('RBAC_PERMISSION_DENIED');
+    expect(error.message).toBe('Permission denied');
+    expect(error.details).toEqual({ permission: 'reports.write' });
+  });
+
+  it('supports native causes without mixing them into details', () => {
     const cause = new Error('database timeout');
     const baseError = new RbacError('Configuration error', 'RBAC_CONFIG_ERROR', 500, {
       cause,
       details: { option: 'storage' },
     });
-    const error = new RbacPermissionDeniedError({
-      cause,
-      details: { permission: 'reports.write' },
-    });
+    const error = new RbacStorageError({ operation: 'list' }, { cause });
 
     expect(baseError).toBeInstanceOf(Error);
     expect(baseError.name).toBe('RbacError');
     expect(baseError.cause).toBe(cause);
     expect(baseError.details).toEqual({ option: 'storage' });
     expect(error).toBeInstanceOf(RbacError);
-    expect(error).toBeInstanceOf(RbacPermissionDeniedError);
-    expect(error.name).toBe('RbacPermissionDeniedError');
+    expect(error).toBeInstanceOf(RbacStorageError);
+    expect(error.name).toBe('RbacStorageError');
     expect(error.cause).toBe(cause);
-    expect(error.code).toBe('RBAC_PERMISSION_DENIED');
-    expect(error.message).toBe('Permission denied');
-    expect(error.details).toEqual({ permission: 'reports.write' });
+    expect(error.code).toBe('RBAC_STORAGE_ERROR');
+    expect(error.message).toBe('RBAC storage error');
+    expect(error.details).toEqual({ operation: 'list' });
   });
 
   it('maps subject missing to UnauthorizedException', () => {
@@ -77,10 +85,10 @@ describe('RBAC errors', () => {
 
   it('serializes only safe message and code in HTTP responses', () => {
     const exception = mapRbacErrorToHttpException(
-      new RbacBindingNotFoundError({
-        cause: new Error('connection string leaked'),
-        details: { bindingId: 'binding_1', secret: 'do-not-serialize' },
-      }),
+      new RbacBindingNotFoundError(
+        { bindingId: 'binding_1', secret: 'do-not-serialize' },
+        { cause: new Error('connection string leaked') },
+      ),
     );
 
     expect(exception.getResponse()).toEqual({
