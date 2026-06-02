@@ -9,9 +9,12 @@ import {
   RbacConfigError,
   RbacError,
   RbacPermissionDeniedError,
+  RbacPermissionNotFoundError,
+  RbacResourceMissingError,
   RbacRoleNotFoundError,
   RbacStorageError,
   RbacSubjectMissingError,
+  RbacTenantMissingError,
   mapRbacErrorToHttpException,
 } from '../../src';
 import type {
@@ -19,12 +22,24 @@ import type {
   FactoryProvider,
 } from '@nestjs/common';
 import type {
+  AssignRoleInput,
+  CreateRoleInput,
+  ListEffectiveRolesInput,
+  RbacAuditEvent,
+  RbacCanInput,
+  RbacDecision,
   RbacModuleAsyncOptions,
   RbacModuleOptions,
   RbacRequirementOptions,
   RbacResourceRef,
   RbacResourceResolver,
   RbacResourceResolverFn,
+  RbacResourceResolverToken,
+  RbacStorage,
+  RbacSubject,
+  RbacSubjectResolver,
+  RbacTenantResolver,
+  RevokeRoleInput,
   UpdateRoleInput,
 } from '../../src';
 
@@ -108,18 +123,71 @@ describe('RBAC errors', () => {
     expect(JSON.stringify(exception.getResponse())).not.toContain('do-not-serialize');
     expect(JSON.stringify(exception.getResponse())).not.toContain('connection string leaked');
   });
+
+  it.each([
+    [
+      new RbacConfigError(),
+      InternalServerErrorException,
+      { message: 'RBAC configuration error', code: 'RBAC_CONFIG_ERROR' },
+    ],
+    [
+      new RbacSubjectMissingError(),
+      UnauthorizedException,
+      { message: 'Subject missing', code: 'RBAC_SUBJECT_MISSING' },
+    ],
+    [
+      new RbacTenantMissingError(),
+      ForbiddenException,
+      { message: 'Tenant missing', code: 'RBAC_TENANT_MISSING' },
+    ],
+    [
+      new RbacResourceMissingError(),
+      ForbiddenException,
+      { message: 'Resource missing', code: 'RBAC_RESOURCE_MISSING' },
+    ],
+    [
+      new RbacPermissionDeniedError(),
+      ForbiddenException,
+      { message: 'Permission denied', code: 'RBAC_PERMISSION_DENIED' },
+    ],
+    [
+      new RbacRoleNotFoundError(),
+      ForbiddenException,
+      { message: 'Role not found', code: 'RBAC_ROLE_NOT_FOUND' },
+    ],
+    [
+      new RbacPermissionNotFoundError(),
+      ForbiddenException,
+      { message: 'Permission not found', code: 'RBAC_PERMISSION_NOT_FOUND' },
+    ],
+    [
+      new RbacBindingNotFoundError(),
+      ForbiddenException,
+      { message: 'Binding not found', code: 'RBAC_BINDING_NOT_FOUND' },
+    ],
+    [
+      new RbacStorageError(),
+      InternalServerErrorException,
+      { message: 'RBAC storage error', code: 'RBAC_STORAGE_ERROR' },
+    ],
+  ])('maps %s to its explicit HTTP exception response', (error, exception, response) => {
+    const httpException = mapRbacErrorToHttpException(error);
+
+    expect(httpException).toBeInstanceOf(exception);
+    expect(httpException.getResponse()).toEqual(response);
+  });
 });
 
 describe('RBAC public interface types', () => {
   it('treats role updates as partial patches keyed by roleId', () => {
     expectTypeOf<UpdateRoleInput>().toMatchTypeOf<{
       roleId: string;
-      tenantId?: string | null;
-      key?: string;
-      name?: string;
-      description?: string;
-      isSystem?: boolean;
-      permissions?: string[];
+      tenantId?: string | null | undefined;
+      key?: string | undefined;
+      name?: string | undefined;
+      description?: string | undefined;
+      isSystem?: boolean | undefined;
+      permissions?: string[] | undefined;
     }>();
     expectTypeOf<{ roleId: string }>().toMatchTypeOf<UpdateRoleInput>();
   });
@@ -139,11 +207,18 @@ describe('RBAC public interface types', () => {
     >();
 
     const asyncOptions = {
+      imports: undefined,
       inject: ['RBAC_STORAGE'],
       useFactory: (storage: RbacModuleOptions['storage']) => ({ storage }),
     } satisfies RbacModuleAsyncOptions;
+    const asyncOptionsWithMaybeInject = {
+      inject: undefined,
+      useFactory: () => ({ storage: {} as RbacModuleOptions['storage'] }),
+    } satisfies RbacModuleAsyncOptions;
 
+    expect(asyncOptions.imports).toBeUndefined();
     expect(asyncOptions.inject).toEqual(['RBAC_STORAGE']);
+    expect(asyncOptionsWithMaybeInject.inject).toBeUndefined();
   });
 
   it('allows class resource resolvers to return synchronously', () => {
@@ -158,5 +233,149 @@ describe('RBAC public interface types', () => {
       type: 'project',
       id: 'project_1',
     });
+
+    const resolverToken: RbacResourceResolverToken = Symbol('ProjectResolver');
+
+    expect(typeof resolverToken).toBe('symbol');
+  });
+
+  it('accepts explicit undefined in public pass-through input and option shapes', () => {
+    const fakeStorage: RbacStorage = {
+      findRole: () => Promise.resolve(null),
+      listRoles: () => Promise.resolve([]),
+      upsertRole: () =>
+        Promise.resolve({
+          id: 'role_1',
+          key: 'admin',
+          permissions: [],
+        }),
+      deleteRole: () => Promise.resolve(),
+      grantPermission: () => Promise.resolve(),
+      revokePermission: () => Promise.resolve(),
+      listRolePermissions: () => Promise.resolve([]),
+      assignRole: () =>
+        Promise.resolve({
+          id: 'binding_1',
+          subjectType: 'user',
+          subjectId: 'user_1',
+          roleId: 'role_1',
+        }),
+      revokeRole: () => Promise.resolve(),
+      listBindings: () => Promise.resolve([]),
+      listEffectiveRoles: () => Promise.resolve([]),
+      listEffectivePermissions: () => Promise.resolve([]),
+    };
+    const subject: RbacSubject = { type: 'user', id: 'user_1' };
+    const maybeSubject: RbacSubject | undefined = undefined;
+    const maybeSubjectResolver: RbacSubjectResolver | undefined = undefined;
+    const maybeTenantResolver: RbacTenantResolver | undefined = undefined;
+    const maybeTenantId: string | null | undefined = undefined;
+    const maybePermission: string | undefined = undefined;
+    const maybePermissions: string[] | undefined = undefined;
+    const maybeResource: RbacResourceRef | undefined = undefined;
+    const maybeResourceDeclaration: NonNullable<RbacRequirementOptions['resource']> | undefined =
+      undefined;
+    const maybeReason: string | undefined = undefined;
+    const maybeNow: Date | undefined = undefined;
+
+    const canInput: RbacCanInput = {
+      subject: maybeSubject,
+      tenantId: maybeTenantId,
+      tenantMode: undefined,
+      permission: maybePermission,
+      permissions: maybePermissions,
+      roleKey: undefined,
+      mode: undefined,
+      resource: maybeResource,
+      now: maybeNow,
+    };
+    const decision: RbacDecision = {
+      allowed: false,
+      reason: 'denied_subject_missing',
+      subject: maybeSubject,
+      tenantId: maybeTenantId,
+      permission: maybePermission,
+      permissions: maybePermissions,
+      roleKey: undefined,
+      mode: undefined,
+      matchedRoleKeys: undefined,
+      matchedPermissions: undefined,
+      resource: maybeResource,
+    };
+    const moduleOptions: RbacModuleOptions = {
+      storage: fakeStorage,
+      subjectResolver: maybeSubjectResolver,
+      tenantResolver: maybeTenantResolver,
+      auditLogger: undefined,
+      requireMetadata: undefined,
+      tenant: {
+        requiredByDefault: undefined,
+        allowGlobalRolesInTenant: undefined,
+      },
+      storageErrors: undefined,
+      logAllowedDecisions: undefined,
+      now: undefined,
+    };
+    const requirementOptions: RbacRequirementOptions = {
+      mode: undefined,
+      tenant: undefined,
+      resource: maybeResourceDeclaration,
+      reason: maybeReason,
+    };
+    const createRoleInput: CreateRoleInput = {
+      tenantId: maybeTenantId,
+      key: 'admin',
+      name: undefined,
+      description: undefined,
+      isSystem: undefined,
+      permissions: [],
+    };
+    const updateRoleInput: UpdateRoleInput = {
+      roleId: 'role_1',
+      tenantId: maybeTenantId,
+      key: undefined,
+      name: undefined,
+      description: undefined,
+      isSystem: undefined,
+      permissions: undefined,
+    };
+    const assignRoleInput: AssignRoleInput = {
+      tenantId: maybeTenantId,
+      subject,
+      roleId: 'role_1',
+      resource: maybeResource,
+      expiresAt: undefined,
+      metadata: undefined,
+    };
+    const revokeRoleInput: RevokeRoleInput = {
+      bindingId: 'binding_1',
+      revokedAt: undefined,
+    };
+    const listEffectiveRolesInput: ListEffectiveRolesInput = {
+      subject,
+      tenantId: maybeTenantId,
+      resource: maybeResource,
+      now: maybeNow,
+    };
+    const auditEvent: RbacAuditEvent = {
+      type: 'rbac.permission.denied',
+      tenantId: maybeTenantId,
+      subjectType: undefined,
+      subjectId: undefined,
+      metadata: undefined,
+    };
+
+    expect([
+      canInput,
+      decision,
+      moduleOptions,
+      requirementOptions,
+      createRoleInput,
+      updateRoleInput,
+      assignRoleInput,
+      revokeRoleInput,
+      listEffectiveRolesInput,
+      auditEvent,
+    ]).toHaveLength(10);
   });
 });

@@ -3,15 +3,16 @@ import type { RbacResourceResolverFn } from './resolvers';
 import type { RbacResourceResolverToken } from './resource';
 
 export interface RbacRequirementOptions {
-  mode?: RbacRequirementMode;
-  tenant?: 'required' | 'optional' | 'none';
+  mode?: RbacRequirementMode | undefined;
+  tenant?: 'required' | 'optional' | 'none' | undefined;
   resource?:
     | { type: string; idParam: string }
     | { type: string; idHeader: string }
     | { type: string; idQuery: string }
     | RbacResourceResolverFn
-    | RbacResourceResolverToken;
-  reason?: string;
+    | RbacResourceResolverToken
+    | undefined;
+  reason?: string | undefined;
 }
 
 export type RbacRequirement =

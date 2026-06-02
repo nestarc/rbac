@@ -9,22 +9,22 @@ export interface RbacRole {
 }
 
 export interface CreateRoleInput {
-  tenantId?: string | null;
+  tenantId?: string | null | undefined;
   key: string;
-  name?: string;
-  description?: string;
-  isSystem?: boolean;
+  name?: string | undefined;
+  description?: string | undefined;
+  isSystem?: boolean | undefined;
   permissions: string[];
 }
 
 export interface UpdateRoleInput {
   roleId: string;
-  tenantId?: string | null;
-  key?: string;
-  name?: string;
-  description?: string;
-  isSystem?: boolean;
-  permissions?: string[];
+  tenantId?: string | null | undefined;
+  key?: string | undefined;
+  name?: string | undefined;
+  description?: string | undefined;
+  isSystem?: boolean | undefined;
+  permissions?: string[] | undefined;
 }
 
 export interface DeleteRoleInput {
@@ -32,11 +32,11 @@ export interface DeleteRoleInput {
 }
 
 export interface ListRolesInput {
-  tenantId?: string | null;
+  tenantId?: string | null | undefined;
 }
 
 export interface FindRoleInput {
-  tenantId?: string | null;
+  tenantId?: string | null | undefined;
   key: string;
 }
 

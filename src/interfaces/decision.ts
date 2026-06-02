@@ -5,29 +5,29 @@ export type RbacTenantMode = 'required' | 'optional' | 'none';
 export type RbacRequirementMode = 'any' | 'all';
 
 export interface RbacCanInput {
-  subject?: RbacSubject;
-  tenantId?: string | null;
-  tenantMode?: RbacTenantMode;
-  permission?: string;
-  permissions?: string[];
-  roleKey?: string;
-  mode?: RbacRequirementMode;
-  resource?: RbacResourceRef;
-  now?: Date;
+  subject?: RbacSubject | undefined;
+  tenantId?: string | null | undefined;
+  tenantMode?: RbacTenantMode | undefined;
+  permission?: string | undefined;
+  permissions?: string[] | undefined;
+  roleKey?: string | undefined;
+  mode?: RbacRequirementMode | undefined;
+  resource?: RbacResourceRef | undefined;
+  now?: Date | undefined;
 }
 
 export interface RbacDecision {
   allowed: boolean;
   reason: RbacDecisionReason;
-  subject?: RbacSubject;
-  tenantId?: string | null;
-  permission?: string;
-  permissions?: string[];
-  roleKey?: string;
-  mode?: RbacRequirementMode;
-  matchedRoleKeys?: string[];
-  matchedPermissions?: string[];
-  resource?: RbacResourceRef;
+  subject?: RbacSubject | undefined;
+  tenantId?: string | null | undefined;
+  permission?: string | undefined;
+  permissions?: string[] | undefined;
+  roleKey?: string | undefined;
+  mode?: RbacRequirementMode | undefined;
+  matchedRoleKeys?: string[] | undefined;
+  matchedPermissions?: string[] | undefined;
+  resource?: RbacResourceRef | undefined;
 }
 
 export type RbacDecisionReason =

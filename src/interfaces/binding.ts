@@ -15,25 +15,25 @@ export interface RbacRoleBinding {
 }
 
 export interface AssignRoleInput {
-  tenantId?: string | null;
+  tenantId?: string | null | undefined;
   subject: RbacSubject;
   roleId: string;
-  resource?: RbacResourceRef;
-  expiresAt?: Date | null;
-  metadata?: Record<string, unknown>;
+  resource?: RbacResourceRef | undefined;
+  expiresAt?: Date | null | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export type AssignRoleStorageInput = AssignRoleInput;
 
 export interface RevokeRoleInput {
   bindingId: string;
-  revokedAt?: Date;
+  revokedAt?: Date | undefined;
 }
 
 export type RevokeRoleStorageInput = RevokeRoleInput;
 
 export interface ListBindingsInput {
-  tenantId?: string | null;
+  tenantId?: string | null | undefined;
   subject: RbacSubject;
 }
 

@@ -21,9 +21,9 @@ import type { RbacSubject } from './subject';
 
 export interface ListEffectiveRolesInput {
   subject: RbacSubject;
-  tenantId?: string | null;
-  resource?: RbacResourceRef;
-  now?: Date;
+  tenantId?: string | null | undefined;
+  resource?: RbacResourceRef | undefined;
+  now?: Date | undefined;
 }
 
 export type ListEffectivePermissionsInput = ListEffectiveRolesInput;

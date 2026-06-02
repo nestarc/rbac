@@ -8,10 +8,10 @@ export interface RbacAuditEvent {
     | 'rbac.role.assigned'
     | 'rbac.role.revoked'
     | 'rbac.permission.denied';
-  tenantId?: string | null;
-  subjectType?: string;
-  subjectId?: string;
-  metadata?: Record<string, unknown>;
+  tenantId?: string | null | undefined;
+  subjectType?: string | undefined;
+  subjectId?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface RbacAuditLogger {
