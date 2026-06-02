@@ -3,18 +3,43 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  RbacBindingNotFoundError,
+  RbacConfigError,
+  RbacError,
   RbacPermissionDeniedError,
+  RbacRoleNotFoundError,
   RbacStorageError,
   RbacSubjectMissingError,
   mapRbacErrorToHttpException,
 } from '../../src';
+import type {
+  RbacRequirementOptions,
+  RbacResourceResolverFn,
+  UpdateRoleInput,
+} from '../../src';
 
 describe('RBAC errors', () => {
-  it('stores stable codes and safe details', () => {
-    const error = new RbacPermissionDeniedError({ permission: 'reports.write' });
+  it('stores stable codes, names, safe details, and native causes', () => {
+    const cause = new Error('database timeout');
+    const baseError = new RbacError('Configuration error', 'RBAC_CONFIG_ERROR', 500, {
+      cause,
+      details: { option: 'storage' },
+    });
+    const error = new RbacPermissionDeniedError({
+      cause,
+      details: { permission: 'reports.write' },
+    });
 
+    expect(baseError).toBeInstanceOf(Error);
+    expect(baseError.name).toBe('RbacError');
+    expect(baseError.cause).toBe(cause);
+    expect(baseError.details).toEqual({ option: 'storage' });
+    expect(error).toBeInstanceOf(RbacError);
+    expect(error).toBeInstanceOf(RbacPermissionDeniedError);
+    expect(error.name).toBe('RbacPermissionDeniedError');
+    expect(error.cause).toBe(cause);
     expect(error.code).toBe('RBAC_PERMISSION_DENIED');
     expect(error.message).toBe('Permission denied');
     expect(error.details).toEqual({ permission: 'reports.write' });
@@ -36,5 +61,56 @@ describe('RBAC errors', () => {
     expect(mapRbacErrorToHttpException(new RbacStorageError())).toBeInstanceOf(
       InternalServerErrorException,
     );
+  });
+
+  it('maps config errors to InternalServerErrorException', () => {
+    expect(mapRbacErrorToHttpException(new RbacConfigError())).toBeInstanceOf(
+      InternalServerErrorException,
+    );
+  });
+
+  it('maps not found errors to ForbiddenException', () => {
+    expect(mapRbacErrorToHttpException(new RbacRoleNotFoundError())).toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('serializes only safe message and code in HTTP responses', () => {
+    const exception = mapRbacErrorToHttpException(
+      new RbacBindingNotFoundError({
+        cause: new Error('connection string leaked'),
+        details: { bindingId: 'binding_1', secret: 'do-not-serialize' },
+      }),
+    );
+
+    expect(exception.getResponse()).toEqual({
+      message: 'Binding not found',
+      code: 'RBAC_BINDING_NOT_FOUND',
+    });
+    expect(exception.getResponse()).not.toHaveProperty('details');
+    expect(exception.getResponse()).not.toHaveProperty('cause');
+    expect(JSON.stringify(exception.getResponse())).not.toContain('do-not-serialize');
+    expect(JSON.stringify(exception.getResponse())).not.toContain('connection string leaked');
+  });
+});
+
+describe('RBAC public interface types', () => {
+  it('treats role updates as partial patches keyed by roleId', () => {
+    expectTypeOf<UpdateRoleInput>().toMatchTypeOf<{
+      roleId: string;
+      tenantId?: string | null;
+      key?: string;
+      name?: string;
+      description?: string;
+      isSystem?: boolean;
+      permissions?: string[];
+    }>();
+    expectTypeOf<{ roleId: string }>().toMatchTypeOf<UpdateRoleInput>();
+  });
+
+  it('allows function resource resolvers in requirement options', () => {
+    expectTypeOf<RbacResourceResolverFn>().toMatchTypeOf<
+      NonNullable<RbacRequirementOptions['resource']>
+    >();
   });
 });

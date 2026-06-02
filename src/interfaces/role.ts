@@ -17,8 +17,14 @@ export interface CreateRoleInput {
   permissions: string[];
 }
 
-export interface UpdateRoleInput extends CreateRoleInput {
-  roleId?: string;
+export interface UpdateRoleInput {
+  roleId: string;
+  tenantId?: string | null;
+  key?: string;
+  name?: string;
+  description?: string;
+  isSystem?: boolean;
+  permissions?: string[];
 }
 
 export interface DeleteRoleInput {
