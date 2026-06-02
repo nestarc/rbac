@@ -28,8 +28,11 @@ import type {
   RbacAuditEvent,
   RbacCanInput,
   RbacDecision,
+  RbacHeaderResourceDeclaration,
   RbacModuleAsyncOptions,
   RbacModuleOptions,
+  RbacParamResourceDeclaration,
+  RbacQueryResourceDeclaration,
   RbacRequirementOptions,
   RbacResourceRef,
   RbacResourceResolver,
@@ -197,16 +200,42 @@ describe('RBAC public interface types', () => {
     expectTypeOf<RbacResourceResolverFn>().toMatchTypeOf<
       NonNullable<RbacRequirementOptions['resource']>
     >();
+    expectTypeOf<RbacParamResourceDeclaration>().toMatchTypeOf<
+      NonNullable<RbacRequirementOptions['resource']>
+    >();
+    expectTypeOf<RbacHeaderResourceDeclaration>().toMatchTypeOf<
+      NonNullable<RbacRequirementOptions['resource']>
+    >();
+    expectTypeOf<RbacQueryResourceDeclaration>().toMatchTypeOf<
+      NonNullable<RbacRequirementOptions['resource']>
+    >();
 
     const resolverToken: RbacResourceResolverToken = Symbol('ProjectResolver');
     const resolverTokenRef: RbacResourceResolverTokenRef = { resolverToken };
     const requirementOptions: RbacRequirementOptions = { resource: resolverTokenRef };
+    const paramResource: RbacRequirementOptions = {
+      resource: { type: 'project', idParam: 'projectId' },
+    };
+    const headerResource: RbacRequirementOptions = {
+      resource: { type: 'project', idHeader: 'x-project-id' },
+    };
+    const queryResource: RbacRequirementOptions = {
+      resource: { type: 'project', idQuery: 'projectId' },
+    };
+
+    const mixedResourceLiteral = { type: 'project', idParam: 'projectId', idHeader: 'x-project-id' };
+    // @ts-expect-error Built-in resource declarations must choose exactly one source.
+    const mixedResource: RbacRequirementOptions = { resource: mixedResourceLiteral };
 
     expect(requirementOptions.resource).toEqual(resolverTokenRef);
+    expect(paramResource.resource).toEqual({ type: 'project', idParam: 'projectId' });
+    expect(headerResource.resource).toEqual({ type: 'project', idHeader: 'x-project-id' });
+    expect(queryResource.resource).toEqual({ type: 'project', idQuery: 'projectId' });
 
     // @ts-expect-error Bare DI resolver tokens are ambiguous with direct function resolvers.
     const invalidRequirementOptions: RbacRequirementOptions = { resource: resolverToken };
 
+    expect(mixedResource).toBeDefined();
     expect(invalidRequirementOptions).toBeDefined();
   });
 
@@ -247,8 +276,15 @@ describe('RBAC public interface types', () => {
     });
 
     const resolverToken: RbacResourceResolverToken = Symbol('ProjectResolver');
+    const classResolverTokenRef: RbacResourceResolverTokenRef = {
+      resolverToken: SyncResourceResolver,
+    };
+    const classRequirementOptions: RbacRequirementOptions = {
+      resource: classResolverTokenRef,
+    };
 
     expect(typeof resolverToken).toBe('symbol');
+    expect(classRequirementOptions.resource).toEqual(classResolverTokenRef);
   });
 
   it('accepts explicit undefined in public pass-through input and option shapes', () => {

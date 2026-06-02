@@ -2,13 +2,37 @@ import type { RbacRequirementMode } from './decision';
 import type { RbacResourceResolverFn } from './resolvers';
 import type { RbacResourceResolverTokenRef } from './resource';
 
+export type RbacParamResourceDeclaration = {
+  type: string;
+  idParam: string;
+  idHeader?: never;
+  idQuery?: never;
+};
+
+export type RbacHeaderResourceDeclaration = {
+  type: string;
+  idHeader: string;
+  idParam?: never;
+  idQuery?: never;
+};
+
+export type RbacQueryResourceDeclaration = {
+  type: string;
+  idQuery: string;
+  idParam?: never;
+  idHeader?: never;
+};
+
+export type RbacBuiltInResourceDeclaration =
+  | RbacParamResourceDeclaration
+  | RbacHeaderResourceDeclaration
+  | RbacQueryResourceDeclaration;
+
 export interface RbacRequirementOptions {
   mode?: RbacRequirementMode | undefined;
   tenant?: 'required' | 'optional' | 'none' | undefined;
   resource?:
-    | { type: string; idParam: string }
-    | { type: string; idHeader: string }
-    | { type: string; idQuery: string }
+    | RbacBuiltInResourceDeclaration
     | RbacResourceResolverFn
     | RbacResourceResolverTokenRef
     | undefined;
