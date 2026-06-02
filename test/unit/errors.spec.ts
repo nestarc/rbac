@@ -35,6 +35,7 @@ import type {
   RbacResourceResolver,
   RbacResourceResolverFn,
   RbacResourceResolverToken,
+  RbacResourceResolverTokenRef,
   RbacStorage,
   RbacSubject,
   RbacSubjectResolver,
@@ -196,6 +197,17 @@ describe('RBAC public interface types', () => {
     expectTypeOf<RbacResourceResolverFn>().toMatchTypeOf<
       NonNullable<RbacRequirementOptions['resource']>
     >();
+
+    const resolverToken: RbacResourceResolverToken = Symbol('ProjectResolver');
+    const resolverTokenRef: RbacResourceResolverTokenRef = { resolverToken };
+    const requirementOptions: RbacRequirementOptions = { resource: resolverTokenRef };
+
+    expect(requirementOptions.resource).toEqual(resolverTokenRef);
+
+    // @ts-expect-error Bare DI resolver tokens are ambiguous with direct function resolvers.
+    const invalidRequirementOptions: RbacRequirementOptions = { resource: resolverToken };
+
+    expect(invalidRequirementOptions).toBeDefined();
   });
 
   it('matches Nest factory provider typing for async module options', () => {
@@ -270,7 +282,6 @@ describe('RBAC public interface types', () => {
     const maybeSubjectResolver: RbacSubjectResolver | undefined = undefined;
     const maybeTenantResolver: RbacTenantResolver | undefined = undefined;
     const maybeTenantId: string | null | undefined = undefined;
-    const maybePermission: string | undefined = undefined;
     const maybePermissions: string[] | undefined = undefined;
     const maybeResource: RbacResourceRef | undefined = undefined;
     const maybeResourceDeclaration: NonNullable<RbacRequirementOptions['resource']> | undefined =
@@ -282,19 +293,38 @@ describe('RBAC public interface types', () => {
       subject: maybeSubject,
       tenantId: maybeTenantId,
       tenantMode: undefined,
-      permission: maybePermission,
+      permission: 'reports.read',
       permissions: maybePermissions,
-      roleKey: undefined,
       mode: undefined,
       resource: maybeResource,
       now: maybeNow,
     };
+    const roleCanInput: RbacCanInput = {
+      subject: maybeSubject,
+      tenantId: maybeTenantId,
+      roleKey: 'admin',
+      resource: maybeResource,
+      now: maybeNow,
+    };
+    const permissionsCanInput: RbacCanInput = {
+      permissions: ['reports.read'],
+      mode: 'all',
+    };
+    // @ts-expect-error A requirement must include a permission family or role family.
+    const missingRequirementCanInput: RbacCanInput = { subject: maybeSubject };
+    // @ts-expect-error Permission and role requirements are mutually exclusive.
+    const mixedRequirementCanInput: RbacCanInput = {
+      permission: 'reports.read',
+      roleKey: 'admin',
+    };
+    // @ts-expect-error Role requirements do not use permission aggregation mode.
+    const roleModeCanInput: RbacCanInput = { roleKey: 'admin', mode: 'any' };
     const decision: RbacDecision = {
       allowed: false,
       reason: 'denied_subject_missing',
       subject: maybeSubject,
       tenantId: maybeTenantId,
-      permission: maybePermission,
+      permission: undefined,
       permissions: maybePermissions,
       roleKey: undefined,
       mode: undefined,
@@ -367,6 +397,11 @@ describe('RBAC public interface types', () => {
 
     expect([
       canInput,
+      roleCanInput,
+      permissionsCanInput,
+      missingRequirementCanInput,
+      mixedRequirementCanInput,
+      roleModeCanInput,
       decision,
       moduleOptions,
       requirementOptions,
@@ -376,6 +411,6 @@ describe('RBAC public interface types', () => {
       revokeRoleInput,
       listEffectiveRolesInput,
       auditEvent,
-    ]).toHaveLength(10);
+    ]).toHaveLength(15);
   });
 });

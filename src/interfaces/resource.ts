@@ -10,3 +10,7 @@ export interface RbacResourceResolver {
 }
 
 export type RbacResourceResolverToken = InjectionToken<RbacResourceResolver>;
+
+export interface RbacResourceResolverTokenRef {
+  resolverToken: RbacResourceResolverToken;
+}

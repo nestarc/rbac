@@ -4,17 +4,38 @@ import type { RbacSubject } from './subject';
 export type RbacTenantMode = 'required' | 'optional' | 'none';
 export type RbacRequirementMode = 'any' | 'all';
 
-export interface RbacCanInput {
+export interface RbacCanBaseInput {
   subject?: RbacSubject | undefined;
   tenantId?: string | null | undefined;
   tenantMode?: RbacTenantMode | undefined;
-  permission?: string | undefined;
-  permissions?: string[] | undefined;
-  roleKey?: string | undefined;
-  mode?: RbacRequirementMode | undefined;
   resource?: RbacResourceRef | undefined;
   now?: Date | undefined;
 }
+
+export type RbacPermissionCanInput = RbacCanBaseInput &
+  (
+    | {
+        permission: string;
+        permissions?: string[] | undefined;
+        roleKey?: never;
+        mode?: RbacRequirementMode | undefined;
+      }
+    | {
+        permission?: undefined;
+        permissions: string[];
+        roleKey?: never;
+        mode?: RbacRequirementMode | undefined;
+      }
+  );
+
+export type RbacRoleCanInput = RbacCanBaseInput & {
+  roleKey: string;
+  permission?: never;
+  permissions?: never;
+  mode?: never;
+};
+
+export type RbacCanInput = RbacPermissionCanInput | RbacRoleCanInput;
 
 export interface RbacDecision {
   allowed: boolean;

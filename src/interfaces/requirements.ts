@@ -1,6 +1,6 @@
 import type { RbacRequirementMode } from './decision';
 import type { RbacResourceResolverFn } from './resolvers';
-import type { RbacResourceResolverToken } from './resource';
+import type { RbacResourceResolverTokenRef } from './resource';
 
 export interface RbacRequirementOptions {
   mode?: RbacRequirementMode | undefined;
@@ -10,7 +10,7 @@ export interface RbacRequirementOptions {
     | { type: string; idHeader: string }
     | { type: string; idQuery: string }
     | RbacResourceResolverFn
-    | RbacResourceResolverToken
+    | RbacResourceResolverTokenRef
     | undefined;
   reason?: string | undefined;
 }
