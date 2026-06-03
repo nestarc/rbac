@@ -272,10 +272,11 @@ export class PrismaRbacStorage implements RbacStorage {
   ): Promise<RbacRole> {
     try {
       return await this.prisma.$transaction(async (tx) => {
-      const explicitRoleId = 'roleId' in input ? input.roleId : undefined;
+      const hasExplicitRoleId = 'roleId' in input;
+      const explicitRoleId = hasExplicitRoleId ? input.roleId : undefined;
       let existing: PrismaRoleRecord | null;
 
-      if ('roleId' in input) {
+      if (hasExplicitRoleId) {
         existing = (await tx.rbacRole.findFirst({
           where: { id: explicitRoleId },
         })) as PrismaRoleRecord | null;
@@ -292,7 +293,9 @@ export class PrismaRbacStorage implements RbacStorage {
           ? normalizeTenantId(input.tenantId)
           : (existing?.tenantId ?? null);
 
-      await this.assertUniqueRoleKey(tx, id, tenantId, key);
+      if (hasExplicitRoleId) {
+        await this.assertUniqueRoleKey(tx, id, tenantId, key);
+      }
 
       const role = (await tx.rbacRole.upsert({
         where: { id },
