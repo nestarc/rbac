@@ -17,6 +17,7 @@ import {
   type RbacCanInput,
   type RbacModuleOptions,
   type RbacResourceResolver,
+  type RbacResourceResolverFn,
 } from '../../src';
 
 const getHandler = (target: object, key: string) =>
@@ -78,6 +79,17 @@ describe('RbacModule', () => {
 });
 
 describe('RbacGuard', () => {
+  const subject = { type: 'user' as const, id: 'user_1', tenantId: 'tenant_1' };
+
+  const expectResourceMissing = async (promise: Promise<unknown>) => {
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        message: 'Resource missing',
+        code: 'RBAC_RESOURCE_MISSING',
+      },
+    });
+  };
+
   it('allows routes without RBAC metadata by default', async () => {
     class ReportsController {
       list() {
@@ -121,7 +133,7 @@ describe('RbacGuard', () => {
     const resourceResolver = vi.fn(() => ({ type: 'report', id: 'report_1' }));
 
     class ReportsController {
-      @Can('reports.read', { resource: resourceResolver })
+      @Can('reports.read', { resource: resourceResolver as unknown as RbacResourceResolverFn })
       read() {
         return undefined;
       }
@@ -158,7 +170,6 @@ describe('RbacGuard', () => {
       }
     }
     const handler = getHandler(ReportsController.prototype, 'read');
-    const subject = { type: 'user' as const, id: 'user_1', tenantId: 'tenant_1' };
     const can = vi.fn((input: RbacCanInput) => {
       void input;
       return Promise.resolve({
@@ -209,7 +220,6 @@ describe('RbacGuard', () => {
     const RESOURCE_RESOLVER = Symbol('RESOURCE_RESOLVER');
     const resolve = vi.fn(() => ({ type: 'report', id: 'report_1' }));
     const resourceResolver: RbacResourceResolver = { resolve };
-    const subject = { type: 'user' as const, id: 'user_1', tenantId: 'tenant_1' };
     const can = vi.fn((input: RbacCanInput) => {
       void input;
       return Promise.resolve({
@@ -251,5 +261,295 @@ describe('RbacGuard', () => {
       resource: { type: 'report', id: 'report_1' },
     });
     expect(moduleRef.get(ModuleRef)).toBeInstanceOf(ModuleRef);
+  });
+
+  it('throws RBAC_RESOURCE_MISSING when a function resource resolver returns undefined', async () => {
+    const resourceResolver = vi.fn(() => undefined);
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read', { resource: resourceResolver as unknown as RbacResourceResolverFn })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expectResourceMissing(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    );
+    expect(can).not.toHaveBeenCalled();
+  });
+
+  it('throws RBAC_RESOURCE_MISSING when a function resource resolver returns null', async () => {
+    const resourceResolver = vi.fn(() => null);
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read', { resource: resourceResolver as unknown as RbacResourceResolverFn })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expectResourceMissing(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    );
+    expect(can).not.toHaveBeenCalled();
+  });
+
+  it('throws RBAC_RESOURCE_MISSING when a function resource resolver returns malformed resources', async () => {
+    const malformedResources = [
+      {},
+      { type: '', id: '' },
+      { type: '   ', id: 'report_1' },
+      { type: 'report' },
+    ];
+
+    for (const malformedResource of malformedResources) {
+      const resourceResolver = vi.fn(() => malformedResource);
+      const can = vi.fn((input: RbacCanInput) => {
+        void input;
+        return Promise.resolve({
+          allowed: true,
+          reason: 'allowed_by_role_permission' as const,
+        });
+      });
+
+      class ReportsController {
+        @Can('reports.read', { resource: resourceResolver as unknown as RbacResourceResolverFn })
+        read() {
+          return undefined;
+        }
+      }
+      const handler = getHandler(ReportsController.prototype, 'read');
+      const moduleRef = await Test.createTestingModule({
+        providers: [
+          Reflector,
+          RbacGuard,
+          { provide: RbacService, useValue: { can } },
+          {
+            provide: RBAC_OPTIONS,
+            useValue: {
+              storage: new InMemoryRbacStorage(),
+              subjectResolver: () => subject,
+            } satisfies RbacModuleOptions,
+          },
+        ],
+      }).compile();
+
+      await expectResourceMissing(
+        moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+      );
+      expect(can).not.toHaveBeenCalled();
+    }
+  });
+
+  it('throws RBAC_RESOURCE_MISSING when a resolver token provider returns a malformed resource', async () => {
+    const RESOURCE_RESOLVER = Symbol('RESOURCE_RESOLVER');
+    const resolve = vi.fn(() => ({ type: 'report', id: '   ' }));
+    const resourceResolver: RbacResourceResolver = { resolve };
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read', { resource: { resolverToken: RESOURCE_RESOLVER } })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        { provide: RESOURCE_RESOLVER, useValue: resourceResolver },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expectResourceMissing(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    );
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(can).not.toHaveBeenCalled();
+  });
+
+  it('passes valid function resource resolver output to RbacService', async () => {
+    const resource = { type: 'report', id: 'report_1' };
+    const resourceResolver = vi.fn(() => resource);
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read', { resource: resourceResolver })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).resolves.toBe(true);
+
+    expect(can.mock.calls[0]?.[0]).toMatchObject({
+      permissions: ['reports.read'],
+      resource,
+    });
+  });
+
+  it('maps missing tenant decisions to coded forbidden responses', async () => {
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: false,
+        reason: 'denied_tenant_missing' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read')
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).rejects.toMatchObject({
+      response: {
+        message: 'Tenant missing',
+        code: 'RBAC_TENANT_MISSING',
+      },
+    });
+  });
+
+  it('maps denied permission decisions to coded forbidden responses', async () => {
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: false,
+        reason: 'denied_no_matching_permission' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read')
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).rejects.toMatchObject({
+      response: {
+        message: 'Permission denied',
+        code: 'RBAC_PERMISSION_DENIED',
+      },
+    });
   });
 });

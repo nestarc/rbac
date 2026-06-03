@@ -216,12 +216,15 @@ export class RbacGuard implements CanActivate {
     }
   }
 
-  private ensureResource(resource: RbacResourceRef | undefined): RbacResourceRef {
-    if (resource === undefined) {
+  private ensureResource(resource: unknown): RbacResourceRef {
+    if (!isRecord(resource) || !isNonEmptyString(resource.type) || !isNonEmptyString(resource.id)) {
       throw mapRbacErrorToHttpException(new RbacResourceMissingError());
     }
 
-    return resource;
+    return {
+      type: resource.type.trim(),
+      id: resource.id.trim(),
+    };
   }
 
   private deniedDecisionToHttpException(reason: RbacDecisionReason) {
