@@ -19,6 +19,7 @@
     "docs/*.md",
     "examples",
     "prisma",
+    "changelog.md",
     "README.md",
     "LICENSE"
   ],
