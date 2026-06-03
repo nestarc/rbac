@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     prisma: 'src/prisma.ts',
+    testing: 'src/testing.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
