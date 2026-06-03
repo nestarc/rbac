@@ -16,6 +16,9 @@
   },
   "files": [
     "dist",
+    "docs/*.md",
+    "examples",
+    "prisma",
     "README.md",
     "LICENSE"
   ],
