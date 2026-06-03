@@ -5,3 +5,5 @@ export type RbacTenantIdGetter = () => string | null | undefined;
 export function createTenancyTenantResolver(getTenantId: RbacTenantIdGetter): RbacTenantResolver {
   return () => getTenantId();
 }
+
+export const createNestarcTenancyResolver = createTenancyTenantResolver;

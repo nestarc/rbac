@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
-import { Controller, Get, Module, Post, UseGuards, type ExecutionContext } from '@nestjs/common';
+import { Controller, Get, Module, Post, type ExecutionContext } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -48,26 +49,28 @@ class TestRbacController {
     return { ok: true };
   }
 
-  @UseGuards(RbacGuard)
   @Can('reports.read')
   @Get('/reports')
   readReports() {
     return { ok: true };
   }
 
-  @UseGuards(RbacGuard)
   @Can('reports.write')
   @Post('/reports')
   writeReports() {
     return { ok: true };
   }
 
-  @UseGuards(RbacGuard)
   @Can('project.member.invite', {
     resource: { type: 'project', idParam: 'projectId' },
   })
   @Post('/projects/:projectId/invitations')
   inviteProjectMember() {
+    return { ok: true };
+  }
+
+  @Get('/metadata-required')
+  metadataRequired() {
     return { ok: true };
   }
 }
@@ -87,9 +90,11 @@ describe('RbacGuard HTTP behavior', () => {
           storage,
           tenant: { requiredByDefault: true },
           subjectResolver,
+          requireMetadata: true,
         }),
       ],
       controllers: [TestRbacController],
+      providers: [{ provide: APP_GUARD, useClass: RbacGuard }],
     })
     class TestRbacModule {}
 
@@ -130,6 +135,12 @@ describe('RbacGuard HTTP behavior', () => {
 
   it('skips RBAC for health checks', async () => {
     await request(httpServer()).get('/health').expect(200).expect({ ok: true });
+  });
+
+  it('runs as APP_GUARD and rejects routes without RBAC metadata', async () => {
+    const response = await request(httpServer()).get('/metadata-required').expect(403);
+
+    expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
   });
 
   it('returns 401 with RBAC_SUBJECT_MISSING when the subject is missing', async () => {

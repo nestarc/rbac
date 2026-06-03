@@ -7,11 +7,15 @@ do not import optional peer packages at runtime.
 
 `createTenancyTenantResolver()` accepts a callback. The callback can read from the
 tenant context used by the consuming application, including async-local storage or
-a request-scoped provider.
+a request-scoped provider. `createNestarcTenancyResolver()` is exported as a
+PRD-compatible alias with the same callback signature.
 
 ```ts
 import { InMemoryRbacStorage, RbacModule } from '@nestarc/rbac';
-import { createTenancyTenantResolver } from '@nestarc/rbac/integrations/tenancy';
+import {
+  createNestarcTenancyResolver,
+  createTenancyTenantResolver,
+} from '@nestarc/rbac/integrations/tenancy';
 
 const tenancyContext = {
   getTenantId: () => 'tenant_1',
@@ -21,6 +25,11 @@ RbacModule.forRoot({
   storage: new InMemoryRbacStorage(),
   tenantResolver: createTenancyTenantResolver(() => tenancyContext.getTenantId()),
   tenant: { requiredByDefault: true },
+});
+
+RbacModule.forRoot({
+  storage: new InMemoryRbacStorage(),
+  tenantResolver: createNestarcTenancyResolver(() => tenancyContext.getTenantId()),
 });
 ```
 
@@ -87,4 +96,3 @@ RbacModule.forRoot({
 ```
 
 RBAC does not log `subject.attributes` by default.
-

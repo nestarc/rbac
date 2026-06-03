@@ -6,20 +6,20 @@ They throw plain `Error` instances instead of depending on Vitest or Jest global
 ```ts
 import { Test } from '@nestjs/testing';
 import { RbacService } from '@nestarc/rbac';
-import { TestRbacModule, expectAllowed, expectDenied, rbacUser } from '@nestarc/rbac/testing';
+import { TestRbacModule, expectAllowed, expectDenied, user } from '@nestarc/rbac/testing';
 
 const moduleRef = await Test.createTestingModule({
   imports: [
     TestRbacModule.forRoot({
       tenant: { requiredByDefault: true },
-      subject: rbacUser('user_1', 'tenant_1'),
+      subject: user('user_1', 'tenant_1'),
     }),
   ],
 }).compile();
 
 const rbac = moduleRef.get(RbacService);
-const subject = rbacUser('user_1', 'tenant_1');
-const role = await rbac.createRole({
+const subject = user('user_1', 'tenant_1');
+await rbac.createRole({
   tenantId: 'tenant_1',
   key: 'viewer',
   permissions: ['reports.read'],
@@ -28,7 +28,7 @@ const role = await rbac.createRole({
 await rbac.assignRole({
   tenantId: 'tenant_1',
   subject,
-  roleId: role.id,
+  roleKey: 'viewer',
 });
 
 await expectAllowed(rbac, {
@@ -57,7 +57,7 @@ for a fixed test subject, or `subjectResolver` to mirror application auth behavi
 ```ts
 TestRbacModule.forRoot({
   storage: customStorage,
-  subject: rbacUser('user_1', 'tenant_1'),
+  subject: user('user_1', 'tenant_1'),
   tenant: { requiredByDefault: true },
 });
 ```
@@ -65,13 +65,54 @@ TestRbacModule.forRoot({
 ## Subject Fixtures
 
 ```ts
-import { rbacApiKey, rbacServiceAccount, rbacUser } from '@nestarc/rbac/testing';
+import {
+  apiKey,
+  rbacApiKey,
+  rbacServiceAccount,
+  rbacUser,
+  serviceAccount,
+  user,
+} from '@nestarc/rbac/testing';
 
-const user = rbacUser('user_1', 'tenant_1');
-const apiKey = rbacApiKey('key_1', 'tenant_1');
-const service = rbacServiceAccount('worker_1');
+const subject = user('user_1', 'tenant_1');
+const keySubject = apiKey('key_1', 'tenant_1');
+const service = serviceAccount('worker_1');
+
+// Legacy explicit names remain available.
+const sameSubject = rbacUser('user_1', 'tenant_1');
+const sameKeySubject = rbacApiKey('key_1', 'tenant_1');
+const sameService = rbacServiceAccount('worker_1');
 ```
 
 Use service-level `rbac.can()` or controller tests with `RbacGuard` depending on
 whether the test is checking RBAC decisions or full HTTP wiring.
 
+## `withTenantRbac()` Recipe
+
+Tests that need the same tenant-aware module setup repeatedly can keep a small
+local helper around `TestRbacModule.forRoot()`:
+
+```ts
+import { Test } from '@nestjs/testing';
+import { RbacService } from '@nestarc/rbac';
+import { TestRbacModule, user } from '@nestarc/rbac/testing';
+
+export async function withTenantRbac(tenantId = 'tenant_1') {
+  const subject = user('user_1', tenantId);
+  const moduleRef = await Test.createTestingModule({
+    imports: [
+      TestRbacModule.forRoot({
+        tenant: { requiredByDefault: true },
+        subject,
+      }),
+    ],
+  }).compile();
+
+  return {
+    moduleRef,
+    rbac: moduleRef.get(RbacService),
+    subject,
+    tenantId,
+  };
+}
+```

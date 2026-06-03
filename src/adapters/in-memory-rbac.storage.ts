@@ -1,4 +1,4 @@
-import { RbacConfigError } from '../errors';
+import { RbacConfigError, RbacRoleNotFoundError } from '../errors';
 import { normalizePermission, normalizePermissions } from '../utils';
 import type {
   AssignRoleStorageInput,
@@ -194,6 +194,11 @@ export class InMemoryRbacStorage implements RbacStorage {
 
   deleteRole(input: DeleteRoleInput): Promise<void> {
     this.roles.delete(input.roleId);
+    for (const [bindingId, binding] of this.bindings.entries()) {
+      if (binding.roleId === input.roleId) {
+        this.bindings.delete(bindingId);
+      }
+    }
 
     return Promise.resolve();
   }
@@ -225,13 +230,17 @@ export class InMemoryRbacStorage implements RbacStorage {
   }
 
   assignRole(input: AssignRoleStorageInput): Promise<RbacRoleBinding> {
+    if (!this.roles.has(input.roleId)) {
+      return Promise.reject(new RbacRoleNotFoundError({ roleId: input.roleId }));
+    }
+
     const tenantId = normalizeTenantId(input.tenantId);
     const { resourceType, resourceId } = bindingResource(input.resource);
     const expiresAt = cloneDate(input.expiresAt);
     const now = new Date();
     const existing = [...this.bindings.values()].find(
       (binding) =>
-        isBindingActive(binding, now) &&
+        !binding.revokedAt &&
         normalizeTenantId(binding.tenantId) === tenantId &&
         binding.subjectType === input.subject.type &&
         binding.subjectId === input.subject.id &&
@@ -240,7 +249,20 @@ export class InMemoryRbacStorage implements RbacStorage {
         (binding.resourceId ?? null) === resourceId,
     );
 
-    if (existing) return Promise.resolve(cloneBinding(existing));
+    if (existing) {
+      if (!isBindingActive(existing, now)) {
+        existing.expiresAt = expiresAt;
+        existing.revokedAt = null;
+        const metadata = cloneMetadata(input.metadata);
+        if (metadata !== undefined) {
+          existing.metadata = metadata;
+        } else {
+          delete existing.metadata;
+        }
+      }
+
+      return Promise.resolve(cloneBinding(existing));
+    }
 
     const binding: RbacRoleBinding = {
       id: this.nextBindingId(),

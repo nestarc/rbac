@@ -49,7 +49,7 @@ export class AppModule {}
 Seed a role and binding through `RbacService`:
 
 ```ts
-const role = await rbac.createRole({
+await rbac.createRole({
   tenantId: 'tenant_1',
   key: 'viewer',
   permissions: ['reports.read'],
@@ -58,7 +58,7 @@ const role = await rbac.createRole({
 await rbac.assignRole({
   tenantId: 'tenant_1',
   subject: { type: 'user', id: 'user_1', tenantId: 'tenant_1' },
-  roleId: role.id,
+  roleKey: 'viewer',
 });
 ```
 
@@ -124,7 +124,7 @@ Resource-scoped bindings let one subject hold a role only for a specific object,
 as one project.
 
 ```ts
-const maintainer = await rbac.createRole({
+await rbac.createRole({
   tenantId: 'tenant_1',
   key: 'project-maintainer',
   permissions: ['project.member.invite'],
@@ -133,7 +133,7 @@ const maintainer = await rbac.createRole({
 await rbac.assignRole({
   tenantId: 'tenant_1',
   subject: { type: 'user', id: 'user_1' },
-  roleId: maintainer.id,
+  roleKey: 'project-maintainer',
   resource: { type: 'project', id: 'project_1' },
 });
 ```
@@ -225,7 +225,7 @@ const moduleRef = await Test.createTestingModule({
 }).compile();
 
 const rbac = moduleRef.get(RbacService);
-const role = await rbac.createRole({
+await rbac.createRole({
   tenantId: 'tenant_1',
   key: 'viewer',
   permissions: ['reports.read'],
@@ -233,7 +233,7 @@ const role = await rbac.createRole({
 await rbac.assignRole({
   tenantId: 'tenant_1',
   subject: rbacUser('user_1', 'tenant_1'),
-  roleId: role.id,
+  roleKey: 'viewer',
 });
 
 await expectAllowed(rbac, {

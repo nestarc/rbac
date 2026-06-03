@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { RBAC_OPTIONS } from './constants';
 import {
+  RbacConfigError,
   RbacPermissionDeniedError,
+  RbacRoleNotFoundError,
   RbacStorageError,
-  RbacSubjectMissingError,
-  RbacTenantMissingError,
 } from './errors';
 import type {
   AssignRoleInput,
+  AssignRoleStorageInput,
   CreateRoleInput,
   DeleteRoleInput,
   GrantPermissionInput,
@@ -75,6 +76,7 @@ export class RbacService {
   constructor(@Inject(RBAC_OPTIONS) private readonly options: RbacModuleOptions) {}
 
   async can(input: RbacCanInput): Promise<RbacDecision> {
+    this.validateCanInput(input);
     const subject = hasSubject(input.subject) ? input.subject : undefined;
     const tenant = this.resolveTenant(input, subject);
 
@@ -100,20 +102,12 @@ export class RbacService {
     return this.canPermission(input, subject, tenant.tenantId);
   }
 
-  async assertCan(input: RbacCanInput): Promise<RbacDecision> {
+  async assertCan(input: RbacCanInput): Promise<void> {
     const decision = await this.can(input);
 
-    if (decision.allowed) return decision;
+    if (decision.allowed) return;
 
-    const details = { decision };
-    if (decision.reason === 'denied_subject_missing') {
-      throw new RbacSubjectMissingError(details);
-    }
-    if (decision.reason === 'denied_tenant_missing') {
-      throw new RbacTenantMissingError(details);
-    }
-
-    throw new RbacPermissionDeniedError(details);
+    throw new RbacPermissionDeniedError({ decision: this.sanitizeDecision(decision) });
   }
 
   async createRole(input: CreateRoleInput): Promise<RbacRole> {
@@ -171,7 +165,16 @@ export class RbacService {
 
   async assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
     this.validateAssignRoleInput(input);
-    const binding = await this.options.storage.assignRole(input);
+    const { roleId, roleKey } = await this.resolveAssignRoleIdentifier(input);
+    const storageInput: AssignRoleStorageInput = {
+      tenantId: input.tenantId,
+      subject: input.subject,
+      roleId,
+      resource: input.resource,
+      expiresAt: input.expiresAt,
+      metadata: input.metadata,
+    };
+    const binding = await this.options.storage.assignRole(storageInput);
     await this.logAudit({
       type: 'rbac.role.assigned',
       tenantId: binding.tenantId,
@@ -180,6 +183,7 @@ export class RbacService {
       metadata: {
         bindingId: binding.id,
         roleId: binding.roleId,
+        ...(roleKey !== undefined ? { roleKey } : {}),
         ...(input.resource !== undefined ? { resource: auditResource(input.resource) } : {}),
       },
     });
@@ -385,6 +389,34 @@ export class RbacService {
     return permissions;
   }
 
+  private validateCanInput(input: RbacCanInput): void {
+    const hasRoleKey = 'roleKey' in input && typeof input.roleKey === 'string';
+    const hasPermission =
+      ('permission' in input && input.permission !== undefined) ||
+      ('permissions' in input && input.permissions !== undefined);
+
+    if (hasRoleKey && hasPermission) {
+      throw new RbacConfigError({
+        reason: 'can() accepts exactly one requirement family per call',
+      });
+    }
+  }
+
+  private sanitizeDecision(decision: RbacDecision): RbacDecision {
+    return {
+      ...decision,
+      subject: decision.subject ? this.sanitizeSubject(decision.subject) : undefined,
+    };
+  }
+
+  private sanitizeSubject(subject: RbacSubject): RbacSubject {
+    return {
+      type: subject.type,
+      id: subject.id,
+      ...(subject.tenantId !== undefined ? { tenantId: subject.tenantId } : {}),
+    };
+  }
+
   private validateCreateRoleInput(input: CreateRoleInput): void {
     this.validateOptionalTenantId(input.tenantId);
     assertNonEmptyString(input.key, 'role key');
@@ -405,11 +437,43 @@ export class RbacService {
   private validateAssignRoleInput(input: AssignRoleInput): void {
     this.validateOptionalTenantId(input.tenantId);
     this.validateSubjectForWrite(input.subject);
-    assertNonEmptyString(input.roleId, 'roleId');
+    const hasRoleId = 'roleId' in input && input.roleId !== undefined;
+    const hasRoleKey = 'roleKey' in input && input.roleKey !== undefined;
+    if (hasRoleId === hasRoleKey) {
+      throw new RbacConfigError({
+        reason: 'assignRole() accepts exactly one role identifier per call',
+      });
+    }
+    if (hasRoleId) {
+      assertNonEmptyString(input.roleId, 'roleId');
+    }
+    if (hasRoleKey) {
+      assertNonEmptyString(input.roleKey, 'roleKey');
+    }
     if (input.resource !== undefined) {
       assertNonEmptyString(input.resource.type, 'resource.type');
       assertNonEmptyString(input.resource.id, 'resource.id');
     }
+  }
+
+  private async resolveAssignRoleIdentifier(
+    input: AssignRoleInput,
+  ): Promise<{ roleId: string; roleKey?: string | undefined }> {
+    if ('roleId' in input && input.roleId !== undefined) {
+      return { roleId: input.roleId.trim() };
+    }
+
+    const roleKey = input.roleKey.trim();
+    const role = await this.options.storage.findRole({
+      tenantId: input.tenantId,
+      key: roleKey,
+    });
+
+    if (role === null) {
+      throw new RbacRoleNotFoundError({ tenantId: input.tenantId, roleKey });
+    }
+
+    return { roleId: role.id, roleKey };
   }
 
   private validateSubjectForWrite(subject: RbacSubject): void {

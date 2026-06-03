@@ -216,6 +216,21 @@ export interface RbacRoleBinding {
 }
 ```
 
+Public assignment API:
+
+```ts
+export type AssignRoleInput = {
+  tenantId?: string | null;
+  subject: RbacSubject;
+  resource?: RbacResourceRef;
+  expiresAt?: Date | null;
+  metadata?: Record<string, unknown>;
+} & ({ roleId: string; roleKey?: never } | { roleKey: string; roleId?: never });
+```
+
+`RbacService.assignRole()` resolves `roleKey` to `roleId` before calling storage;
+storage adapters receive `AssignRoleStorageInput` with `roleId`.
+
 ### 4.6 Resource scope
 
 특정 resource에만 적용되는 권한 범위다.
@@ -418,14 +433,20 @@ RbacModule.forRoot({
 5. `request.headers['x-tenant-id']`
 6. options의 `tenantResolver`
 
-`@nestarc/tenancy` 통합은 optional helper로 제공한다.
+`@nestarc/tenancy` 통합은 optional helper로 제공한다. RBAC 패키지는 optional
+peer package를 runtime import하지 않으므로 helper에는 consuming app이 사용하는
+tenant context getter를 전달한다.
 
 ```ts
 import { createNestarcTenancyResolver } from '@nestarc/rbac/integrations/tenancy';
 
+const tenancyContext = {
+  getTenantId: () => 'tenant_1',
+};
+
 RbacModule.forRoot({
   storage,
-  tenantResolver: createNestarcTenancyResolver(),
+  tenantResolver: createNestarcTenancyResolver(() => tenancyContext.getTenantId()),
 });
 ```
 
@@ -614,9 +635,10 @@ model RbacRole {
 }
 
 model RbacPermission {
-  key         String   @id
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id        String   @id @default(cuid())
+  key       String   @unique(map: "rbac_permissions_key_unique")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   roles RbacRolePermission[]
 
@@ -624,15 +646,16 @@ model RbacPermission {
 }
 
 model RbacRolePermission {
-  roleId        String @map("role_id")
-  permissionKey String @map("permission_key")
-  createdAt     DateTime @default(now()) @map("created_at")
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
-  role       RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission RbacPermission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+  role       RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
-  @@id([roleId, permissionKey])
-  @@index([permissionKey])
+  @@id([roleId, permissionId])
+  @@index([permissionId], map: "rbac_role_permissions_permission_idx")
   @@map("rbac_role_permissions")
 }
 
@@ -845,8 +868,8 @@ await this.rbac.assertCan({
 Deliverables:
 
 - `@nestarc/rbac/integrations/tenancy`
-- `createNestarcTenancyResolver()`
-- `withTenantRbac()` test helper recipe
+- `createTenancyTenantResolver(getTenantId)` and PRD-compatible alias `createNestarcTenancyResolver(getTenantId)`
+- documented `withTenantRbac()` test helper recipe
 
 Expected behavior:
 
@@ -1152,7 +1175,7 @@ Test matrix:
 
 - Statements: >= 90%
 - Branches: >= 85%
-- Permission matcher and guard: >= 95%
+- Permission matcher and guard: >= 95%, enforced through `vitest.config.ts`
 
 ---
 

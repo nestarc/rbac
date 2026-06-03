@@ -10,11 +10,14 @@ import {
 } from '../../src';
 import {
   TestRbacModule,
+  apiKey,
   expectAllowed,
   expectDenied,
   rbacApiKey,
   rbacServiceAccount,
   rbacUser,
+  serviceAccount,
+  user,
 } from '../../src/testing';
 
 describe('testing helpers', () => {
@@ -29,6 +32,12 @@ describe('testing helpers', () => {
       type: 'service_account',
       id: 'svc_1',
     });
+  });
+
+  it('exports concise subject fixture aliases from the public testing entrypoint', () => {
+    expect(user('user_1', 'tenant_1')).toEqual(rbacUser('user_1', 'tenant_1'));
+    expect(apiKey('key_1')).toEqual(rbacApiKey('key_1'));
+    expect(serviceAccount('svc_1')).toEqual(rbacServiceAccount('svc_1'));
   });
 
   it('registers an in-memory RBAC module for tests', async () => {

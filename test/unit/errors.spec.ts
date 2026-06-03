@@ -23,6 +23,7 @@ import type {
 } from '@nestjs/common';
 import type {
   AssignRoleInput,
+  AssignRoleStorageInput,
   CreateRoleInput,
   ListEffectiveRolesInput,
   RbacAuditEvent,
@@ -210,9 +211,18 @@ describe('RBAC public interface types', () => {
       NonNullable<RbacRequirementOptions['resource']>
     >();
 
+    class ProjectResourceResolver implements RbacResourceResolver {
+      resolve(context: ExecutionContext): RbacResourceRef | undefined {
+        void context;
+        return { type: 'project', id: 'project_1' };
+      }
+    }
     const resolverToken: RbacResourceResolverToken = Symbol('ProjectResolver');
     const resolverTokenRef: RbacResourceResolverTokenRef = { resolverToken };
     const requirementOptions: RbacRequirementOptions = { resource: resolverTokenRef };
+    const classTokenRequirementOptions: RbacRequirementOptions = {
+      resource: ProjectResourceResolver,
+    };
     const paramResource: RbacRequirementOptions = {
       resource: { type: 'project', idParam: 'projectId' },
     };
@@ -232,11 +242,8 @@ describe('RBAC public interface types', () => {
     expect(headerResource.resource).toEqual({ type: 'project', idHeader: 'x-project-id' });
     expect(queryResource.resource).toEqual({ type: 'project', idQuery: 'projectId' });
 
-    // @ts-expect-error Bare DI resolver tokens are ambiguous with direct function resolvers.
-    const invalidRequirementOptions: RbacRequirementOptions = { resource: resolverToken };
-
     expect(mixedResource).toBeDefined();
-    expect(invalidRequirementOptions).toBeDefined();
+    expect(classTokenRequirementOptions.resource).toBe(ProjectResourceResolver);
   });
 
   it('matches Nest factory provider typing for async module options', () => {
@@ -413,6 +420,28 @@ describe('RBAC public interface types', () => {
       expiresAt: undefined,
       metadata: undefined,
     };
+    const assignRoleByKeyInput: AssignRoleInput = {
+      tenantId: maybeTenantId,
+      subject,
+      roleKey: 'admin',
+      resource: maybeResource,
+      expiresAt: undefined,
+      metadata: undefined,
+    };
+    const assignRoleStorageInput: AssignRoleStorageInput = {
+      tenantId: maybeTenantId,
+      subject,
+      roleId: 'role_1',
+      resource: maybeResource,
+      expiresAt: undefined,
+      metadata: undefined,
+    };
+    const assignRoleStorageByKeyInput: AssignRoleStorageInput = {
+      tenantId: maybeTenantId,
+      subject,
+      // @ts-expect-error Storage adapters receive resolved role IDs, not public role keys.
+      roleKey: 'admin',
+    };
     const revokeRoleInput: RevokeRoleInput = {
       bindingId: 'binding_1',
       revokedAt: undefined,
@@ -444,9 +473,12 @@ describe('RBAC public interface types', () => {
       createRoleInput,
       updateRoleInput,
       assignRoleInput,
+      assignRoleByKeyInput,
+      assignRoleStorageInput,
+      assignRoleStorageByKeyInput,
       revokeRoleInput,
       listEffectiveRolesInput,
       auditEvent,
-    ]).toHaveLength(15);
+    ]).toHaveLength(18);
   });
 });

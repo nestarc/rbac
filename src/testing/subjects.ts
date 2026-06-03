@@ -17,3 +17,7 @@ export const rbacServiceAccount = (id: string, tenantId?: string | null): RbacSu
   id,
   ...(tenantId !== undefined ? { tenantId } : {}),
 });
+
+export const user = rbacUser;
+export const apiKey = rbacApiKey;
+export const serviceAccount = rbacServiceAccount;

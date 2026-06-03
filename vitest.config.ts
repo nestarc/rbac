@@ -14,6 +14,18 @@ export default defineConfig({
         branches: 85,
         functions: 90,
         lines: 90,
+        'src/rbac.guard.ts': {
+          statements: 95,
+          branches: 95,
+          functions: 95,
+          lines: 95,
+        },
+        'src/utils/permission-matcher.ts': {
+          statements: 95,
+          branches: 95,
+          functions: 95,
+          lines: 95,
+        },
       },
     },
   },

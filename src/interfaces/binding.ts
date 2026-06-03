@@ -14,16 +14,29 @@ export interface RbacRoleBinding {
   metadata?: Record<string, unknown>;
 }
 
-export interface AssignRoleInput {
+export interface AssignRoleBaseInput {
   tenantId?: string | null | undefined;
   subject: RbacSubject;
-  roleId: string;
   resource?: RbacResourceRef | undefined;
   expiresAt?: Date | null | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
-export type AssignRoleStorageInput = AssignRoleInput;
+export type AssignRoleInput = AssignRoleBaseInput &
+  (
+    | {
+        roleId: string;
+        roleKey?: never;
+      }
+    | {
+        roleKey: string;
+        roleId?: never;
+      }
+  );
+
+export interface AssignRoleStorageInput extends AssignRoleBaseInput {
+  roleId: string;
+}
 
 export interface RevokeRoleInput {
   bindingId: string;

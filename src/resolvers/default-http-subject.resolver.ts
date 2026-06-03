@@ -66,8 +66,14 @@ const normalizeSubject = (value: unknown): RbacSubject | undefined => {
   return subject;
 };
 
+const resolveSubjectType = (record: SubjectRecord, fallback: RbacSubjectType): RbacSubjectType => {
+  const type = record.type;
+
+  return typeof type === 'string' && type.length > 0 ? type : fallback;
+};
+
 const mapSubject = (
-  type: RbacSubjectType,
+  fallbackType: RbacSubjectType,
   record: unknown,
   idKeys: string[],
 ): RbacSubject | undefined => {
@@ -81,7 +87,7 @@ const mapSubject = (
   }
 
   const subject: RbacSubject = {
-    type,
+    type: resolveSubjectType(record, fallbackType),
     id,
     attributes: record,
   };

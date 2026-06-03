@@ -51,7 +51,7 @@ Create tenant roles and assign them through `RbacService`; the same calls work
 with in-memory and Prisma-backed storage.
 
 ```ts
-const role = await rbac.createRole({
+await rbac.createRole({
   tenantId: 'tenant_1',
   key: 'billing-admin',
   permissions: ['billing.invoice.read', 'billing.invoice.write'],
@@ -60,7 +60,7 @@ const role = await rbac.createRole({
 await rbac.assignRole({
   tenantId: 'tenant_1',
   subject: { type: 'user', id: 'user_1', tenantId: 'tenant_1' },
-  roleId: role.id,
+  roleKey: 'billing-admin',
 });
 ```
 
@@ -75,4 +75,3 @@ npm run test:prisma
 The integration test uses `DATABASE_URL`, runs the same contract behavior as the
 in-memory adapter, and verifies resource-scoped bindings, expirations, revocation,
 and permission matching against PostgreSQL.
-

@@ -395,6 +395,48 @@ export function runRbacStorageContract({ createStorage }: RbacStorageContractOpt
       await expect(
         storage.listEffectivePermissions({ tenantId, subject: user('user_11', tenantId) }),
       ).resolves.toEqual([]);
+      await expect(
+        storage.listBindings({ tenantId, subject: user('user_11', tenantId) }),
+      ).resolves.toEqual([]);
+    });
+
+    it('rejects assignments to missing roles', async () => {
+      await expect(
+        storage.assignRole({
+          tenantId,
+          subject: user('user_missing_role', tenantId),
+          roleId: 'missing_role',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('reactivates expired unrevoked duplicate bindings instead of creating another binding', async () => {
+      const now = new Date('2026-01-15T00:00:00.000Z');
+      const role = await createRole('temporary_member', ['temporary.read']);
+      const expiredBinding = await storage.assignRole({
+        tenantId,
+        subject: user('user_reactivate', tenantId),
+        roleId: role.id,
+        expiresAt: new Date('2026-01-14T00:00:00.000Z'),
+      });
+      const reactivatedBinding = await storage.assignRole({
+        tenantId,
+        subject: user('user_reactivate', tenantId),
+        roleId: role.id,
+        expiresAt: new Date('2026-02-01T00:00:00.000Z'),
+      });
+
+      expect(reactivatedBinding.id).toBe(expiredBinding.id);
+      await expect(
+        storage.listBindings({ tenantId, subject: user('user_reactivate', tenantId) }),
+      ).resolves.toHaveLength(1);
+      await expect(
+        storage.listEffectiveRoles({
+          tenantId,
+          subject: user('user_reactivate', tenantId),
+          now,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ bindingId: expiredBinding.id })]);
     });
 
     it('returns normalized permission sets from effective bindings', async () => {

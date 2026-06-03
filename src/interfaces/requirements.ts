@@ -1,6 +1,6 @@
 import type { RbacRequirementMode } from './decision';
 import type { RbacResourceResolverFn } from './resolvers';
-import type { RbacResourceResolverTokenRef } from './resource';
+import type { RbacResourceResolverToken, RbacResourceResolverTokenRef } from './resource';
 
 export type RbacParamResourceDeclaration = {
   type: string;
@@ -34,6 +34,7 @@ export interface RbacRequirementOptions {
   resource?:
     | RbacBuiltInResourceDeclaration
     | RbacResourceResolverFn
+    | RbacResourceResolverToken
     | RbacResourceResolverTokenRef
     | undefined;
   reason?: string | undefined;

@@ -150,6 +150,22 @@ export interface RbacRoleBinding {
 }
 ```
 
+Public assignment calls may use either the resolved role ID or the tenant-scoped
+role key:
+
+```ts
+export type AssignRoleInput = {
+  tenantId?: string | null;
+  subject: RbacSubject;
+  resource?: RbacResourceRef;
+  expiresAt?: Date | null;
+  metadata?: Record<string, unknown>;
+} & ({ roleId: string; roleKey?: never } | { roleKey: string; roleId?: never });
+```
+
+Storage adapters receive `AssignRoleStorageInput`, where the service has already
+resolved any public `roleKey` into `roleId`.
+
 Rules:
 
 - Only active bindings are evaluated.
@@ -835,7 +851,7 @@ Coverage target:
 
 - Statements: at least 90%.
 - Branches: at least 85%.
-- Permission matcher and guard: at least 95%.
+- Permission matcher and guard: at least 95%, enforced in `vitest.config.ts`.
 
 ---
 

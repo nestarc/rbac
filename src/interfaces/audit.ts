@@ -7,6 +7,7 @@ export interface RbacAuditEvent {
     | 'rbac.permission.revoked'
     | 'rbac.role.assigned'
     | 'rbac.role.revoked'
+    | 'rbac.permission.allowed'
     | 'rbac.permission.denied';
   tenantId?: string | null | undefined;
   subjectType?: string | undefined;

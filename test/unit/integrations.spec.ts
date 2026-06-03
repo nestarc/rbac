@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createApiKeySubjectResolver } from '../../src/integrations/api-keys';
-import { createTenancyTenantResolver } from '../../src/integrations/tenancy';
+import {
+  createNestarcTenancyResolver,
+  createTenancyTenantResolver,
+} from '../../src/integrations/tenancy';
 import type { ExecutionContext } from '@nestjs/common';
 import type { RbacSubject } from '../../src';
 
@@ -30,6 +33,13 @@ describe('integration helpers', () => {
       const resolver = createTenancyTenantResolver(() => null);
 
       expect(resolver(httpContext({}), {}, subject)).toBeNull();
+    });
+
+    it('exports the PRD-compatible Nestarc tenancy resolver alias', () => {
+      const subject: RbacSubject = { type: 'user', id: 'user_1' };
+      const resolver = createNestarcTenancyResolver(() => 'tenant_alias');
+
+      expect(resolver(httpContext({}), {}, subject)).toBe('tenant_alias');
     });
   });
 

@@ -72,6 +72,7 @@ describe('default HTTP RBAC resolvers', () => {
     it('maps request user records using the first usable identifier', () => {
       const user = {
         sub: 'sub_1',
+        type: 'service_account',
         userId: 'user_1',
         tenantId: 'tenant_user',
         email: 'user@example.com',
@@ -79,7 +80,7 @@ describe('default HTTP RBAC resolvers', () => {
       const context = httpContext({ user });
 
       expect(defaultHttpSubjectResolver()(context)).toEqual({
-        type: 'user',
+        type: 'service_account',
         id: 'sub_1',
         tenantId: 'tenant_user',
         attributes: user,

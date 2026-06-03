@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   InMemoryRbacStorage,
+  RbacConfigError,
   RbacPermissionDeniedError,
+  RbacRoleNotFoundError,
   RbacService,
   RbacStorageError,
-  RbacSubjectMissingError,
-  RbacTenantMissingError,
   type RbacAuditEvent,
+  type RbacCanInput,
   type RbacModuleOptions,
   type RbacResourceRef,
   type RbacStorage,
@@ -143,6 +144,46 @@ describe('RbacService', () => {
     });
   });
 
+  it('assigns roles by role key through the public service API', async () => {
+    const role = await service.createRole({
+      tenantId,
+      key: 'report_reader',
+      name: 'Report reader',
+      permissions: ['reports.read'],
+    });
+
+    const binding = await service.assignRole({
+      tenantId,
+      subject: user('user_1', tenantId),
+      roleKey: 'report_reader',
+      resource: project,
+    });
+
+    expect(binding.roleId).toBe(role.id);
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        resource: project,
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      reason: 'allowed_by_role_permission',
+      matchedRoleKeys: ['report_reader'],
+    });
+  });
+
+  it('rejects role-key assignments when the role does not exist', async () => {
+    await expect(
+      service.assignRole({
+        tenantId,
+        subject: user('user_1', tenantId),
+        roleKey: 'missing_role',
+      }),
+    ).rejects.toBeInstanceOf(RbacRoleNotFoundError);
+  });
+
   it('throws from assertCan on denied decision', async () => {
     await expect(
       service.assertCan({
@@ -153,13 +194,27 @@ describe('RbacService', () => {
     ).rejects.toBeInstanceOf(RbacPermissionDeniedError);
   });
 
-  it('throws typed errors for missing subject and tenant assertions', async () => {
+  it('returns undefined from assertCan on allowed decisions', async () => {
+    await createAssignedRole('assert_reader', ['reports.read']);
+
+    await expect(
+      service.assertCan({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        resource: project,
+        now,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('throws permission denied errors for all denied assertions', async () => {
     await expect(
       service.assertCan({
         tenantId,
         permission: 'reports.read',
       }),
-    ).rejects.toBeInstanceOf(RbacSubjectMissingError);
+    ).rejects.toBeInstanceOf(RbacPermissionDeniedError);
 
     await expect(
       service.assertCan({
@@ -167,7 +222,61 @@ describe('RbacService', () => {
         tenantMode: 'required',
         permission: 'reports.read',
       }),
-    ).rejects.toBeInstanceOf(RbacTenantMissingError);
+    ).rejects.toBeInstanceOf(RbacPermissionDeniedError);
+  });
+
+  it('does not expose full subject attributes in assertion error details', async () => {
+    await expect(
+      service.assertCan({
+        subject: {
+          type: 'user',
+          id: 'user_private',
+          tenantId,
+          attributes: { email: 'private@example.com' },
+        },
+        tenantId,
+        permission: 'reports.read',
+      }),
+    ).rejects.toMatchObject({
+      details: {
+        decision: {
+          subject: { type: 'user', id: 'user_private', tenantId },
+        },
+      },
+    });
+
+    await expect(
+      service.assertCan({
+        subject: {
+          type: 'user',
+          id: 'user_private',
+          tenantId,
+          attributes: { email: 'private@example.com' },
+        },
+        tenantId,
+        permission: 'reports.read',
+      }),
+    ).rejects.not.toThrow(/private@example\.com/);
+  });
+
+  it('rejects mixed role and permission requirement families', async () => {
+    await createAssignedRole('mixed_reader', ['reports.read']);
+
+    const mixedDecision = service.can({
+      subject: user('user_1', tenantId),
+      tenantId,
+      roleKey: 'mixed_reader',
+      permission: 'reports.delete',
+      resource: project,
+      now,
+    } as RbacCanInput);
+
+    await expect(mixedDecision).rejects.toBeInstanceOf(RbacConfigError);
+    await expect(mixedDecision).rejects.toMatchObject({
+      details: {
+        reason: 'can() accepts exactly one requirement family per call',
+      },
+    });
   });
 
   it('denies empty permission arrays instead of allowing vacuously', async () => {
@@ -428,6 +537,12 @@ describe('RbacService', () => {
         writeService.assignRole({
           tenantId: null,
           subject: user('user_1'),
+          roleKey: ' ',
+        }),
+      () =>
+        writeService.assignRole({
+          tenantId: null,
+          subject: user('user_1'),
           roleId: 'role_1',
           resource: { type: ' ', id: 'project_1' },
         }),
@@ -442,6 +557,7 @@ describe('RbacService', () => {
     expect(writeStorage.deleteRole).not.toHaveBeenCalled();
     expect(writeStorage.grantPermission).not.toHaveBeenCalled();
     expect(writeStorage.revokePermission).not.toHaveBeenCalled();
+    expect(writeStorage.findRole).not.toHaveBeenCalled();
     expect(writeStorage.assignRole).not.toHaveBeenCalled();
     expect(writeStorage.revokeRole).not.toHaveBeenCalled();
   });
