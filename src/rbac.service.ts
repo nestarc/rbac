@@ -30,7 +30,13 @@ import type {
   RevokeRoleInput,
   UpdateRoleInput,
 } from './interfaces';
-import { matchesPermission, matchesResource, normalizePermission, normalizePermissions } from './utils';
+import {
+  assertNonEmptyString,
+  matchesPermission,
+  matchesResource,
+  normalizePermission,
+  normalizePermissions,
+} from './utils';
 
 interface ResolvedTenant {
   tenantId: string | null;
@@ -111,6 +117,7 @@ export class RbacService {
   }
 
   async createRole(input: CreateRoleInput): Promise<RbacRole> {
+    this.validateCreateRoleInput(input);
     const role = await this.options.storage.upsertRole(input);
     await this.logAudit({
       type: 'rbac.role.created',
@@ -122,6 +129,7 @@ export class RbacService {
   }
 
   async updateRole(input: UpdateRoleInput): Promise<RbacRole> {
+    this.validateUpdateRoleInput(input);
     const role = await this.options.storage.upsertRole(input);
     await this.logAudit({
       type: 'rbac.role.updated',
@@ -133,6 +141,7 @@ export class RbacService {
   }
 
   async deleteRole(input: DeleteRoleInput): Promise<void> {
+    assertNonEmptyString(input.roleId, 'roleId');
     await this.options.storage.deleteRole(input);
     await this.logAudit({
       type: 'rbac.role.deleted',
@@ -141,6 +150,8 @@ export class RbacService {
   }
 
   async grantPermission(input: GrantPermissionInput): Promise<void> {
+    assertNonEmptyString(input.roleId, 'roleId');
+    normalizePermission(input.permission);
     await this.options.storage.grantPermission(input);
     await this.logAudit({
       type: 'rbac.permission.granted',
@@ -149,6 +160,8 @@ export class RbacService {
   }
 
   async revokePermission(input: RevokePermissionInput): Promise<void> {
+    assertNonEmptyString(input.roleId, 'roleId');
+    normalizePermission(input.permission);
     await this.options.storage.revokePermission(input);
     await this.logAudit({
       type: 'rbac.permission.revoked',
@@ -157,6 +170,7 @@ export class RbacService {
   }
 
   async assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
+    this.validateAssignRoleInput(input);
     const binding = await this.options.storage.assignRole(input);
     await this.logAudit({
       type: 'rbac.role.assigned',
@@ -174,6 +188,7 @@ export class RbacService {
   }
 
   async revokeRole(input: RevokeRoleInput): Promise<void> {
+    assertNonEmptyString(input.bindingId, 'bindingId');
     await this.options.storage.revokeRole(input);
     await this.logAudit({
       type: 'rbac.role.revoked',
@@ -320,7 +335,7 @@ export class RbacService {
       return { tenantId: null, missing: false };
     }
     if (input.tenantId === null) {
-      return { tenantId: null, missing: false };
+      return { tenantId: null, missing: mode === 'required' };
     }
 
     const rawTenantId = input.tenantId !== undefined ? input.tenantId : subject?.tenantId;
@@ -368,6 +383,48 @@ export class RbacService {
     }
 
     return permissions;
+  }
+
+  private validateCreateRoleInput(input: CreateRoleInput): void {
+    this.validateOptionalTenantId(input.tenantId);
+    assertNonEmptyString(input.key, 'role key');
+    normalizePermissions(input.permissions);
+  }
+
+  private validateUpdateRoleInput(input: UpdateRoleInput): void {
+    assertNonEmptyString(input.roleId, 'roleId');
+    this.validateOptionalTenantId(input.tenantId);
+    if (input.key !== undefined) {
+      assertNonEmptyString(input.key, 'role key');
+    }
+    if (input.permissions !== undefined) {
+      normalizePermissions(input.permissions);
+    }
+  }
+
+  private validateAssignRoleInput(input: AssignRoleInput): void {
+    this.validateOptionalTenantId(input.tenantId);
+    this.validateSubjectForWrite(input.subject);
+    assertNonEmptyString(input.roleId, 'roleId');
+    if (input.resource !== undefined) {
+      assertNonEmptyString(input.resource.type, 'resource.type');
+      assertNonEmptyString(input.resource.id, 'resource.id');
+    }
+  }
+
+  private validateSubjectForWrite(subject: RbacSubject): void {
+    assertNonEmptyString(subject?.type, 'subject.type');
+    assertNonEmptyString(subject?.id, 'subject.id');
+    this.validateOptionalTenantId(subject?.tenantId, 'subject.tenantId');
+  }
+
+  private validateOptionalTenantId(
+    tenantId: string | null | undefined,
+    name = 'tenantId',
+  ): void {
+    if (tenantId !== null && tenantId !== undefined) {
+      assertNonEmptyString(tenantId, name);
+    }
   }
 
   private isRoleCheck(input: RbacCanInput): input is RbacCanInput & { roleKey: string } {

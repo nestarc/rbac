@@ -226,6 +226,66 @@ describe('RbacGuard', () => {
     ]);
   });
 
+  it('uses configured tenant resolver only after default HTTP tenant sources are missing', async () => {
+    class ReportsController {
+      @Can('reports.read', { tenant: 'required' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const subjectResolver = vi
+      .fn()
+      .mockReturnValueOnce({ type: 'user', id: 'user_1', tenantId: 'subject_tenant' })
+      .mockReturnValueOnce({ type: 'user', id: 'user_2' });
+    const tenantResolver = vi.fn(() => 'fallback_tenant');
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      });
+    });
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver,
+            tenantResolver,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+    const guard = moduleRef.get(RbacGuard);
+
+    await expect(
+      guard.canActivate(contextFor(ReportsController, handler, {})),
+    ).resolves.toBe(true);
+    expect(tenantResolver).not.toHaveBeenCalled();
+    expect(can).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        tenantId: 'subject_tenant',
+        tenantMode: 'required',
+      }),
+    );
+
+    await expect(
+      guard.canActivate(contextFor(ReportsController, handler, {})),
+    ).resolves.toBe(true);
+    expect(tenantResolver).toHaveBeenCalledTimes(1);
+    expect(can).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        tenantId: 'fallback_tenant',
+        tenantMode: 'required',
+      }),
+    );
+  });
+
   it('resolves resources from resolver token providers', async () => {
     const RESOURCE_RESOLVER = Symbol('RESOURCE_RESOLVER');
     const resolve = vi.fn(() => ({ type: 'report', id: 'report_1' }));

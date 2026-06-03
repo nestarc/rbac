@@ -91,8 +91,8 @@ When an option is not set on the decorator, the guard uses
 `tenant.requiredByDefault` from `RbacModule.forRoot()`.
 
 Default HTTP tenant resolution checks the subject `tenantId`, `request.tenantId`,
-`request.tenant.id`, and the `x-tenant-id` header. A custom `tenantResolver` can
-replace this behavior.
+`request.tenant.id`, and the `x-tenant-id` header. A custom `tenantResolver` runs
+as the final fallback when those sources are missing.
 
 ## Resource Declarations
 
@@ -123,4 +123,3 @@ exportReport() {
 
 If a route declares a resource and the ID is missing, the guard denies before
 calling the controller method.
-

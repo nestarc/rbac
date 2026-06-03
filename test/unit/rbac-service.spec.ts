@@ -314,7 +314,7 @@ describe('RbacService', () => {
     });
   });
 
-  it('treats explicit null tenantId as a global check without falling back to subject tenant', async () => {
+  it('denies explicit null tenantId when tenant mode is required', async () => {
     const globalRole = await service.createRole({
       tenantId: null,
       key: 'global_reader',
@@ -334,12 +334,116 @@ describe('RbacService', () => {
         permission: 'system.read',
       }),
     ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_tenant_missing',
+      tenantId: null,
+    });
+  });
+
+  it('allows explicit null tenantId for route-level global checks', async () => {
+    const globalRole = await service.createRole({
+      tenantId: null,
+      key: 'global_reader',
+      name: 'global_reader',
+      permissions: ['system.read'],
+    });
+    await service.assignRole({
+      tenantId: null,
+      subject: user('user_1', tenantId),
+      roleId: globalRole.id,
+    });
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId: null,
+        tenantMode: 'none',
+        permission: 'system.read',
+      }),
+    ).resolves.toMatchObject({
       allowed: true,
       reason: 'allowed_by_role_permission',
       tenantId: null,
       matchedRoleKeys: ['global_reader'],
       matchedPermissions: ['system.read'],
     });
+  });
+
+  it('rejects invalid write API identifiers before storage writes', async () => {
+    const writeStorage = {
+      findRole: vi.fn(() => Promise.resolve(null)),
+      listRoles: vi.fn(() => Promise.resolve([])),
+      upsertRole: vi.fn(() => Promise.resolve({
+        id: 'role_1',
+        key: 'role',
+        tenantId: null,
+        permissions: [],
+      })),
+      deleteRole: vi.fn(() => Promise.resolve(undefined)),
+      grantPermission: vi.fn(() => Promise.resolve(undefined)),
+      revokePermission: vi.fn(() => Promise.resolve(undefined)),
+      listRolePermissions: vi.fn(() => Promise.resolve([])),
+      assignRole: vi.fn(() => Promise.resolve({
+        id: 'binding_1',
+        tenantId: null,
+        subjectType: 'user',
+        subjectId: 'user_1',
+        roleId: 'role_1',
+      })),
+      revokeRole: vi.fn(() => Promise.resolve(undefined)),
+      listBindings: vi.fn(() => Promise.resolve([])),
+      listEffectiveRoles: vi.fn(() => Promise.resolve([])),
+      listEffectivePermissions: vi.fn(() => Promise.resolve([])),
+    } satisfies RbacStorage;
+    const writeService = new RbacService({ storage: writeStorage });
+
+    const invalidWrites = [
+      () => writeService.createRole({ tenantId: ' ', key: 'role', permissions: [] }),
+      () => writeService.createRole({ tenantId: null, key: ' ', permissions: [] }),
+      () => writeService.createRole({ tenantId: null, key: 'role', permissions: ['bad permission'] }),
+      () => writeService.updateRole({ roleId: ' ', key: 'role' }),
+      () => writeService.deleteRole({ roleId: ' ' }),
+      () => writeService.grantPermission({ roleId: ' ', permission: 'reports.read' }),
+      () => writeService.grantPermission({ roleId: 'role_1', permission: 'reports..read' }),
+      () => writeService.revokePermission({ roleId: ' ', permission: 'reports.read' }),
+      () =>
+        writeService.assignRole({
+          tenantId: ' ',
+          subject: user('user_1', tenantId),
+          roleId: 'role_1',
+        }),
+      () =>
+        writeService.assignRole({
+          tenantId: null,
+          subject: user('', tenantId),
+          roleId: 'role_1',
+        }),
+      () =>
+        writeService.assignRole({
+          tenantId: null,
+          subject: user('user_1'),
+          roleId: ' ',
+        }),
+      () =>
+        writeService.assignRole({
+          tenantId: null,
+          subject: user('user_1'),
+          roleId: 'role_1',
+          resource: { type: ' ', id: 'project_1' },
+        }),
+      () => writeService.revokeRole({ bindingId: ' ' }),
+    ];
+
+    for (const invalidWrite of invalidWrites) {
+      await expect(invalidWrite()).rejects.toThrow();
+    }
+
+    expect(writeStorage.upsertRole).not.toHaveBeenCalled();
+    expect(writeStorage.deleteRole).not.toHaveBeenCalled();
+    expect(writeStorage.grantPermission).not.toHaveBeenCalled();
+    expect(writeStorage.revokePermission).not.toHaveBeenCalled();
+    expect(writeStorage.assignRole).not.toHaveBeenCalled();
+    expect(writeStorage.revokeRole).not.toHaveBeenCalled();
   });
 
   it('allows global roles and permissions inside tenants only when configured', async () => {

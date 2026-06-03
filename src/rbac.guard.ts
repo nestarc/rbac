@@ -163,9 +163,12 @@ export class RbacGuard implements CanActivate {
     requirementOptions: RbacRequirementOptions,
     subject: RbacSubject,
   ): Promise<string | null | undefined> | string | null | undefined {
-    const resolver = this.options.tenantResolver ?? resolveHttpTenant;
+    const defaultTenantId = resolveHttpTenant(context, requirementOptions, subject);
+    if (defaultTenantId !== undefined || this.options.tenantResolver === undefined) {
+      return defaultTenantId;
+    }
 
-    return resolver(context, requirementOptions, subject);
+    return this.options.tenantResolver(context, requirementOptions, subject);
   }
 
   private async resolveResource(
