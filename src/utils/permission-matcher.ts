@@ -1,9 +1,14 @@
+import { normalizePermission } from './normalize';
+
 export function matchesPermission(granted: string, required: string): boolean {
-  if (granted === '*') return true;
-  if (granted === required) return true;
-  if (granted.endsWith('.*')) {
-    const prefix = granted.slice(0, -1);
-    return required.startsWith(prefix);
+  const normalizedGranted = normalizePermission(granted);
+  const normalizedRequired = normalizePermission(required);
+
+  if (normalizedGranted === '*') return true;
+  if (normalizedGranted === normalizedRequired) return true;
+  if (normalizedGranted.endsWith('.*')) {
+    const prefix = normalizedGranted.slice(0, -1);
+    return normalizedRequired.startsWith(prefix);
   }
   return false;
 }

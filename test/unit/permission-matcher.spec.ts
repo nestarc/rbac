@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesPermission, normalizePermissions } from '../../src';
+import { assertNonEmptyString, matchesPermission, normalizePermissions } from '../../src';
 
 describe('matchesPermission', () => {
   it.each([
@@ -12,6 +12,15 @@ describe('matchesPermission', () => {
     ['invoice.read', 'invoice.read.all', false],
   ])('matches %s against %s as %s', (granted, required, expected) => {
     expect(matchesPermission(granted, required)).toBe(expected);
+  });
+
+  it.each([
+    ['invoice.', 'invoice.read'],
+    ['invoice.*', 'invoice.'],
+    ['*.read', 'invoice.read'],
+    ['invoice.read', '.read'],
+  ])('rejects invalid matcher input %s against %s', (granted, required) => {
+    expect(() => matchesPermission(granted, required)).toThrow('Invalid permission');
   });
 });
 
@@ -29,4 +38,31 @@ describe('normalizePermissions', () => {
       expect(() => normalizePermissions([permission])).toThrow('Invalid permission');
     },
   );
+
+  it('accepts wildcard and supported segment characters', () => {
+    expect(normalizePermissions(['*', 'Reports.Read_All', 'billing-plan.view_2026'])).toEqual([
+      '*',
+      'Reports.Read_All',
+      'billing-plan.view_2026',
+    ]);
+  });
+
+  it.each(['*.read', '.read', 'reports..read'])(
+    'rejects invalid edge-case permission %s',
+    (permission) => {
+      expect(() => normalizePermissions([permission])).toThrow('Invalid permission');
+    },
+  );
+});
+
+describe('assertNonEmptyString', () => {
+  it.each([undefined, null, '', ' '])('rejects empty value %s', (value) => {
+    expect(() => assertNonEmptyString(value, 'permission')).toThrow(
+      'permission must be a non-empty string',
+    );
+  });
+
+  it('returns trimmed values for valid input', () => {
+    expect(assertNonEmptyString(' reports.read ', 'permission')).toBe('reports.read');
+  });
 });
