@@ -198,7 +198,7 @@ export class RbacService {
         subject,
         tenantId,
         permission: requirement.permission,
-        permissions: this.rawPermissions(input),
+        permissions: requirement.permissions,
         mode: requirement.mode,
         matchedRoleKeys: [],
         matchedPermissions: [],
@@ -226,7 +226,7 @@ export class RbacService {
           subject,
           tenantId,
           permission: requirement.permission,
-          permissions: this.rawPermissions(input),
+          permissions: requirement.permissions,
           mode: requirement.mode,
           matchedRoleKeys: matches.matchedRoleKeys,
           matchedPermissions: matches.matchedPermissions,
@@ -275,6 +275,9 @@ export class RbacService {
     if (mode === 'none') {
       return { tenantId: null, missing: false };
     }
+    if (input.tenantId === null) {
+      return { tenantId: null, missing: false };
+    }
 
     const rawTenantId = input.tenantId !== undefined ? input.tenantId : subject?.tenantId;
     const tenantId = isNonEmptyString(rawTenantId) ? rawTenantId.trim() : null;
@@ -308,14 +311,19 @@ export class RbacService {
   }
 
   private rawPermissions(input: RbacCanInput): string[] {
+    const permissions: string[] = [];
     if ('permission' in input && typeof input.permission === 'string') {
-      return [input.permission];
+      permissions.push(input.permission);
     }
     if ('permissions' in input && Array.isArray(input.permissions)) {
-      return input.permissions.filter((permission): permission is string => typeof permission === 'string');
+      permissions.push(
+        ...input.permissions.filter(
+          (permission): permission is string => typeof permission === 'string',
+        ),
+      );
     }
 
-    return [];
+    return permissions;
   }
 
   private isRoleCheck(input: RbacCanInput): input is RbacCanInput & { roleKey: string } {

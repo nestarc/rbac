@@ -210,6 +210,70 @@ describe('RbacService', () => {
     });
   });
 
+  it('requires both permission and permissions entries in all mode', async () => {
+    await createAssignedRole('report_reader', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        permissions: ['reports.write'],
+        mode: 'all',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_no_matching_permission',
+      permissions: ['reports.read', 'reports.write'],
+      matchedRoleKeys: ['report_reader'],
+      matchedPermissions: ['reports.read'],
+    });
+
+    await createAssignedRole('report_writer', ['reports.write']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        permissions: ['reports.write'],
+        mode: 'all',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      reason: 'allowed_by_role_permission',
+      permissions: ['reports.read', 'reports.write'],
+      matchedRoleKeys: ['report_reader', 'report_writer'],
+      matchedPermissions: ['reports.read', 'reports.write'],
+    });
+  });
+
+  it('uses all mode by default for mixed permission and permissions entries', async () => {
+    await createAssignedRole('report_reader', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        permissions: ['reports.write'],
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_no_matching_permission',
+      mode: 'all',
+      permissions: ['reports.read', 'reports.write'],
+      matchedRoleKeys: ['report_reader'],
+      matchedPermissions: ['reports.read'],
+    });
+  });
+
   it('uses any mode by default for a single permission entry', async () => {
     await createAssignedRole('report_reader', ['reports.read']);
 
@@ -227,6 +291,53 @@ describe('RbacService', () => {
       mode: 'any',
       matchedRoleKeys: ['report_reader'],
       matchedPermissions: ['reports.read'],
+    });
+  });
+
+  it('falls back to subject tenant when tenantId is omitted', async () => {
+    await createAssignedRole('report_reader', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        permission: 'reports.read',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      reason: 'allowed_by_role_permission',
+      tenantId,
+      matchedRoleKeys: ['report_reader'],
+      matchedPermissions: ['reports.read'],
+    });
+  });
+
+  it('treats explicit null tenantId as a global check without falling back to subject tenant', async () => {
+    const globalRole = await service.createRole({
+      tenantId: null,
+      key: 'global_reader',
+      name: 'global_reader',
+      permissions: ['system.read'],
+    });
+    await service.assignRole({
+      tenantId: null,
+      subject: user('user_1', tenantId),
+      roleId: globalRole.id,
+    });
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId: null,
+        permission: 'system.read',
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      reason: 'allowed_by_role_permission',
+      tenantId: null,
+      matchedRoleKeys: ['global_reader'],
+      matchedPermissions: ['system.read'],
     });
   });
 
