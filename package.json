@@ -40,13 +40,38 @@
     "test": "vitest run",
     "test:e2e": "vitest run test/e2e",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma.example",
+    "prisma:migrate:test": "prisma db execute --schema=prisma/schema.prisma.example --file=prisma/migrations/0001_init_rbac.sql",
+    "test:prisma": "vitest run --config vitest.integration.config.ts"
   },
   "peerDependencies": {
+    "@nestarc/api-keys": ">=0.1 <1",
+    "@nestarc/audit-log": ">=0.1 <1",
+    "@nestarc/tenancy": ">=0.1 <1",
     "@nestjs/common": ">=10 <12",
     "@nestjs/core": ">=10 <12",
+    "@prisma/client": ">=5 <8",
+    "prisma": ">=5 <8",
     "reflect-metadata": ">=0.1.13",
     "rxjs": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "@prisma/client": {
+      "optional": true
+    },
+    "prisma": {
+      "optional": true
+    },
+    "@nestarc/tenancy": {
+      "optional": true
+    },
+    "@nestarc/api-keys": {
+      "optional": true
+    },
+    "@nestarc/audit-log": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -54,12 +79,14 @@
     "@nestjs/core": "^11.1.24",
     "@nestjs/platform-express": "^11.1.24",
     "@nestjs/testing": "^11.1.24",
+    "@prisma/client": "^7.8.0",
     "@swc/core": "^1.15.40",
     "@types/node": "^25.9.1",
     "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^10.4.1",
     "prettier": "^3.8.3",
+    "prisma": "^7.8.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "supertest": "^7.2.2",
