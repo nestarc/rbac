@@ -1,3 +1,4 @@
+import { RbacConfigError } from '../errors';
 import { normalizePermission, normalizePermissions } from '../utils';
 import type {
   AssignRoleStorageInput,
@@ -152,6 +153,20 @@ export class InMemoryRbacStorage implements RbacStorage {
           ? { permissions: normalizePermissions(input.permissions) }
           : { permissions: [...role.permissions] }),
       };
+      const duplicateRole = this.findStoredRole(updated.tenantId, updated.key);
+
+      if (duplicateRole && duplicateRole.id !== updated.id) {
+        return Promise.reject(
+          new RbacConfigError({
+            operation: 'upsertRole',
+            reason: 'duplicate_role_key',
+            tenantId: updated.tenantId,
+            key: updated.key,
+            roleId: updated.id,
+            conflictingRoleId: duplicateRole.id,
+          }),
+        );
+      }
 
       this.roles.set(updated.id, updated);
 
@@ -355,10 +370,23 @@ export class InMemoryRbacStorage implements RbacStorage {
     };
   }
 
-  private nextRoleId(): string {
-    this.roleSequence += 1;
+  private findStoredRole(tenantId: string | null | undefined, key: string): RbacRole | undefined {
+    const normalizedTenantId = normalizeTenantId(tenantId);
 
-    return `role_${this.roleSequence}`;
+    return [...this.roles.values()].find(
+      (role) => normalizeTenantId(role.tenantId) === normalizedTenantId && role.key === key,
+    );
+  }
+
+  private nextRoleId(): string {
+    let roleId: string;
+
+    do {
+      this.roleSequence += 1;
+      roleId = `role_${this.roleSequence}`;
+    } while (this.roles.has(roleId));
+
+    return roleId;
   }
 
   private nextBindingId(): string {

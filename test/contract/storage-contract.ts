@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { RbacConfigError } from '../../src';
 import { user } from '../fixtures/subjects';
 import type { RbacResourceRef, RbacRole, RbacStorage } from '../../src';
 
@@ -194,6 +195,69 @@ export function runRbacStorageContract({ createStorage }: RbacStorageContractOpt
         'documents.read',
         'documents.write',
       ]);
+    });
+
+    it('does not let explicit role ids collide with later generated role ids', async () => {
+      const explicitRole = await storage.upsertRole({
+        roleId: 'role_1',
+        tenantId,
+        key: 'explicit_role',
+        permissions: ['explicit.read'],
+      });
+      const generatedRole = await createRole('generated_role', ['generated.read']);
+
+      expect(generatedRole.id).not.toBe(explicitRole.id);
+      await expect(storage.findRole({ tenantId, key: 'explicit_role' })).resolves.toMatchObject({
+        id: explicitRole.id,
+        permissions: ['explicit.read'],
+      });
+      await expect(storage.findRole({ tenantId, key: 'generated_role' })).resolves.toMatchObject({
+        id: generatedRole.id,
+        permissions: ['generated.read'],
+      });
+    });
+
+    it('rejects role id updates that duplicate another role tenant and key', async () => {
+      const sourceRole = await createRole('duplicate_source', ['source.read']);
+      const targetRole = await createRole('duplicate_target', ['target.read']);
+
+      await expect(
+        storage.upsertRole({
+          roleId: targetRole.id,
+          tenantId,
+          key: 'duplicate_source',
+        }),
+      ).rejects.toBeInstanceOf(RbacConfigError);
+
+      await expect(storage.findRole({ tenantId, key: 'duplicate_source' })).resolves.toMatchObject({
+        id: sourceRole.id,
+      });
+      await expect(storage.findRole({ tenantId, key: 'duplicate_target' })).resolves.toMatchObject({
+        id: targetRole.id,
+      });
+    });
+
+    it('keeps findRole deterministic after a rejected duplicate role update', async () => {
+      const firstRole = await createRole('deterministic_source', ['source.read']);
+      const secondRole = await createRole('deterministic_target', ['target.read']);
+
+      await expect(
+        storage.upsertRole({
+          roleId: secondRole.id,
+          tenantId,
+          key: 'deterministic_source',
+          permissions: ['target.changed'],
+        }),
+      ).rejects.toBeInstanceOf(RbacConfigError);
+
+      expect(await storage.findRole({ tenantId, key: 'deterministic_source' })).toMatchObject({
+        id: firstRole.id,
+        permissions: ['source.read'],
+      });
+      expect(await storage.findRole({ tenantId, key: 'deterministic_target' })).toMatchObject({
+        id: secondRole.id,
+        permissions: ['target.read'],
+      });
     });
 
     it('applies resource-scoped bindings only to the matching resource', async () => {
