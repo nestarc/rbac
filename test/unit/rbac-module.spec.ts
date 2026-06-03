@@ -1,0 +1,255 @@
+import 'reflect-metadata';
+
+import { Module, type ExecutionContext } from '@nestjs/common';
+import { ModuleRef, Reflector } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  Can,
+  InMemoryRbacStorage,
+  RBAC_OPTIONS,
+  RBAC_STORAGE,
+  RBAC_SUBJECT_REQUEST_KEY,
+  RequireRole,
+  RbacGuard,
+  RbacModule,
+  RbacService,
+  type RbacCanInput,
+  type RbacModuleOptions,
+  type RbacResourceResolver,
+} from '../../src';
+
+const getHandler = (target: object, key: string) =>
+  Object.getOwnPropertyDescriptor(target, key)?.value as () => unknown;
+
+const contextFor = (
+  controller: new () => unknown,
+  handler: () => unknown,
+  request: Record<string, unknown> = {},
+): ExecutionContext =>
+  ({
+    getClass: () => controller,
+    getHandler: () => handler,
+    switchToHttp: () => ({
+      getRequest: () => request,
+    }),
+  }) as unknown as ExecutionContext;
+
+describe('RbacModule', () => {
+  it('forRoot registers and exports options, storage, service, and guard', async () => {
+    const storage = new InMemoryRbacStorage();
+    const options: RbacModuleOptions = { storage };
+    const moduleRef = await Test.createTestingModule({
+      imports: [RbacModule.forRoot(options)],
+    }).compile();
+
+    expect(moduleRef.get(RBAC_OPTIONS)).toBe(options);
+    expect(moduleRef.get(RBAC_STORAGE)).toBe(storage);
+    expect(moduleRef.get(RbacService)).toBeInstanceOf(RbacService);
+    expect(moduleRef.get(RbacGuard)).toBeInstanceOf(RbacGuard);
+  });
+
+  it('forRootAsync supports imports, inject, and useFactory', async () => {
+    const CONFIG = Symbol('CONFIG');
+    const storage = new InMemoryRbacStorage();
+
+    @Module({
+      providers: [{ provide: CONFIG, useValue: { storage } }],
+      exports: [CONFIG],
+    })
+    class ConfigModule {}
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        RbacModule.forRootAsync({
+          imports: [ConfigModule],
+          inject: [CONFIG],
+          useFactory: (config: { storage: InMemoryRbacStorage }) => ({
+            storage: config.storage,
+          }),
+        }),
+      ],
+    }).compile();
+
+    expect(moduleRef.get(RBAC_STORAGE)).toBe(storage);
+    expect(moduleRef.get(RbacService)).toBeInstanceOf(RbacService);
+    expect(moduleRef.get(RbacGuard)).toBeInstanceOf(RbacGuard);
+  });
+});
+
+describe('RbacGuard', () => {
+  it('allows routes without RBAC metadata by default', async () => {
+    class ReportsController {
+      list() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'list');
+    const storage = new InMemoryRbacStorage();
+    const moduleRef = await Test.createTestingModule({
+      imports: [RbacModule.forRoot({ storage })],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).resolves.toBe(true);
+  });
+
+  it('rejects routes without RBAC metadata when requireMetadata is enabled', async () => {
+    class ReportsController {
+      list() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'list');
+    const moduleRef = await Test.createTestingModule({
+      imports: [RbacModule.forRoot({ storage: new InMemoryRbacStorage(), requireMetadata: true })],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).rejects.toMatchObject({
+      response: {
+        message: 'Permission denied',
+        code: 'RBAC_PERMISSION_DENIED',
+      },
+    });
+  });
+
+  it('throws a 401 coded response before resolving tenant or resource when subject is missing', async () => {
+    const tenantResolver = vi.fn(() => 'tenant_1');
+    const resourceResolver = vi.fn(() => ({ type: 'report', id: 'report_1' }));
+
+    class ReportsController {
+      @Can('reports.read', { resource: resourceResolver })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        RbacModule.forRoot({
+          storage: new InMemoryRbacStorage(),
+          tenantResolver,
+          subjectResolver: () => undefined,
+        }),
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).rejects.toMatchObject({
+      response: {
+        message: 'Subject missing',
+        code: 'RBAC_SUBJECT_MISSING',
+      },
+    });
+    expect(tenantResolver).not.toHaveBeenCalled();
+    expect(resourceResolver).not.toHaveBeenCalled();
+  });
+
+  it('passes stacked handler and class requirements to RbacService in handler-first order', async () => {
+    @RequireRole('owner')
+    class ReportsController {
+      @Can('reports.read', { tenant: 'required' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const subject = { type: 'user' as const, id: 'user_1', tenantId: 'tenant_1' };
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role' as const,
+      });
+    });
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+    const request: Record<string, unknown> = {};
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler, request)),
+    ).resolves.toBe(true);
+
+    expect(request[RBAC_SUBJECT_REQUEST_KEY]).toBe(subject);
+    expect(can).toHaveBeenCalledTimes(2);
+    expect(can.mock.calls.map(([input]: [RbacCanInput]) => input)).toEqual([
+      {
+        subject,
+        tenantId: 'tenant_1',
+        tenantMode: 'required',
+        permissions: ['reports.read'],
+        mode: 'any',
+      },
+      {
+        subject,
+        tenantId: 'tenant_1',
+        tenantMode: 'optional',
+        roleKey: 'owner',
+      },
+    ]);
+  });
+
+  it('resolves resources from resolver token providers', async () => {
+    const RESOURCE_RESOLVER = Symbol('RESOURCE_RESOLVER');
+    const resolve = vi.fn(() => ({ type: 'report', id: 'report_1' }));
+    const resourceResolver: RbacResourceResolver = { resolve };
+    const subject = { type: 'user' as const, id: 'user_1', tenantId: 'tenant_1' };
+    const can = vi.fn((input: RbacCanInput) => {
+      void input;
+      return Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      });
+    });
+
+    class ReportsController {
+      @Can('reports.read', { resource: { resolverToken: RESOURCE_RESOLVER } })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        { provide: RESOURCE_RESOLVER, useValue: resourceResolver },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).resolves.toBe(true);
+
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(can.mock.calls[0]?.[0]).toMatchObject({
+      permissions: ['reports.read'],
+      resource: { type: 'report', id: 'report_1' },
+    });
+    expect(moduleRef.get(ModuleRef)).toBeInstanceOf(ModuleRef);
+  });
+});
