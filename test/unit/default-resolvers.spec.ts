@@ -168,6 +168,17 @@ describe('default HTTP RBAC resolvers', () => {
       expect(resolveHttpTenant(context, {}, subject)).toBe('tenant_subject');
     });
 
+    it('preserves an explicit null subject tenant without falling through', () => {
+      const subject: RbacSubject = { type: 'user', id: 'user_1', tenantId: null };
+      const context = httpContext({
+        tenantId: 'tenant_request',
+        tenant: { id: 'tenant_object' },
+        headers: { 'x-tenant-id': 'tenant_header' },
+      });
+
+      expect(resolveHttpTenant(context, {}, subject)).toBeNull();
+    });
+
     it('reads tenant ids from request fields and headers', () => {
       expect(
         resolveHttpTenant(httpContext({ tenantId: 'tenant_request' }), {}, {
@@ -187,6 +198,45 @@ describe('default HTTP RBAC resolvers', () => {
           id: 'user_1',
         }),
       ).toBe('tenant_header');
+    });
+
+    it('preserves an explicit null request tenant id without falling through', () => {
+      expect(
+        resolveHttpTenant(
+          httpContext({
+            tenantId: null,
+            tenant: { id: 'tenant_object' },
+            headers: { 'x-tenant-id': 'tenant_header' },
+          }),
+          {},
+          {
+            type: 'user',
+            id: 'user_1',
+          },
+        ),
+      ).toBeNull();
+    });
+
+    it('preserves an explicit null request tenant object id without falling through', () => {
+      expect(
+        resolveHttpTenant(
+          httpContext({
+            tenant: { id: null },
+            headers: { 'x-tenant-id': 'tenant_header' },
+          }),
+          {},
+          {
+            type: 'user',
+            id: 'user_1',
+          },
+        ),
+      ).toBeNull();
+    });
+
+    it('stringifies numeric zero tenant ids', () => {
+      expect(
+        resolveHttpTenant(httpContext({ tenantId: 0 }), {}, { type: 'user', id: 'user_1' }),
+      ).toBe('0');
     });
 
     it('returns undefined when no tenant source resolves', () => {

@@ -11,7 +11,10 @@ type HttpRequest = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-const resolveId = (value: unknown): string | undefined => {
+const resolveTenantId = (value: unknown): string | null | undefined => {
+  if (value === null) {
+    return null;
+  }
   if (typeof value === 'string' && value.length > 0) {
     return value;
   }
@@ -39,21 +42,23 @@ export const resolveHttpTenant = (
     return null;
   }
 
-  const subjectTenantId = resolveId(subject.tenantId);
+  const subjectTenantId = resolveTenantId(subject.tenantId);
   if (subjectTenantId !== undefined) {
     return subjectTenantId;
   }
 
   const request = context.switchToHttp().getRequest<HttpRequest>();
-  const requestTenantId = resolveId(request.tenantId);
+  const requestTenantId = resolveTenantId(request.tenantId);
   if (requestTenantId !== undefined) {
     return requestTenantId;
   }
 
-  const tenantObjectId = isRecord(request.tenant) ? resolveId(request.tenant.id) : undefined;
+  const tenantObjectId = isRecord(request.tenant)
+    ? resolveTenantId(request.tenant.id)
+    : undefined;
   if (tenantObjectId !== undefined) {
     return tenantObjectId;
   }
 
-  return resolveId(getHeader(request.headers, 'x-tenant-id'));
+  return resolveTenantId(getHeader(request.headers, 'x-tenant-id'));
 };
