@@ -1,5 +1,6 @@
 export * from './constants';
 export * from './adapters';
+export * from './audit';
 export * from './decorators';
 export * from './errors';
 export * from './interfaces';
