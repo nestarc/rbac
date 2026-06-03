@@ -35,6 +35,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
       - name: Verify release tag matches package version
         run: |
           PACKAGE_VERSION="$(node -p "require('./package.json').version")"
