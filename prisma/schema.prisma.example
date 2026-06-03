@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RbacRole {
+  id          String               @id @default(cuid())
+  key         String
+  name        String?
+  description String?
+  tenantId    String?              @map("tenant_id")
+  isSystem    Boolean              @default(false) @map("is_system")
+  permissions RbacRolePermission[]
+  bindings    RbacRoleBinding[]
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  @@map("rbac_roles")
+}
+
+model RbacPermission {
+  id        String               @id @default(cuid())
+  key       String               @unique
+  roles     RbacRolePermission[]
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  @@map("rbac_permissions")
+}
+
+model RbacRolePermission {
+  roleId       String         @map("role_id")
+  permissionId String         @map("permission_id")
+  role         RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission   RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  @@id([roleId, permissionId])
+  @@index([permissionId], map: "rbac_role_permissions_permission_idx")
+  @@map("rbac_role_permissions")
+}
+
+model RbacRoleBinding {
+  id           String    @id @default(cuid())
+  tenantId     String?   @map("tenant_id")
+  subjectType  String    @map("subject_type")
+  subjectId    String    @map("subject_id")
+  roleId       String    @map("role_id")
+  resourceType String?   @map("resource_type")
+  resourceId   String?   @map("resource_id")
+  expiresAt    DateTime? @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  metadata     Json?
+  role         RbacRole  @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("rbac_role_bindings")
+}
