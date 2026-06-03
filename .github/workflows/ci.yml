@@ -57,3 +57,46 @@ jobs:
 
       - name: Coverage
         run: npm run test:coverage
+
+  prisma-integration:
+    name: Prisma Integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rbac
+          POSTGRES_PASSWORD: rbac
+          POSTGRES_DB: rbac_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://rbac:rbac@127.0.0.1:5432/rbac_test
+      RBAC_PRISMA_DATABASE_URL: postgresql://rbac:rbac@127.0.0.1:5432/rbac_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Apply RBAC migration
+        run: npm run prisma:migrate:test
+
+      - name: Run Prisma contract tests
+        run: npm run test:prisma

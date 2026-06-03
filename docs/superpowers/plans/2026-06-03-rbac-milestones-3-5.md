@@ -142,8 +142,8 @@ Expected: `package-lock.json` updates and install exits 0.
 Add these packages to `peerDependencies`:
 
 ```json
-"@prisma/client": ">=5 <8",
-"prisma": ">=5 <8",
+"@prisma/client": ">=5 <7",
+"prisma": ">=5 <7",
 "@nestarc/tenancy": ">=0.1 <1",
 "@nestarc/api-keys": ">=0.1 <1",
 "@nestarc/audit-log": ">=0.1 <1"

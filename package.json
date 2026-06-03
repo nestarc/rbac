@@ -29,6 +29,16 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./prisma": {
+      "import": {
+        "types": "./dist/prisma.d.ts",
+        "default": "./dist/prisma.js"
+      },
+      "require": {
+        "types": "./dist/prisma.d.cts",
+        "default": "./dist/prisma.cjs"
+      }
     }
   },
   "scripts": {
