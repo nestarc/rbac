@@ -86,12 +86,57 @@ describe('default HTTP RBAC resolvers', () => {
       });
     });
 
+    it('maps request user records from userId when id and sub are absent', () => {
+      const user = {
+        userId: 'user_1',
+        tenantId: 'tenant_user',
+      };
+      const context = httpContext({ user });
+
+      expect(defaultHttpSubjectResolver()(context)).toEqual({
+        type: 'user',
+        id: 'user_1',
+        tenantId: 'tenant_user',
+        attributes: user,
+      });
+    });
+
     it('maps API key context records', () => {
       const apiKeyContext = {
         keyId: 'key_1',
         id: 'ignored',
         tenantId: 'tenant_key',
         scopes: ['reports.read'],
+      };
+      const context = httpContext({ apiKeyContext });
+
+      expect(defaultHttpSubjectResolver()(context)).toEqual({
+        type: 'api_key',
+        id: 'key_1',
+        tenantId: 'tenant_key',
+        attributes: apiKeyContext,
+      });
+    });
+
+    it('maps request API key records when API key context is absent', () => {
+      const apiKey = {
+        keyId: 'key_1',
+        tenantId: 'tenant_key',
+      };
+      const context = httpContext({ apiKey });
+
+      expect(defaultHttpSubjectResolver()(context)).toEqual({
+        type: 'api_key',
+        id: 'key_1',
+        tenantId: 'tenant_key',
+        attributes: apiKey,
+      });
+    });
+
+    it('maps API key records from id when keyId is absent', () => {
+      const apiKeyContext = {
+        id: 'key_1',
+        tenantId: 'tenant_key',
       };
       const context = httpContext({ apiKeyContext });
 
@@ -143,6 +188,12 @@ describe('default HTTP RBAC resolvers', () => {
         }),
       ).toBe('tenant_header');
     });
+
+    it('returns undefined when no tenant source resolves', () => {
+      expect(
+        resolveHttpTenant(httpContext({ headers: {} }), {}, { type: 'user', id: 'user_1' }),
+      ).toBeUndefined();
+    });
   });
 
   describe('resolveHttpResource', () => {
@@ -161,6 +212,15 @@ describe('default HTTP RBAC resolvers', () => {
       ).toEqual({ type: 'invoice', id: '42' });
       expect(
         resolveHttpResource(httpContext({ headers: { 'x-project-id': 'project_1' } }), {
+          type: 'project',
+          idHeader: 'X-Project-Id',
+        }),
+      ).toEqual({ type: 'project', id: 'project_1' });
+    });
+
+    it('resolves header resources from exact-case headers when lowercase is absent', () => {
+      expect(
+        resolveHttpResource(httpContext({ headers: { 'X-Project-Id': 'project_1' } }), {
           type: 'project',
           idHeader: 'X-Project-Id',
         }),
