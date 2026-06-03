@@ -49,6 +49,26 @@
         "types": "./dist/testing.d.cts",
         "default": "./dist/testing.cjs"
       }
+    },
+    "./integrations/tenancy": {
+      "import": {
+        "types": "./dist/integrations/tenancy.d.ts",
+        "default": "./dist/integrations/tenancy.js"
+      },
+      "require": {
+        "types": "./dist/integrations/tenancy.d.cts",
+        "default": "./dist/integrations/tenancy.cjs"
+      }
+    },
+    "./integrations/api-keys": {
+      "import": {
+        "types": "./dist/integrations/api-keys.d.ts",
+        "default": "./dist/integrations/api-keys.js"
+      },
+      "require": {
+        "types": "./dist/integrations/api-keys.d.cts",
+        "default": "./dist/integrations/api-keys.cjs"
+      }
     }
   },
   "scripts": {

@@ -5,6 +5,8 @@ export default defineConfig({
     index: 'src/index.ts',
     prisma: 'src/prisma.ts',
     testing: 'src/testing.ts',
+    'integrations/tenancy': 'src/integrations/tenancy.ts',
+    'integrations/api-keys': 'src/integrations/api-keys.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
@@ -18,5 +20,8 @@ export default defineConfig({
     'rxjs',
     '@prisma/client',
     'prisma',
+    '@nestarc/tenancy',
+    '@nestarc/api-keys',
+    '@nestarc/audit-log',
   ],
 });
