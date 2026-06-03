@@ -2,7 +2,10 @@
 /dist
 /node_modules
 /build
+/coverage
 /tmp
+*.tsbuildinfo
+*.tgz
 
 # Logs
 logs
