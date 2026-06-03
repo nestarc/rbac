@@ -30,17 +30,30 @@ function cloneDate(date: Date | null | undefined): Date | null {
   return date ? new Date(date) : null;
 }
 
-function sameDate(left: Date | null | undefined, right: Date | null | undefined): boolean {
-  const normalizedLeft = left?.getTime() ?? null;
-  const normalizedRight = right?.getTime() ?? null;
+function cloneValue(value: unknown): unknown {
+  if (value instanceof Date) return new Date(value);
+  if (Array.isArray(value)) return value.map(cloneValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        key,
+        cloneValue(nestedValue),
+      ]),
+    );
+  }
 
-  return normalizedLeft === normalizedRight;
+  return value;
 }
 
 function cloneMetadata(
   metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
-  return metadata ? { ...metadata } : undefined;
+  if (metadata === undefined) return undefined;
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(metadata);
+  }
+
+  return cloneValue(metadata) as Record<string, unknown>;
 }
 
 function cloneRole(role: RbacRole): RbacRole {
@@ -200,16 +213,16 @@ export class InMemoryRbacStorage implements RbacStorage {
     const tenantId = normalizeTenantId(input.tenantId);
     const { resourceType, resourceId } = bindingResource(input.resource);
     const expiresAt = cloneDate(input.expiresAt);
+    const now = new Date();
     const existing = [...this.bindings.values()].find(
       (binding) =>
-        !binding.revokedAt &&
+        isBindingActive(binding, now) &&
         normalizeTenantId(binding.tenantId) === tenantId &&
         binding.subjectType === input.subject.type &&
         binding.subjectId === input.subject.id &&
         binding.roleId === input.roleId &&
         (binding.resourceType ?? null) === resourceType &&
-        (binding.resourceId ?? null) === resourceId &&
-        sameDate(binding.expiresAt, expiresAt),
+        (binding.resourceId ?? null) === resourceId,
     );
 
     if (existing) return Promise.resolve(cloneBinding(existing));
@@ -309,7 +322,11 @@ export class InMemoryRbacStorage implements RbacStorage {
     if (!isBindingActive(binding, now)) {
       return false;
     }
-    if (!this.roles.has(binding.roleId)) {
+    const role = this.roles.get(binding.roleId);
+    if (!role) {
+      return false;
+    }
+    if (normalizeTenantId(role.tenantId) !== normalizeTenantId(binding.tenantId)) {
       return false;
     }
 
