@@ -5,22 +5,22 @@ CREATE TABLE IF NOT EXISTS rbac_roles (
   description TEXT,
   tenant_id TEXT,
   is_system BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 
 CREATE TABLE IF NOT EXISTS rbac_permissions (
   id TEXT PRIMARY KEY,
   key TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 
 CREATE TABLE IF NOT EXISTS rbac_role_permissions (
   role_id TEXT NOT NULL,
   permission_id TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (role_id, permission_id),
   CONSTRAINT rbac_role_permissions_role_id_fkey
     FOREIGN KEY (role_id)
@@ -42,11 +42,11 @@ CREATE TABLE IF NOT EXISTS rbac_role_bindings (
   role_id TEXT NOT NULL,
   resource_type TEXT,
   resource_id TEXT,
-  expires_at TIMESTAMPTZ,
-  revoked_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ(3),
+  revoked_at TIMESTAMPTZ(3),
   metadata JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   CONSTRAINT rbac_role_bindings_role_id_fkey
     FOREIGN KEY (role_id)
     REFERENCES rbac_roles (id)
@@ -65,6 +65,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS rbac_roles_tenant_key_unique
   ON rbac_roles (tenant_id, key)
   WHERE tenant_id IS NOT NULL;
 
+-- This enforces a single unrevoked binding row. Expiration is evaluated in
+-- storage logic; reassigning an expired, unrevoked binding should update the
+-- existing row instead of inserting a duplicate.
 CREATE UNIQUE INDEX IF NOT EXISTS rbac_active_binding_unique
   ON rbac_role_bindings (
     COALESCE(tenant_id, ''),
