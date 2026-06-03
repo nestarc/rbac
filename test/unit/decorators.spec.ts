@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { CUSTOM_ROUTE_ARGS_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import { Reflector } from '@nestjs/core';
 import { describe, expect, it } from 'vitest';
 import {
   Can,
@@ -23,6 +24,11 @@ interface CustomRouteArgMetadata {
   pipes: unknown[];
 }
 
+type RouteHandler = (...args: never[]) => unknown;
+
+const getHandler = (target: object, key: string): RouteHandler =>
+  Object.getOwnPropertyDescriptor(target, key)?.value as RouteHandler;
+
 describe('RBAC decorators', () => {
   it('stores a single permission requirement for Can on a handler', () => {
     class ReportsController {
@@ -31,8 +37,7 @@ describe('RBAC decorators', () => {
         return undefined;
       }
     }
-    const handler = Object.getOwnPropertyDescriptor(ReportsController.prototype, 'read')
-      ?.value as object;
+    const handler = getHandler(ReportsController.prototype, 'read');
 
     expect(Reflect.getMetadata(RBAC_REQUIREMENTS_METADATA, handler)).toEqual([
       {
@@ -57,8 +62,7 @@ describe('RBAC decorators', () => {
         return undefined;
       }
     }
-    const handler = Object.getOwnPropertyDescriptor(ReportsController.prototype, 'write')
-      ?.value as object;
+    const handler = getHandler(ReportsController.prototype, 'write');
 
     expect(Reflect.getMetadata(RBAC_REQUIREMENTS_METADATA, ReportsController)).toEqual([
       {
@@ -77,6 +81,86 @@ describe('RBAC decorators', () => {
     ]);
   });
 
+  it('preserves multiple RBAC requirements on the same handler', () => {
+    class ReportsController {
+      @Can('reports.read')
+      @RequirePermissions(['reports.write'], { mode: 'all', reason: 'writer' })
+      @RequireRole('report-manager')
+      update() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'update');
+
+    expect(Reflect.getMetadata(RBAC_REQUIREMENTS_METADATA, handler)).toEqual([
+      {
+        kind: 'role',
+        roleKey: 'report-manager',
+        options: {},
+      },
+      {
+        kind: 'permission',
+        permissions: ['reports.write'],
+        mode: 'all',
+        options: { mode: 'all', reason: 'writer' },
+      },
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'any',
+        options: {},
+      },
+    ]);
+  });
+
+  it('preserves multiple RBAC requirements on the same class', () => {
+    @RequirePermissions(['reports.manage'], { mode: 'all' })
+    @RequireRole('owner')
+    class ReportsController {}
+
+    expect(Reflect.getMetadata(RBAC_REQUIREMENTS_METADATA, ReportsController)).toEqual([
+      {
+        kind: 'role',
+        roleKey: 'owner',
+        options: {},
+      },
+      {
+        kind: 'permission',
+        permissions: ['reports.manage'],
+        mode: 'all',
+        options: { mode: 'all' },
+      },
+    ]);
+  });
+
+  it('merges method and class requirements through Reflector.getAllAndMerge', () => {
+    @RequireRole('owner')
+    class ReportsController {
+      @Can('reports.read')
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const reflector = new Reflector();
+
+    expect(
+      reflector.getAllAndMerge(RBAC_REQUIREMENTS_METADATA, [handler, ReportsController]),
+    ).toEqual([
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'any',
+        options: {},
+      },
+      {
+        kind: 'role',
+        roleKey: 'owner',
+        options: {},
+      },
+    ]);
+  });
+
   it('stores skip metadata with the provided reason', () => {
     class HealthController {
       @SkipRbac('health check')
@@ -84,12 +168,55 @@ describe('RBAC decorators', () => {
         return undefined;
       }
     }
-    const handler = Object.getOwnPropertyDescriptor(HealthController.prototype, 'check')
-      ?.value as object;
+    const handler = getHandler(HealthController.prototype, 'check');
 
     expect(Reflect.getMetadata(RBAC_SKIP_METADATA, handler)).toEqual({
       reason: 'health check',
     });
+  });
+
+  it('lets method skip metadata override class skip metadata through Reflector.getAllAndOverride', () => {
+    @SkipRbac('public controller')
+    class HealthController {
+      @SkipRbac('health check')
+      check() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(HealthController.prototype, 'check');
+    const reflector = new Reflector();
+
+    expect(reflector.getAllAndOverride(RBAC_SKIP_METADATA, [handler, HealthController])).toEqual(
+      {
+        reason: 'health check',
+      },
+    );
+  });
+
+  it('isolates stored permission requirements from caller mutations', () => {
+    const permissions = ['reports.read'];
+    const options = { mode: 'all', reason: 'initial reason' } as const;
+
+    class ReportsController {
+      @RequirePermissions(permissions, options)
+      update() {
+        return undefined;
+      }
+    }
+    permissions.push('reports.write');
+    const mutableOptions = options as { mode: 'any' | 'all'; reason: string };
+    mutableOptions.mode = 'any';
+    mutableOptions.reason = 'mutated reason';
+    const handler = getHandler(ReportsController.prototype, 'update');
+
+    expect(Reflect.getMetadata(RBAC_REQUIREMENTS_METADATA, handler)).toEqual([
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'all',
+        options: { mode: 'all', reason: 'initial reason' },
+      },
+    ]);
   });
 
   it('reads the RBAC subject from the HTTP request', () => {
