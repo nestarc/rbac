@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.spec.ts', 'test/**/*.e2e-spec.ts'],
+    exclude: ['node_modules', 'dist', 'test/integration/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

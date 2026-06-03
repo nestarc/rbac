@@ -14,12 +14,15 @@ import type {
   ListBindingsInput,
   ListPermissionsInput,
   ListRolesInput,
+  RbacAuditEvent,
   RbacCanInput,
   RbacDecision,
   RbacDecisionReason,
   RbacEffectivePermission,
+  RbacEffectiveRole,
   RbacModuleOptions,
   RbacRequirementMode,
+  RbacResourceRef,
   RbacRole,
   RbacRoleBinding,
   RbacSubject,
@@ -27,7 +30,13 @@ import type {
   RevokeRoleInput,
   UpdateRoleInput,
 } from './interfaces';
-import { matchesPermission, matchesResource, normalizePermission, normalizePermissions } from './utils';
+import {
+  assertNonEmptyString,
+  matchesPermission,
+  matchesResource,
+  normalizePermission,
+  normalizePermissions,
+} from './utils';
 
 interface ResolvedTenant {
   tenantId: string | null;
@@ -55,6 +64,10 @@ function hasSubject(subject: RbacSubject | undefined): subject is RbacSubject {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function auditResource(resource: RbacResourceRef | undefined): RbacResourceRef | undefined {
+  return resource ? { type: resource.type, id: resource.id } : undefined;
 }
 
 @Injectable()
@@ -103,32 +116,84 @@ export class RbacService {
     throw new RbacPermissionDeniedError(details);
   }
 
-  createRole(input: CreateRoleInput): Promise<RbacRole> {
-    return this.options.storage.upsertRole(input);
+  async createRole(input: CreateRoleInput): Promise<RbacRole> {
+    this.validateCreateRoleInput(input);
+    const role = await this.options.storage.upsertRole(input);
+    await this.logAudit({
+      type: 'rbac.role.created',
+      tenantId: role.tenantId,
+      metadata: { roleId: role.id, roleKey: role.key },
+    });
+
+    return role;
   }
 
-  updateRole(input: UpdateRoleInput): Promise<RbacRole> {
-    return this.options.storage.upsertRole(input);
+  async updateRole(input: UpdateRoleInput): Promise<RbacRole> {
+    this.validateUpdateRoleInput(input);
+    const role = await this.options.storage.upsertRole(input);
+    await this.logAudit({
+      type: 'rbac.role.updated',
+      tenantId: role.tenantId,
+      metadata: { roleId: role.id, roleKey: role.key },
+    });
+
+    return role;
   }
 
-  deleteRole(input: DeleteRoleInput): Promise<void> {
-    return this.options.storage.deleteRole(input);
+  async deleteRole(input: DeleteRoleInput): Promise<void> {
+    assertNonEmptyString(input.roleId, 'roleId');
+    await this.options.storage.deleteRole(input);
+    await this.logAudit({
+      type: 'rbac.role.deleted',
+      metadata: { roleId: input.roleId },
+    });
   }
 
-  grantPermission(input: GrantPermissionInput): Promise<void> {
-    return this.options.storage.grantPermission(input);
+  async grantPermission(input: GrantPermissionInput): Promise<void> {
+    assertNonEmptyString(input.roleId, 'roleId');
+    normalizePermission(input.permission);
+    await this.options.storage.grantPermission(input);
+    await this.logAudit({
+      type: 'rbac.permission.granted',
+      metadata: { roleId: input.roleId, permission: input.permission },
+    });
   }
 
-  revokePermission(input: RevokePermissionInput): Promise<void> {
-    return this.options.storage.revokePermission(input);
+  async revokePermission(input: RevokePermissionInput): Promise<void> {
+    assertNonEmptyString(input.roleId, 'roleId');
+    normalizePermission(input.permission);
+    await this.options.storage.revokePermission(input);
+    await this.logAudit({
+      type: 'rbac.permission.revoked',
+      metadata: { roleId: input.roleId, permission: input.permission },
+    });
   }
 
-  assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
-    return this.options.storage.assignRole(input);
+  async assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
+    this.validateAssignRoleInput(input);
+    const binding = await this.options.storage.assignRole(input);
+    await this.logAudit({
+      type: 'rbac.role.assigned',
+      tenantId: binding.tenantId,
+      subjectType: binding.subjectType,
+      subjectId: binding.subjectId,
+      metadata: {
+        bindingId: binding.id,
+        roleId: binding.roleId,
+        ...(input.resource !== undefined ? { resource: auditResource(input.resource) } : {}),
+      },
+    });
+
+    return binding;
   }
 
-  revokeRole(input: RevokeRoleInput): Promise<void> {
-    return this.options.storage.revokeRole(input);
+  async revokeRole(input: RevokeRoleInput): Promise<void> {
+    assertNonEmptyString(input.bindingId, 'bindingId');
+    await this.options.storage.revokeRole(input);
+    await this.logAudit({
+      type: 'rbac.role.revoked',
+      metadata: { bindingId: input.bindingId },
+    });
   }
 
   listRoles(input: ListRolesInput): Promise<RbacRole[]> {
@@ -159,12 +224,9 @@ export class RbacService {
     }
 
     try {
-      const roles = (await this.options.storage.listEffectiveRoles({
-        subject,
-        tenantId,
-        resource: input.resource,
-        now: this.resolveNow(input),
-      })).filter((role) => matchesResource(role, input.resource));
+      const roles = (await this.listEffectiveRolesForTenant(input, subject, tenantId)).filter(
+        (role) => matchesResource(role, input.resource),
+      );
       const matchedRoleKeys = unique(
         roles.filter((role) => role.roleKey === roleKey).map((role) => role.roleKey),
       );
@@ -206,12 +268,9 @@ export class RbacService {
     }
 
     try {
-      const effectivePermissions = (await this.options.storage.listEffectivePermissions({
-        subject,
-        tenantId,
-        resource: input.resource,
-        now: this.resolveNow(input),
-      })).filter((permission) => matchesResource(permission, input.resource));
+      const effectivePermissions = (
+        await this.listEffectivePermissionsForTenant(input, subject, tenantId)
+      ).filter((permission) => matchesResource(permission, input.resource));
       const matches = this.matchPermissions(effectivePermissions, requirement.permissions);
       const allowed =
         requirement.mode === 'all'
@@ -276,7 +335,7 @@ export class RbacService {
       return { tenantId: null, missing: false };
     }
     if (input.tenantId === null) {
-      return { tenantId: null, missing: false };
+      return { tenantId: null, missing: mode === 'required' };
     }
 
     const rawTenantId = input.tenantId !== undefined ? input.tenantId : subject?.tenantId;
@@ -326,6 +385,48 @@ export class RbacService {
     return permissions;
   }
 
+  private validateCreateRoleInput(input: CreateRoleInput): void {
+    this.validateOptionalTenantId(input.tenantId);
+    assertNonEmptyString(input.key, 'role key');
+    normalizePermissions(input.permissions);
+  }
+
+  private validateUpdateRoleInput(input: UpdateRoleInput): void {
+    assertNonEmptyString(input.roleId, 'roleId');
+    this.validateOptionalTenantId(input.tenantId);
+    if (input.key !== undefined) {
+      assertNonEmptyString(input.key, 'role key');
+    }
+    if (input.permissions !== undefined) {
+      normalizePermissions(input.permissions);
+    }
+  }
+
+  private validateAssignRoleInput(input: AssignRoleInput): void {
+    this.validateOptionalTenantId(input.tenantId);
+    this.validateSubjectForWrite(input.subject);
+    assertNonEmptyString(input.roleId, 'roleId');
+    if (input.resource !== undefined) {
+      assertNonEmptyString(input.resource.type, 'resource.type');
+      assertNonEmptyString(input.resource.id, 'resource.id');
+    }
+  }
+
+  private validateSubjectForWrite(subject: RbacSubject): void {
+    assertNonEmptyString(subject?.type, 'subject.type');
+    assertNonEmptyString(subject?.id, 'subject.id');
+    this.validateOptionalTenantId(subject?.tenantId, 'subject.tenantId');
+  }
+
+  private validateOptionalTenantId(
+    tenantId: string | null | undefined,
+    name = 'tenantId',
+  ): void {
+    if (tenantId !== null && tenantId !== undefined) {
+      assertNonEmptyString(tenantId, name);
+    }
+  }
+
   private isRoleCheck(input: RbacCanInput): input is RbacCanInput & { roleKey: string } {
     return 'roleKey' in input && typeof input.roleKey === 'string';
   }
@@ -371,5 +472,67 @@ export class RbacService {
     };
 
     return decision;
+  }
+
+  private async listEffectiveRolesForTenant(
+    input: RbacCanInput,
+    subject: RbacSubject,
+    tenantId: string | null,
+  ): Promise<RbacEffectiveRole[]> {
+    const now = this.resolveNow(input);
+    const tenantRoles = await this.options.storage.listEffectiveRoles({
+      subject,
+      tenantId,
+      resource: input.resource,
+      now,
+    });
+
+    if (tenantId === null || this.options.tenant?.allowGlobalRolesInTenant !== true) {
+      return tenantRoles;
+    }
+
+    const globalRoles = await this.options.storage.listEffectiveRoles({
+      subject,
+      tenantId: null,
+      resource: input.resource,
+      now,
+    });
+
+    return [...tenantRoles, ...globalRoles];
+  }
+
+  private async listEffectivePermissionsForTenant(
+    input: RbacCanInput,
+    subject: RbacSubject,
+    tenantId: string | null,
+  ): Promise<RbacEffectivePermission[]> {
+    const now = this.resolveNow(input);
+    const tenantPermissions = await this.options.storage.listEffectivePermissions({
+      subject,
+      tenantId,
+      resource: input.resource,
+      now,
+    });
+
+    if (tenantId === null || this.options.tenant?.allowGlobalRolesInTenant !== true) {
+      return tenantPermissions;
+    }
+
+    const globalPermissions = await this.options.storage.listEffectivePermissions({
+      subject,
+      tenantId: null,
+      resource: input.resource,
+      now,
+    });
+
+    return [...tenantPermissions, ...globalPermissions];
+  }
+
+  private async logAudit(event: RbacAuditEvent): Promise<void> {
+    try {
+      await this.options.auditLogger?.log(event);
+    } catch {
+      // Audit logging must not change RBAC write or authorization behavior.
+    }
   }
 }

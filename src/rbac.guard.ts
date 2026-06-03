@@ -20,6 +20,7 @@ import { RbacService } from './rbac.service';
 import type {
   RbacBuiltInResourceDeclaration,
   RbacCanInput,
+  RbacDecision,
   RbacDecisionReason,
   RbacModuleOptions,
   RbacRequirement,
@@ -41,6 +42,9 @@ const isNonEmptyString = (value: unknown): value is string =>
 
 const hasSubject = (subject: RbacSubject | undefined): subject is RbacSubject =>
   subject !== undefined && isNonEmptyString(subject.type) && isNonEmptyString(subject.id);
+
+const auditResource = (resource: RbacResourceRef | undefined): RbacResourceRef | undefined =>
+  resource ? { type: resource.type, id: resource.id } : undefined;
 
 const isBuiltInResourceDeclaration = (
   resource: RbacRequirementOptions['resource'],
@@ -86,6 +90,7 @@ export class RbacGuard implements CanActivate {
     for (const requirement of requirements) {
       const decision = await this.checkRequirement(context, requirement, subject);
       if (!decision.allowed) {
+        await this.logDeniedDecision(decision);
         throw this.deniedDecisionToHttpException(decision.reason);
       }
     }
@@ -158,9 +163,12 @@ export class RbacGuard implements CanActivate {
     requirementOptions: RbacRequirementOptions,
     subject: RbacSubject,
   ): Promise<string | null | undefined> | string | null | undefined {
-    const resolver = this.options.tenantResolver ?? resolveHttpTenant;
+    const defaultTenantId = resolveHttpTenant(context, requirementOptions, subject);
+    if (defaultTenantId !== undefined || this.options.tenantResolver === undefined) {
+      return defaultTenantId;
+    }
 
-    return resolver(context, requirementOptions, subject);
+    return this.options.tenantResolver(context, requirementOptions, subject);
   }
 
   private async resolveResource(
@@ -239,6 +247,26 @@ export class RbacGuard implements CanActivate {
         return mapRbacErrorToHttpException(new RbacStorageError());
       default:
         return mapRbacErrorToHttpException(new RbacPermissionDeniedError());
+    }
+  }
+
+  private async logDeniedDecision(decision: RbacDecision): Promise<void> {
+    try {
+      await this.options.auditLogger?.log({
+        type: 'rbac.permission.denied',
+        tenantId: decision.tenantId,
+        subjectType: decision.subject?.type,
+        subjectId: decision.subject?.id,
+        metadata: {
+          reason: decision.reason,
+          permission: decision.permission,
+          permissions: decision.permissions,
+          roleKey: decision.roleKey,
+          resource: auditResource(decision.resource),
+        },
+      });
+    } catch {
+      // Preserve the RBAC HTTP response even when audit logging fails.
     }
   }
 }

@@ -16,6 +16,10 @@
   },
   "files": [
     "dist",
+    "docs/*.md",
+    "examples",
+    "prisma",
+    "changelog.md",
     "README.md",
     "LICENSE"
   ],
@@ -29,6 +33,46 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./prisma": {
+      "import": {
+        "types": "./dist/prisma.d.ts",
+        "default": "./dist/prisma.js"
+      },
+      "require": {
+        "types": "./dist/prisma.d.cts",
+        "default": "./dist/prisma.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
+    },
+    "./integrations/tenancy": {
+      "import": {
+        "types": "./dist/integrations/tenancy.d.ts",
+        "default": "./dist/integrations/tenancy.js"
+      },
+      "require": {
+        "types": "./dist/integrations/tenancy.d.cts",
+        "default": "./dist/integrations/tenancy.cjs"
+      }
+    },
+    "./integrations/api-keys": {
+      "import": {
+        "types": "./dist/integrations/api-keys.d.ts",
+        "default": "./dist/integrations/api-keys.js"
+      },
+      "require": {
+        "types": "./dist/integrations/api-keys.d.cts",
+        "default": "./dist/integrations/api-keys.cjs"
+      }
     }
   },
   "scripts": {
@@ -40,13 +84,38 @@
     "test": "vitest run",
     "test:e2e": "vitest run test/e2e",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma.example",
+    "prisma:migrate:test": "prisma db execute --schema=prisma/schema.prisma.example --file=prisma/migrations/0001_init_rbac.sql",
+    "test:prisma": "vitest run --config vitest.integration.config.ts"
   },
   "peerDependencies": {
+    "@nestarc/api-keys": ">=0.1 <1",
+    "@nestarc/audit-log": ">=0.1 <1",
+    "@nestarc/tenancy": ">=0.1 <1",
     "@nestjs/common": ">=10 <12",
     "@nestjs/core": ">=10 <12",
+    "@prisma/client": ">=5 <7",
+    "prisma": ">=5 <7",
     "reflect-metadata": ">=0.1.13",
     "rxjs": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "@prisma/client": {
+      "optional": true
+    },
+    "prisma": {
+      "optional": true
+    },
+    "@nestarc/tenancy": {
+      "optional": true
+    },
+    "@nestarc/api-keys": {
+      "optional": true
+    },
+    "@nestarc/audit-log": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -54,12 +123,14 @@
     "@nestjs/core": "^11.1.24",
     "@nestjs/platform-express": "^11.1.24",
     "@nestjs/testing": "^11.1.24",
+    "@prisma/client": "^6.19.3",
     "@swc/core": "^1.15.40",
     "@types/node": "^25.9.1",
     "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^10.4.1",
     "prettier": "^3.8.3",
+    "prisma": "^6.19.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "supertest": "^7.2.2",
