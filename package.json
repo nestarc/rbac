@@ -1,6 +1,6 @@
 {
   "name": "@nestarc/rbac",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Tenant-aware RBAC and permission guards for production NestJS SaaS applications.",
   "license": "MIT",
   "repository": {
@@ -16,7 +16,11 @@
   },
   "files": [
     "dist",
-    "docs/*.md",
+    "docs/guards.md",
+    "docs/installation.md",
+    "docs/integrations.md",
+    "docs/prisma.md",
+    "docs/testing.md",
     "examples",
     "prisma",
     "changelog.md",

@@ -2,7 +2,10 @@
 
 All notable changes to `@nestarc/rbac` will be documented in this file.
 
-## Unreleased
+## 0.1.0 - 2026-06-03
+
+Initial public release of tenant-aware RBAC primitives for NestJS SaaS
+applications.
 
 ### Added
 
@@ -60,9 +63,3 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
   and optional integrations.
 - Added examples for basic HTTP guards, API key subjects, and resource-scoped
   roles.
-
-### Verification
-
-- Verified lint, typecheck, unit/contract tests, route e2e tests, build,
-  coverage, Prisma generation, Prisma migration execution, Docker-backed Prisma
-  integration tests, and npm package dry-run.

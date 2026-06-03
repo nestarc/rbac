@@ -27,6 +27,14 @@ Install NestJS peer dependencies in applications that do not already have them:
 npm install @nestjs/common @nestjs/core reflect-metadata rxjs
 ```
 
+For Prisma/PostgreSQL storage, install the optional Prisma peers in the
+consuming application:
+
+```bash
+npm install @prisma/client
+npm install -D prisma
+```
+
 For focused setup notes, see [docs/installation.md](docs/installation.md).
 
 ## Quickstart
