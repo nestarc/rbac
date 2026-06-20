@@ -49,6 +49,53 @@ export interface RbacDecision {
   matchedRoleKeys?: string[] | undefined;
   matchedPermissions?: string[] | undefined;
   resource?: RbacResourceRef | undefined;
+  details?: RbacDecisionDetails | undefined;
+}
+
+export interface RbacDecisionDetails {
+  requirement?: RbacDecisionRequirementDetails | undefined;
+  matched?: RbacDecisionMatchDetails | undefined;
+  missing?: RbacDecisionMissingDetails | undefined;
+  evaluationPath?: RbacEvaluationStep[] | undefined;
+  safeMessage?: string | undefined;
+}
+
+export interface RbacDecisionRequirementDetails {
+  type: 'permission' | 'role';
+  permissions?: string[] | undefined;
+  roleKeys?: string[] | undefined;
+  mode?: RbacRequirementMode | undefined;
+}
+
+export interface RbacDecisionMatchDetails {
+  roleIds?: string[] | undefined;
+  roleKeys?: string[] | undefined;
+  permissions?: string[] | undefined;
+  bindingIds?: string[] | undefined;
+}
+
+export interface RbacDecisionMissingDetails {
+  subject?: boolean | undefined;
+  tenant?: boolean | undefined;
+  resource?: boolean | undefined;
+  permissions?: string[] | undefined;
+  roleKeys?: string[] | undefined;
+}
+
+export interface RbacEvaluationStep {
+  code:
+    | 'subject_missing'
+    | 'tenant_missing'
+    | 'resource_missing'
+    | 'resource_mismatch'
+    | 'roles_loaded'
+    | 'permissions_loaded'
+    | 'permission_matched'
+    | 'permission_missing'
+    | 'role_matched'
+    | 'role_missing'
+    | 'storage_error';
+  outcome: 'allow' | 'deny' | 'skip' | 'info';
 }
 
 export type RbacDecisionReason =

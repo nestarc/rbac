@@ -18,10 +18,12 @@ import type {
   RbacAuditEvent,
   RbacCanInput,
   RbacDecision,
+  RbacDecisionDetails,
   RbacDecisionReason,
   RbacEffectivePermission,
   RbacEffectiveRole,
   RbacModuleOptions,
+  RbacPolicyChangeEvent,
   RbacRequirementMode,
   RbacResourceRef,
   RbacRole,
@@ -50,6 +52,11 @@ interface PermissionRequirement {
   mode: RbacRequirementMode;
   invalid: boolean;
 }
+
+type DecisionOverrides = Partial<RbacDecision> & {
+  allowed: boolean;
+  missingPermissions?: string[] | undefined;
+};
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
@@ -118,6 +125,13 @@ export class RbacService {
       tenantId: role.tenantId,
       metadata: { roleId: role.id, roleKey: role.key },
     });
+    await this.publishChange({
+      type: 'role.created',
+      tenantId: role.tenantId,
+      roleId: role.id,
+      roleKey: role.key,
+      permissions: role.permissions,
+    });
 
     return role;
   }
@@ -130,6 +144,13 @@ export class RbacService {
       tenantId: role.tenantId,
       metadata: { roleId: role.id, roleKey: role.key },
     });
+    await this.publishChange({
+      type: 'role.updated',
+      tenantId: role.tenantId,
+      roleId: role.id,
+      roleKey: role.key,
+      permissions: role.permissions,
+    });
 
     return role;
   }
@@ -141,6 +162,10 @@ export class RbacService {
       type: 'rbac.role.deleted',
       metadata: { roleId: input.roleId },
     });
+    await this.publishChange({
+      type: 'role.deleted',
+      roleId: input.roleId,
+    });
   }
 
   async grantPermission(input: GrantPermissionInput): Promise<void> {
@@ -150,6 +175,11 @@ export class RbacService {
     await this.logAudit({
       type: 'rbac.permission.granted',
       metadata: { roleId: input.roleId, permission: input.permission },
+    });
+    await this.publishChange({
+      type: 'permission.granted',
+      roleId: input.roleId,
+      permissions: [input.permission],
     });
   }
 
@@ -161,11 +191,17 @@ export class RbacService {
       type: 'rbac.permission.revoked',
       metadata: { roleId: input.roleId, permission: input.permission },
     });
+    await this.publishChange({
+      type: 'permission.revoked',
+      roleId: input.roleId,
+      permissions: [input.permission],
+    });
   }
 
   async assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
     this.validateAssignRoleInput(input);
-    const { roleId, roleKey } = await this.resolveAssignRoleIdentifier(input);
+    const { roleId, roleKey, role } = await this.resolveAssignRoleIdentifier(input);
+    this.validateAssignRoleBoundary(input, role);
     const storageInput: AssignRoleStorageInput = {
       tenantId: input.tenantId,
       subject: input.subject,
@@ -187,6 +223,15 @@ export class RbacService {
         ...(input.resource !== undefined ? { resource: auditResource(input.resource) } : {}),
       },
     });
+    await this.publishChange({
+      type: 'role.assigned',
+      tenantId: binding.tenantId,
+      subject: { type: binding.subjectType, id: binding.subjectId },
+      roleId: binding.roleId,
+      ...(roleKey !== undefined ? { roleKey } : {}),
+      ...(input.resource !== undefined ? { resource: auditResource(input.resource) } : {}),
+      bindingId: binding.id,
+    });
 
     return binding;
   }
@@ -197,6 +242,10 @@ export class RbacService {
     await this.logAudit({
       type: 'rbac.role.revoked',
       metadata: { bindingId: input.bindingId },
+    });
+    await this.publishChange({
+      type: 'role.revoked',
+      bindingId: input.bindingId,
     });
   }
 
@@ -280,6 +329,9 @@ export class RbacService {
         requirement.mode === 'all'
           ? requirement.permissions.every((required) => matches.byRequired.has(required))
           : matches.matchedPermissions.length > 0;
+      const missingPermissions = requirement.permissions.filter(
+        (required) => !matches.byRequired.has(required),
+      );
 
       return this.decision(
         input,
@@ -293,6 +345,7 @@ export class RbacService {
           mode: requirement.mode,
           matchedRoleKeys: matches.matchedRoleKeys,
           matchedPermissions: matches.matchedPermissions,
+          missingPermissions,
         },
       );
     } catch (error) {
@@ -458,9 +511,17 @@ export class RbacService {
 
   private async resolveAssignRoleIdentifier(
     input: AssignRoleInput,
-  ): Promise<{ roleId: string; roleKey?: string | undefined }> {
+  ): Promise<{ roleId: string; roleKey?: string | undefined; role?: RbacRole | undefined }> {
     if ('roleId' in input && input.roleId !== undefined) {
-      return { roleId: input.roleId.trim() };
+      const roleId = input.roleId.trim();
+      const role = this.assignRoleNeedsResolvedRole()
+        ? await this.findRoleById(roleId)
+        : undefined;
+      if (this.assignRoleNeedsResolvedRole() && role === undefined) {
+        throw new RbacRoleNotFoundError({ roleId });
+      }
+
+      return { roleId, role };
     }
 
     const roleKey = input.roleKey.trim();
@@ -473,7 +534,69 @@ export class RbacService {
       throw new RbacRoleNotFoundError({ tenantId: input.tenantId, roleKey });
     }
 
-    return { roleId: role.id, roleKey };
+    return { roleId: role.id, roleKey, role };
+  }
+
+  private assignRoleNeedsResolvedRole(): boolean {
+    const validation = this.options.writeValidation;
+
+    return (
+      validation?.rejectTenantMismatch === true ||
+      validation?.rejectGlobalRoleInTenantBinding === true
+    );
+  }
+
+  private async findRoleById(roleId: string): Promise<RbacRole | undefined> {
+    const roles = await this.options.storage.listRoles({});
+
+    return roles.find((role) => role.id === roleId);
+  }
+
+  private validateAssignRoleBoundary(input: AssignRoleInput, role: RbacRole | undefined): void {
+    const validation = this.options.writeValidation;
+
+    if (
+      validation?.rejectResourceWithoutTenant === true &&
+      input.resource !== undefined &&
+      input.tenantId == null
+    ) {
+      throw new RbacConfigError({
+        operation: 'assignRole',
+        reason: 'resource_binding_requires_tenant',
+      });
+    }
+
+    if (role === undefined) return;
+
+    const roleTenantId = role.tenantId ?? null;
+    const bindingTenantId = input.tenantId ?? null;
+
+    if (
+      validation?.rejectTenantMismatch === true &&
+      roleTenantId !== null &&
+      roleTenantId !== bindingTenantId
+    ) {
+      throw new RbacConfigError({
+        operation: 'assignRole',
+        reason: 'role_tenant_mismatch',
+        roleId: role.id,
+        roleTenantId,
+        bindingTenantId,
+      });
+    }
+
+    if (
+      validation?.rejectGlobalRoleInTenantBinding === true &&
+      roleTenantId === null &&
+      bindingTenantId !== null
+    ) {
+      throw new RbacConfigError({
+        operation: 'assignRole',
+        reason: 'global_role_tenant_binding_rejected',
+        roleId: role.id,
+        bindingTenantId,
+      });
+    }
   }
 
   private validateSubjectForWrite(subject: RbacSubject): void {
@@ -519,7 +642,7 @@ export class RbacService {
   private decision(
     input: RbacCanInput,
     reason: RbacDecisionReason,
-    overrides: Partial<RbacDecision> & { allowed: boolean },
+    overrides: DecisionOverrides,
   ): RbacDecision {
     const decision: RbacDecision = {
       allowed: overrides.allowed,
@@ -534,8 +657,108 @@ export class RbacService {
       matchedPermissions: overrides.matchedPermissions,
       resource: input.resource,
     };
+    decision.details = overrides.details ?? this.buildDecisionDetails(decision, overrides);
 
     return decision;
+  }
+
+  private buildDecisionDetails(
+    decision: RbacDecision,
+    overrides: DecisionOverrides,
+  ): RbacDecisionDetails {
+    const requirement = this.buildRequirementDetails(decision);
+    const matched = this.buildMatchedDetails(decision);
+    const missing = this.buildMissingDetails(decision, overrides);
+
+    return {
+      ...(requirement !== undefined ? { requirement } : {}),
+      ...(matched !== undefined ? { matched } : {}),
+      ...(missing !== undefined ? { missing } : {}),
+      evaluationPath: [this.evaluationStep(decision.reason)],
+      safeMessage: decision.reason,
+    };
+  }
+
+  private buildRequirementDetails(
+    decision: RbacDecision,
+  ): NonNullable<RbacDecisionDetails['requirement']> | undefined {
+    if (decision.roleKey !== undefined) {
+      return { type: 'role', roleKeys: [decision.roleKey] };
+    }
+
+    if (decision.permissions !== undefined) {
+      return {
+        type: 'permission',
+        permissions: decision.permissions,
+        mode: decision.mode ?? (decision.permissions.length > 1 ? 'all' : 'any'),
+      };
+    }
+
+    return undefined;
+  }
+
+  private buildMatchedDetails(
+    decision: RbacDecision,
+  ): NonNullable<RbacDecisionDetails['matched']> | undefined {
+    if (decision.matchedRoleKeys === undefined && decision.matchedPermissions === undefined) {
+      return undefined;
+    }
+
+    return {
+      ...(decision.matchedRoleKeys !== undefined ? { roleKeys: decision.matchedRoleKeys } : {}),
+      ...(decision.matchedPermissions !== undefined
+        ? { permissions: decision.matchedPermissions }
+        : {}),
+    };
+  }
+
+  private buildMissingDetails(
+    decision: RbacDecision,
+    overrides: DecisionOverrides,
+  ): NonNullable<RbacDecisionDetails['missing']> | undefined {
+    switch (decision.reason) {
+      case 'denied_subject_missing':
+        return { subject: true };
+      case 'denied_tenant_missing':
+        return { tenant: true };
+      case 'denied_resource_missing':
+      case 'denied_resource_mismatch':
+        return { resource: true };
+      case 'denied_no_matching_role':
+        return decision.roleKey !== undefined ? { roleKeys: [decision.roleKey] } : undefined;
+      case 'denied_no_matching_permission':
+        return {
+          permissions: overrides.missingPermissions ?? decision.permissions ?? [],
+        };
+      default:
+        return undefined;
+    }
+  }
+
+  private evaluationStep(reason: RbacDecisionReason): NonNullable<
+    RbacDecisionDetails['evaluationPath']
+  >[number] {
+    switch (reason) {
+      case 'allowed_by_role':
+        return { code: 'role_matched', outcome: 'allow' };
+      case 'allowed_by_role_permission':
+        return { code: 'permission_matched', outcome: 'allow' };
+      case 'denied_subject_missing':
+        return { code: 'subject_missing', outcome: 'deny' };
+      case 'denied_tenant_missing':
+        return { code: 'tenant_missing', outcome: 'deny' };
+      case 'denied_resource_missing':
+        return { code: 'resource_missing', outcome: 'deny' };
+      case 'denied_resource_mismatch':
+        return { code: 'resource_mismatch', outcome: 'deny' };
+      case 'denied_no_matching_role':
+      case 'denied_role_expired':
+        return { code: 'role_missing', outcome: 'deny' };
+      case 'denied_no_matching_permission':
+        return { code: 'permission_missing', outcome: 'deny' };
+      case 'denied_storage_error':
+        return { code: 'storage_error', outcome: 'deny' };
+    }
   }
 
   private async listEffectiveRolesForTenant(
@@ -597,6 +820,19 @@ export class RbacService {
       await this.options.auditLogger?.log(event);
     } catch {
       // Audit logging must not change RBAC write or authorization behavior.
+    }
+  }
+
+  private async publishChange(
+    event: Omit<RbacPolicyChangeEvent, 'occurredAt'>,
+  ): Promise<void> {
+    try {
+      await this.options.changePublisher?.publish({
+        occurredAt: this.options.now?.() ?? new Date(),
+        ...event,
+      });
+    } catch {
+      // Change hooks are for cache/outbox integration and must not alter write results.
     }
   }
 }

@@ -13,6 +13,9 @@ import {
   apiKey,
   expectAllowed,
   expectDenied,
+  expectDeniedReason,
+  createRbacScenario,
+  expectRbacMatrix,
   rbacApiKey,
   rbacServiceAccount,
   rbacUser,
@@ -171,5 +174,113 @@ describe('testing helpers', () => {
     ).rejects.toThrow(
       'Expected RBAC denial reason denied_tenant_missing, received denied_no_matching_permission',
     );
+  });
+
+  it('asserts denial reasons directly', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [TestRbacModule.forRoot()],
+    }).compile();
+    const rbac = moduleRef.get(RbacService);
+
+    await expect(
+      expectDeniedReason(
+        rbac,
+        {
+          subject: rbacUser('user_1', 'tenant_1'),
+          tenantId: 'tenant_1',
+          permission: 'reports.read',
+        },
+        'denied_no_matching_permission',
+      ),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_no_matching_permission',
+    });
+  });
+
+  it('creates RBAC scenarios with roles and bindings', async () => {
+    const scenario = await createRbacScenario({
+      roles: [
+        {
+          tenantId: 'tenant_1',
+          key: 'viewer',
+          permissions: ['reports.read'],
+        },
+      ],
+      bindings: [
+        {
+          tenantId: 'tenant_1',
+          subject: rbacUser('user_1', 'tenant_1'),
+          roleKey: 'viewer',
+        },
+      ],
+    });
+
+    expect(scenario.storage).toBeInstanceOf(InMemoryRbacStorage);
+    await expectAllowed(scenario.rbac, {
+      subject: rbacUser('user_1', 'tenant_1'),
+      tenantId: 'tenant_1',
+      permission: 'reports.read',
+    });
+  });
+
+  it('checks permission matrices and reports useful failure text', async () => {
+    const scenario = await createRbacScenario({
+      roles: [
+        {
+          tenantId: 'tenant_1',
+          key: 'viewer',
+          permissions: ['reports.read'],
+        },
+      ],
+      bindings: [
+        {
+          tenantId: 'tenant_1',
+          subject: rbacUser('user_1', 'tenant_1'),
+          roleKey: 'viewer',
+        },
+      ],
+    });
+
+    await expect(
+      expectRbacMatrix(scenario.rbac, [
+        {
+          subject: rbacUser('user_1', 'tenant_1'),
+          tenantId: 'tenant_1',
+          permission: 'reports.read',
+          allowed: true,
+        },
+        {
+          subject: rbacUser('user_1', 'tenant_1'),
+          tenantId: 'tenant_1',
+          permission: 'reports.write',
+          allowed: false,
+          reason: 'denied_no_matching_permission',
+        },
+      ]),
+    ).resolves.toHaveLength(2);
+
+    await expect(
+      expectRbacMatrix(scenario.rbac, [
+        {
+          label: 'writer should pass',
+          subject: rbacUser('user_1', 'tenant_1'),
+          tenantId: 'tenant_1',
+          permission: 'reports.write',
+          allowed: true,
+        },
+      ]),
+    ).rejects.toThrow('writer should pass');
+    await expect(
+      expectRbacMatrix(scenario.rbac, [
+        {
+          label: 'writer should pass',
+          subject: rbacUser('user_1', 'tenant_1'),
+          tenantId: 'tenant_1',
+          permission: 'reports.write',
+          allowed: true,
+        },
+      ]),
+    ).rejects.toThrow('reports.write');
   });
 });

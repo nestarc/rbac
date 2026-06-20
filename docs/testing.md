@@ -48,6 +48,22 @@ await expectDenied(
 );
 ```
 
+Use `expectDeniedReason()` when a test only cares about a stable denial reason:
+
+```ts
+import { expectDeniedReason } from '@nestarc/rbac/testing';
+
+await expectDeniedReason(
+  rbac,
+  {
+    subject,
+    tenantId: 'tenant_1',
+    permission: 'reports.write',
+  },
+  'denied_no_matching_permission',
+);
+```
+
 ## TestRbacModule
 
 `TestRbacModule.forRoot()` wraps `RbacModule.forRoot()` with an
@@ -86,6 +102,50 @@ const sameService = rbacServiceAccount('worker_1');
 
 Use service-level `rbac.can()` or controller tests with `RbacGuard` depending on
 whether the test is checking RBAC decisions or full HTTP wiring.
+
+## Scenario And Matrix Helpers
+
+`createRbacScenario()` seeds an in-memory storage with roles and bindings, then
+returns the storage and service. `expectRbacMatrix()` evaluates a list of expected
+allow/deny cases and includes the permission, role, tenant, and resource in
+failure messages.
+
+```ts
+import { createRbacScenario, expectRbacMatrix, user } from '@nestarc/rbac/testing';
+
+const scenario = await createRbacScenario({
+  roles: [
+    {
+      tenantId: 'tenant_1',
+      key: 'viewer',
+      permissions: ['reports.read'],
+    },
+  ],
+  bindings: [
+    {
+      tenantId: 'tenant_1',
+      subject: user('user_1', 'tenant_1'),
+      roleKey: 'viewer',
+    },
+  ],
+});
+
+await expectRbacMatrix(scenario.rbac, [
+  {
+    subject: user('user_1', 'tenant_1'),
+    tenantId: 'tenant_1',
+    permission: 'reports.read',
+    allowed: true,
+  },
+  {
+    subject: user('user_1', 'tenant_1'),
+    tenantId: 'tenant_1',
+    permission: 'reports.write',
+    allowed: false,
+    reason: 'denied_no_matching_permission',
+  },
+]);
+```
 
 ## `withTenantRbac()` Recipe
 

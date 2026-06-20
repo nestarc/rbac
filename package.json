@@ -19,6 +19,7 @@
     "docs/guards.md",
     "docs/installation.md",
     "docs/integrations.md",
+    "docs/migration-0.2.0.md",
     "docs/prisma.md",
     "docs/testing.md",
     "examples",
@@ -76,6 +77,16 @@
       "require": {
         "types": "./dist/integrations/api-keys.d.cts",
         "default": "./dist/integrations/api-keys.cjs"
+      }
+    },
+    "./integrations/audit-log": {
+      "import": {
+        "types": "./dist/integrations/audit-log.d.ts",
+        "default": "./dist/integrations/audit-log.js"
+      },
+      "require": {
+        "types": "./dist/integrations/audit-log.d.cts",
+        "default": "./dist/integrations/audit-log.cjs"
       }
     }
   },

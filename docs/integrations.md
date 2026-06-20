@@ -96,3 +96,49 @@ RbacModule.forRoot({
 ```
 
 RBAC does not log `subject.attributes` by default.
+
+### `@nestarc/audit-log`
+
+Use `createAuditLogRbacLogger()` when an application already has a structural
+audit logger. The adapter does not import `@nestarc/audit-log` from the root
+package and keeps the peer dependency optional.
+
+```ts
+import { createAuditLogRbacLogger } from '@nestarc/rbac/integrations/audit-log';
+
+RbacModule.forRoot({
+  storage,
+  auditLogger: createAuditLogRbacLogger({
+    auditLog,
+    source: 'rbac',
+  }),
+});
+```
+
+The adapter maps RBAC event types to `action`, uses `success` for allow/write
+events and `failure` for denied events, and removes secret-shaped fields such as
+tokens, API key secrets, request headers, request bodies, and raw attributes from
+metadata.
+
+## Change Events
+
+Audit events describe what happened for security and compliance review. Change
+events are separate operational hooks for cache invalidation, outbox publishing,
+or local permission refreshes.
+
+```ts
+RbacModule.forRoot({
+  storage,
+  changePublisher: {
+    async publish(event) {
+      await outbox.publish('rbac.policy.changed', event);
+    },
+  },
+});
+```
+
+RBAC publishes change events after successful role, permission, and binding
+mutations. Publisher failures are swallowed by default, matching audit logger
+behavior, so cache invalidation hooks must be monitored by the consuming
+application. The package does not provide distributed cache consistency or a
+broker integration.

@@ -70,6 +70,48 @@ await rbac.assignRole({
 });
 ```
 
+## Typed Permission Contracts
+
+Use `defineRbacPermissions()` when an application wants autocomplete and literal
+types for permission keys while keeping persisted values as strings.
+
+```ts
+import { Can, defineRbacPermissions } from '@nestarc/rbac';
+
+export const permissions = defineRbacPermissions({
+  reports: {
+    read: 'reports.read',
+    export: 'reports.export',
+  },
+} as const);
+
+@Can(permissions.reports.read, { tenant: 'required' })
+readReport() {
+  return { ok: true };
+}
+```
+
+Existing string permissions such as `@Can('reports.read')` continue to work.
+
+## Strict Options
+
+`createStrictRbacOptions()` provides a fail-closed starting point without changing
+the package defaults.
+
+```ts
+import { InMemoryRbacStorage, RbacModule, createStrictRbacOptions } from '@nestarc/rbac';
+
+RbacModule.forRoot(
+  createStrictRbacOptions({
+    storage: new InMemoryRbacStorage(),
+  }),
+);
+```
+
+The helper enables `requireMetadata`, tenant-required defaults, tenant boundary
+write validation, and denied storage-error behavior. Explicit overrides remain
+available for routes or apps that need compatibility behavior.
+
 ## Protecting Routes
 
 ```ts
@@ -253,6 +295,22 @@ await expectAllowed(rbac, {
 
 See [docs/testing.md](docs/testing.md).
 
+## Change Events
+
+Apps that cache effective permissions can subscribe to mutation events without
+using audit logs as cache invalidation messages.
+
+```ts
+RbacModule.forRoot({
+  storage,
+  changePublisher: {
+    publish(event) {
+      cache.invalidate(event);
+    },
+  },
+});
+```
+
 ## Security Notes
 
 - Authentication is not included. Use your existing auth guard to attach `request.user`, `request.rbacSubject`, or a custom `subjectResolver`.
@@ -260,4 +318,5 @@ See [docs/testing.md](docs/testing.md).
 - Wildcards are limited to `*` and suffix wildcards such as `reports.*`.
 - Global roles do not apply inside tenants by default.
 - Use `NoopRbacAuditLogger` from the root package when an app wants to pass an explicit audit logger without emitting events.
+- Use `createAuditLogRbacLogger()` from `@nestarc/rbac/integrations/audit-log` to map RBAC audit events to a structural audit logger.
 - Do not log raw subject attributes unless your application has reviewed the data stored by the auth integration.

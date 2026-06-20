@@ -176,6 +176,7 @@ describe('RbacGuard HTTP behavior', () => {
       .expect(403);
 
     expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
+    expect(response.body.details).toBeUndefined();
   });
 
   it('allows project invitations only for the scoped project binding', async () => {

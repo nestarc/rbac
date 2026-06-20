@@ -4,6 +4,8 @@ export * from './audit';
 export * from './decorators';
 export * from './errors';
 export * from './interfaces';
+export * from './options';
+export * from './permissions';
 export * from './rbac.guard';
 export * from './rbac.module';
 export * from './rbac.service';

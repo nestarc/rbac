@@ -7,6 +7,7 @@ export default defineConfig({
     testing: 'src/testing.ts',
     'integrations/tenancy': 'src/integrations/tenancy.ts',
     'integrations/api-keys': 'src/integrations/api-keys.ts',
+    'integrations/audit-log': 'src/integrations/audit-log.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

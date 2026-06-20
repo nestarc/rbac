@@ -72,6 +72,92 @@ describe('RbacService', () => {
     });
   });
 
+  it('adds safe details to allowed permission decisions', async () => {
+    await createAssignedRole('report_admin', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      details: {
+        requirement: {
+          type: 'permission',
+          permissions: ['reports.read'],
+          mode: 'any',
+        },
+        matched: {
+          roleKeys: ['report_admin'],
+          permissions: ['reports.read'],
+        },
+        evaluationPath: [{ code: 'permission_matched', outcome: 'allow' }],
+      },
+    });
+  });
+
+  it('adds missing permission details to denied permission decisions', async () => {
+    await createAssignedRole('report_reader', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permissions: ['reports.read', 'reports.write'],
+        mode: 'all',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      details: {
+        requirement: {
+          type: 'permission',
+          permissions: ['reports.read', 'reports.write'],
+          mode: 'all',
+        },
+        matched: {
+          roleKeys: ['report_reader'],
+          permissions: ['reports.read'],
+        },
+        missing: {
+          permissions: ['reports.write'],
+        },
+        evaluationPath: [{ code: 'permission_missing', outcome: 'deny' }],
+      },
+    });
+  });
+
+  it('adds missing role details to denied role decisions', async () => {
+    await createAssignedRole('viewer', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        roleKey: 'owner',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      details: {
+        requirement: {
+          type: 'role',
+          roleKeys: ['owner'],
+        },
+        missing: {
+          roleKeys: ['owner'],
+        },
+        evaluationPath: [{ code: 'role_missing', outcome: 'deny' }],
+      },
+    });
+  });
+
   it('denies missing subject', async () => {
     await expect(
       service.can({
@@ -103,6 +189,23 @@ describe('RbacService', () => {
       tenantId: 'tenant_2',
       matchedRoleKeys: [],
       matchedPermissions: [],
+    });
+  });
+
+  it('adds missing tenant details to tenant-required denials', async () => {
+    await expect(
+      service.can({
+        subject: user('user_1'),
+        tenantMode: 'required',
+        permission: 'reports.read',
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_tenant_missing',
+      details: {
+        missing: { tenant: true },
+        evaluationPath: [{ code: 'tenant_missing', outcome: 'deny' }],
+      },
     });
   });
 
@@ -182,6 +285,172 @@ describe('RbacService', () => {
         roleKey: 'missing_role',
       }),
     ).rejects.toBeInstanceOf(RbacRoleNotFoundError);
+  });
+
+  it('rejects tenant-mismatched role assignments when strict write validation is enabled', async () => {
+    const strictService = new RbacService({
+      storage,
+      writeValidation: { rejectTenantMismatch: true },
+    });
+    const role = await strictService.createRole({
+      tenantId,
+      key: 'tenant_viewer',
+      permissions: ['reports.read'],
+    });
+
+    await expect(
+      strictService.assignRole({
+        tenantId: 'tenant_2',
+        subject: user('user_1', 'tenant_2'),
+        roleId: role.id,
+      }),
+    ).rejects.toMatchObject({
+      details: {
+        reason: 'role_tenant_mismatch',
+        roleTenantId: tenantId,
+        bindingTenantId: 'tenant_2',
+      },
+    });
+  });
+
+  it('rejects resource-scoped bindings without tenant when strict write validation is enabled', async () => {
+    const strictService = new RbacService({
+      storage,
+      writeValidation: { rejectResourceWithoutTenant: true },
+    });
+    const role = await strictService.createRole({
+      tenantId: null,
+      key: 'global_project_viewer',
+      permissions: ['project.read'],
+    });
+
+    await expect(
+      strictService.assignRole({
+        tenantId: null,
+        subject: user('user_1'),
+        roleId: role.id,
+        resource: project,
+      }),
+    ).rejects.toMatchObject({
+      details: {
+        reason: 'resource_binding_requires_tenant',
+      },
+    });
+  });
+
+  it('allows global role bindings inside tenants unless explicitly rejected', async () => {
+    const strictService = new RbacService({
+      storage,
+      writeValidation: { rejectTenantMismatch: true },
+    });
+    const role = await strictService.createRole({
+      tenantId: null,
+      key: 'global_support',
+      permissions: ['support.read'],
+    });
+
+    await expect(
+      strictService.assignRole({
+        tenantId,
+        subject: user('user_1', tenantId),
+        roleId: role.id,
+      }),
+    ).resolves.toMatchObject({
+      tenantId,
+      roleId: role.id,
+    });
+  });
+
+  it('publishes change events after successful role, permission, and binding writes', async () => {
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const eventService = new RbacService({
+      storage: new InMemoryRbacStorage(),
+      now: () => now,
+      changePublisher: { publish },
+    });
+
+    const role = await eventService.createRole({
+      tenantId,
+      key: 'event_viewer',
+      permissions: ['reports.read'],
+    });
+    await eventService.grantPermission({ roleId: role.id, permission: 'reports.export' });
+    const binding = await eventService.assignRole({
+      tenantId,
+      subject: user('user_1', tenantId),
+      roleId: role.id,
+      resource: project,
+    });
+
+    expect(publish).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'role.created',
+        occurredAt: now,
+        tenantId,
+        roleId: role.id,
+        roleKey: 'event_viewer',
+        permissions: ['reports.read'],
+      }),
+    );
+    expect(publish).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'permission.granted',
+        occurredAt: now,
+        roleId: role.id,
+        permissions: ['reports.export'],
+      }),
+    );
+    expect(publish).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        type: 'role.assigned',
+        occurredAt: now,
+        tenantId,
+        subject: { type: 'user', id: 'user_1' },
+        roleId: role.id,
+        resource: project,
+        bindingId: binding.id,
+      }),
+    );
+  });
+
+  it('does not publish change events when storage writes fail', async () => {
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const failingStorage = {
+      findRole: vi.fn(() => Promise.resolve(null)),
+      listRoles: vi.fn(() => Promise.resolve([])),
+      upsertRole: vi.fn(() => Promise.reject(new Error('storage failed'))),
+      deleteRole: vi.fn(() => Promise.resolve(undefined)),
+      grantPermission: vi.fn(() => Promise.resolve(undefined)),
+      revokePermission: vi.fn(() => Promise.resolve(undefined)),
+      listRolePermissions: vi.fn(() => Promise.resolve([])),
+      assignRole: vi.fn(() => Promise.resolve({
+        id: 'binding_1',
+        tenantId: null,
+        subjectType: 'user',
+        subjectId: 'user_1',
+        roleId: 'role_1',
+      })),
+      revokeRole: vi.fn(() => Promise.resolve(undefined)),
+      listBindings: vi.fn(() => Promise.resolve([])),
+      listEffectiveRoles: vi.fn(() => Promise.resolve([])),
+      listEffectivePermissions: vi.fn(() => Promise.resolve([])),
+    } satisfies RbacStorage;
+    const eventService = new RbacService({
+      storage: failingStorage,
+      changePublisher: { publish },
+    });
+
+    await expect(
+      eventService.createRole({
+        tenantId,
+        key: 'failed_role',
+        permissions: [],
+      }),
+    ).rejects.toThrow('storage failed');
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it('throws from assertCan on denied decision', async () => {

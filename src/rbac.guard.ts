@@ -327,6 +327,7 @@ export class RbacGuard implements CanActivate {
         permissions: decision.permissions,
         roleKey: decision.roleKey,
         resource: auditResource(decision.resource),
+        details: decision.details,
       },
     });
   }
@@ -347,6 +348,9 @@ export class RbacGuard implements CanActivate {
     }
     if (decision.matchedPermissions !== undefined) {
       metadata.matchedPermissions = decision.matchedPermissions;
+    }
+    if (decision.details !== undefined) {
+      metadata.details = decision.details;
     }
     const resource = auditResource(decision.resource);
     if (resource !== undefined) {

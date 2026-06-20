@@ -28,3 +28,11 @@ export async function expectDenied(
 
   return decision;
 }
+
+export async function expectDeniedReason(
+  rbac: RbacService,
+  input: RbacCanInput,
+  reason: RbacDecision['reason'],
+): Promise<RbacDecision> {
+  return expectDenied(rbac, input, reason);
+}

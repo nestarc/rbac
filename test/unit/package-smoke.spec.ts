@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   RBAC_OPTIONS,
@@ -17,5 +19,14 @@ describe('package exports', () => {
 
   it('exports request subject key', () => {
     expect(RBAC_SUBJECT_REQUEST_KEY).toBe('rbacSubject');
+  });
+
+  it('declares the audit-log integration subpath export', () => {
+    const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      exports: Record<string, unknown>;
+    };
+
+    expect(packageJson.exports).toHaveProperty('./integrations/audit-log');
   });
 });
