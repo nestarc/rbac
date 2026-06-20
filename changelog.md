@@ -2,6 +2,33 @@
 
 All notable changes to `@nestarc/rbac` will be documented in this file.
 
+## 0.2.0 - 2026-06-20
+
+Safety and operability release for production NestJS SaaS authorization.
+
+### Added
+
+- Added `defineRbacPermissions()` for opt-in typed permission contracts.
+- Added `createStrictRbacOptions()` for fail-closed RBAC module defaults.
+- Added optional `RbacDecision.details` for safe server-side decision tracing.
+- Added write validation options for tenant mismatch and resource binding checks.
+- Added policy change publisher hooks for role, permission, and binding mutations.
+- Added `@nestarc/rbac/integrations/audit-log` with `createAuditLogRbacLogger()`.
+- Added testing helpers: `expectDeniedReason()`, `createRbacScenario()`, and
+  `expectRbacMatrix()`.
+- Added `docs/spec-0.2.0.md` and `docs/migration-0.2.0.md`.
+
+### Changed
+
+- RBAC guard audit metadata now includes safe decision details when available.
+- Package exports and build entries now include the audit-log integration subpath.
+- README, integration docs, and testing docs now cover 0.2.0 APIs.
+
+### Fixed
+
+- Default HTTP denial responses continue to omit decision details.
+- Audit-log adapter metadata sanitization removes secret-shaped fields.
+
 ## 0.1.0 - 2026-06-03
 
 Initial public release of tenant-aware RBAC primitives for NestJS SaaS

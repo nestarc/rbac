@@ -64,9 +64,7 @@ export function createAuditLogRbacLogger(
         ...(event.subjectType !== undefined ? { actorType: event.subjectType } : {}),
         ...(event.subjectId !== undefined ? { actorId: event.subjectId } : {}),
         ...(event.tenantId !== undefined ? { tenantId: event.tenantId } : {}),
-        ...(event.metadata !== undefined
-          ? { metadata: sanitizeMetadata(event.metadata) as Record<string, unknown> }
-          : {}),
+        ...(event.metadata !== undefined ? { metadata: sanitizeMetadata(event.metadata) } : {}),
       });
     },
   };
