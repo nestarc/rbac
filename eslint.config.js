@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
+    ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'test/integration/generated/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -34,8 +34,14 @@ export default tseslint.config(
     languageOptions: {
       sourceType: 'commonjs',
       globals: {
+        __dirname: 'readonly',
+        console: 'readonly',
         module: 'readonly',
+        process: 'readonly',
       },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
 );

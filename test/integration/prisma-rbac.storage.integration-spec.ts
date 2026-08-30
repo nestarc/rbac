@@ -1,15 +1,47 @@
-import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaRbacStorage } from '../../src/prisma';
+import type { PrismaRbacClientLike } from '../../src/prisma';
 import { runRbacStorageContract } from '../contract/storage-contract';
 
 const databaseUrl = process.env.RBAC_PRISMA_DATABASE_URL ?? process.env.DATABASE_URL;
 const describePrisma = databaseUrl ? describe : describe.skip;
+const isLegacyClient = process.env.RBAC_PRISMA_CLIENT === 'legacy';
+const prismaClientModule = isLegacyClient
+  ? await import('@prisma/client')
+  : await import('./generated/client/client');
+const prismaAdapterModule = isLegacyClient ? undefined : await import('@prisma/adapter-pg');
+
+interface IntegrationPrismaClient extends PrismaRbacClientLike {
+  $disconnect(): Promise<void>;
+}
+
+type PrismaClientConstructor = new (
+  options?: Record<string, unknown>,
+) => IntegrationPrismaClient;
+
+const createPrismaClient = (): IntegrationPrismaClient => {
+  const connectionString =
+    databaseUrl ?? 'postgresql://rbac:rbac@127.0.0.1:5432/rbac_test';
+
+  const { PrismaClient } = prismaClientModule as unknown as {
+    PrismaClient: PrismaClientConstructor;
+  };
+
+  if (isLegacyClient) {
+    return new PrismaClient({ datasources: { db: { url: connectionString } } });
+  }
+
+  const PrismaPg = prismaAdapterModule?.PrismaPg as new (options: {
+    connectionString: string;
+  }) => unknown;
+
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+  });
+};
 
 describePrisma('PrismaRbacStorage', () => {
-  const prisma = databaseUrl
-    ? new PrismaClient({ datasources: { db: { url: databaseUrl } } })
-    : new PrismaClient();
+  const prisma = createPrismaClient();
 
   beforeEach(async () => {
     await prisma.rbacRoleBinding.deleteMany();

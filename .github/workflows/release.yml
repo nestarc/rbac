@@ -18,6 +18,23 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     environment: npm
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rbac
+          POSTGRES_PASSWORD: rbac
+          POSTGRES_DB: rbac_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://rbac:rbac@127.0.0.1:5432/rbac_test
+      RBAC_PRISMA_DATABASE_URL: postgresql://rbac:rbac@127.0.0.1:5432/rbac_test
 
     steps:
       - name: Checkout
@@ -37,6 +54,12 @@ jobs:
 
       - name: Generate Prisma client
         run: npm run prisma:generate
+
+      - name: Apply RBAC migration
+        run: npm run prisma:migrate:test
+
+      - name: Run Prisma 7 PostgreSQL contract tests
+        run: npm run test:prisma
 
       - name: Verify release tag matches package version
         run: |
@@ -62,6 +85,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify Nest 11.2.1 / Prisma 7.10.0 packed consumer
+        run: npm run test:consumer:modern
 
       - name: Verify package contents
         run: npm pack --dry-run
