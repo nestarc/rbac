@@ -29,4 +29,20 @@ describe('package exports', () => {
 
     expect(packageJson.exports).toHaveProperty('./integrations/audit-log');
   });
+
+  it('declares the tested NestJS 11 and Prisma 7 peer contract', () => {
+    const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      peerDependencies: Record<string, string>;
+      scripts: Record<string, string>;
+    };
+
+    expect(packageJson.peerDependencies['@nestjs/common']).toBe('>=10 <12');
+    expect(packageJson.peerDependencies['@nestjs/core']).toBe('>=10 <12');
+    expect(packageJson.peerDependencies['@prisma/client']).toBe('>=5 <8');
+    expect(packageJson.peerDependencies.prisma).toBe('>=5 <8');
+    expect(packageJson.scripts['test:consumer:modern']).toContain(
+      'scripts/verify-modern-consumer.cjs',
+    );
+  });
 });

@@ -31,9 +31,12 @@ For Prisma/PostgreSQL storage, install the optional Prisma peers in the
 consuming application:
 
 ```bash
-npm install @prisma/client
+npm install @prisma/client @prisma/adapter-pg pg
 npm install -D prisma
 ```
+
+The adapter is required by Prisma 7 direct database clients. Prisma 5 and 6
+consumers can keep their existing engine-based `PrismaClient` setup.
 
 For focused setup notes, see [docs/installation.md](docs/installation.md).
 
@@ -207,6 +210,12 @@ useful.
 Install Prisma in the consuming app, copy the example RBAC models from
 `prisma/schema.prisma.example`, and apply `prisma/migrations/0001_init_rbac.sql`
 through your migration workflow.
+
+Prisma 7 applications should keep their `prisma-client` generator and datasource
+URL in `prisma.config.ts`, then create the generated client with the driver adapter
+for their database. `PrismaRbacStorage` accepts both that client and the legacy
+Prisma 5/6 `@prisma/client` shape. See [docs/prisma.md](docs/prisma.md) for the
+complete Prisma 7 setup.
 
 ```ts
 import { Module } from '@nestjs/common';

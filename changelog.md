@@ -2,6 +2,28 @@
 
 All notable changes to `@nestarc/rbac` will be documented in this file.
 
+## 0.2.1 - 2026-08-30
+
+Prisma 7 compatibility release for the NestJS 11 ecosystem lane.
+
+### Added
+
+- Added an adapter-backed Prisma 7.10.0 PostgreSQL 16 contract-test fixture.
+- Added an exact Prisma 6.19.3 PostgreSQL regression lane for the retained legacy
+  client contract.
+- Added a fresh packed-consumer gate that strictly installs exact NestJS 11.2.1
+  and Prisma 7.10.0, then verifies CommonJS, ESM, and TypeScript declarations.
+- Added Prisma 7 generator, `prisma.config.ts`, and PostgreSQL driver-adapter
+  setup guidance.
+
+### Changed
+
+- Expanded optional `@prisma/client` and `prisma` peer support from Prisma 5/6
+  to Prisma 5/6/7.
+- Pinned the repository's modern validation toolchain to NestJS 11.2.1 and
+  Prisma 7.10.0 and made both strict-consumer and real-database checks CI and
+  release gates.
+
 ## 0.2.0 - 2026-06-20
 
 Safety and operability release for production NestJS SaaS authorization.

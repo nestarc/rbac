@@ -4,6 +4,7 @@
 /build
 /coverage
 /tmp
+/test/integration/generated
 *.tsbuildinfo
 *.tgz
 
