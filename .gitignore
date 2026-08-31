@@ -8,6 +8,9 @@
 *.tsbuildinfo
 *.tgz
 
+# macOS
+.DS_Store
+
 # Logs
 logs
 *.log
