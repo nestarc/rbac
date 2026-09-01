@@ -32,9 +32,12 @@ export interface RbacEffectiveRole {
   roleKey: string;
   roleId: string;
   bindingId: string;
-  tenantId?: string | null;
+  /** `null` and `undefined` both identify a global effective record. */
+  tenantId?: string | null | undefined;
+  /** Resource scope is either an absent pair or two populated strings. */
   resourceType?: string | null;
   resourceId?: string | null;
+  /** The record remains active when `expiresAt` is exactly equal to the query `now`. */
   expiresAt?: Date | null;
 }
 

@@ -379,6 +379,33 @@ export function runRbacStorageContract({ createStorage }: RbacStorageContractOpt
       ).resolves.toEqual([]);
     });
 
+    it('keeps bindings expiring exactly at now effective for roles and permissions', async () => {
+      const now = new Date('2026-01-15T00:00:00.000Z');
+      const role = await createRole('boundary_reader', ['boundary.read']);
+
+      await storage.assignRole({
+        tenantId,
+        subject: user('user_expiry_boundary', tenantId),
+        roleId: role.id,
+        expiresAt: new Date(now),
+      });
+
+      await expect(
+        storage.listEffectiveRoles({
+          tenantId,
+          subject: user('user_expiry_boundary', tenantId),
+          now,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ roleKey: 'boundary_reader' })]);
+      await expect(
+        storage.listEffectivePermissions({
+          tenantId,
+          subject: user('user_expiry_boundary', tenantId),
+          now,
+        }),
+      ).resolves.toEqual([expect.objectContaining({ permission: 'boundary.read' })]);
+    });
+
     it('excludes bindings whose roles no longer exist', async () => {
       const role = await createRole('temporary_role', ['temporary.read']);
 

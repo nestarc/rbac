@@ -8,6 +8,8 @@ import {
   RbacStorageError,
   type RbacAuditEvent,
   type RbacCanInput,
+  type RbacEffectivePermission,
+  type RbacEffectiveRole,
   type RbacModuleOptions,
   type RbacResourceRef,
   type RbacStorage,
@@ -17,6 +19,21 @@ import { user } from '../fixtures/subjects';
 const tenantId = 'tenant_1';
 const project: RbacResourceRef = { type: 'project', id: 'project_1' };
 const now = new Date('2026-01-15T00:00:00.000Z');
+
+function effectiveResultStorage(input: {
+  roles?: RbacEffectiveRole[];
+  permissions?: RbacEffectivePermission[];
+}) {
+  const listEffectiveRoles = vi.fn<RbacStorage['listEffectiveRoles']>(() =>
+    Promise.resolve(input.roles ?? []),
+  );
+  const listEffectivePermissions = vi.fn<RbacStorage['listEffectivePermissions']>(() =>
+    Promise.resolve(input.permissions ?? []),
+  );
+  const storage = { listEffectiveRoles, listEffectivePermissions } as unknown as RbacStorage;
+
+  return { storage, listEffectiveRoles, listEffectivePermissions };
+}
 
 describe('RbacService', () => {
   let storage: InMemoryRbacStorage;
@@ -953,6 +970,270 @@ describe('RbacService', () => {
     ).resolves.toMatchObject({
       allowed: true,
       matchedRoleKeys: ['global_admin'],
+    });
+  });
+
+  describe('custom storage effective result validation', () => {
+    const effectiveRole: RbacEffectiveRole = {
+      roleKey: 'report_reader',
+      roleId: 'role_1',
+      bindingId: 'binding_1',
+      tenantId,
+      resourceType: null,
+      resourceId: null,
+      expiresAt: null,
+    };
+    const effectivePermission: RbacEffectivePermission = {
+      ...effectiveRole,
+      permission: 'reports.read',
+    };
+
+    async function evaluate(
+      kind: 'role' | 'permission',
+      record: RbacEffectiveRole | RbacEffectivePermission,
+      options: Pick<RbacModuleOptions, 'tenant'> = {},
+      tenant: string | null = tenantId,
+    ) {
+      const { storage: customStorage } = effectiveResultStorage(
+        kind === 'role'
+          ? { roles: [record] }
+          : { permissions: [record as RbacEffectivePermission] },
+      );
+      const customService = new RbacService({ storage: customStorage, ...options });
+      const decision = await customService.can({
+        subject: user('custom_storage_user', tenant ?? undefined),
+        tenantId: tenant,
+        ...(kind === 'role'
+          ? { roleKey: 'report_reader' }
+          : { permission: 'reports.read' }),
+        resource: project,
+        now,
+      });
+
+      return { customStorage, decision };
+    }
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)('denies wrong-tenant %s records', async (kind, record) => {
+      const { decision } = await evaluate(kind, { ...record, tenantId: 'tenant_2' });
+
+      expect(decision).toMatchObject({
+        allowed: false,
+        reason: kind === 'role' ? 'denied_no_matching_role' : 'denied_no_matching_permission',
+      });
+    });
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)('denies expired and invalid-Date %s records', async (kind, record) => {
+      const expired = await evaluate(kind, {
+        ...record,
+        expiresAt: new Date(now.getTime() - 1),
+      });
+      const invalid = await evaluate(kind, { ...record, expiresAt: new Date('invalid') });
+      const nonDate = await evaluate(kind, {
+        ...record,
+        expiresAt: now.toISOString() as unknown as Date,
+      });
+
+      const expectedReason =
+        kind === 'role' ? 'denied_no_matching_role' : 'denied_no_matching_permission';
+      expect(expired.decision).toMatchObject({ allowed: false, reason: expectedReason });
+      expect(invalid.decision).toMatchObject({ allowed: false, reason: expectedReason });
+      expect(nonDate.decision).toMatchObject({ allowed: false, reason: expectedReason });
+    });
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)('keeps %s records expiring exactly at now active', async (kind, record) => {
+      const { decision } = await evaluate(kind, { ...record, expiresAt: new Date(now) });
+
+      expect(decision).toMatchObject({ allowed: true });
+    });
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)('denies malformed resource pairs on %s records', async (kind, record) => {
+      const missingId = await evaluate(kind, {
+        ...record,
+        resourceType: project.type,
+        resourceId: null,
+      });
+      const missingType = await evaluate(kind, {
+        ...record,
+        resourceType: null,
+        resourceId: project.id,
+      });
+      const invalidType = await evaluate(kind, {
+        ...record,
+        resourceType: 42 as unknown as string,
+        resourceId: project.id,
+      });
+
+      expect(missingId.decision).toMatchObject({ allowed: false });
+      expect(missingType.decision).toMatchObject({ allowed: false });
+      expect(invalidType.decision).toMatchObject({ allowed: false });
+    });
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)('does not let resource aliases override %s record scope', async (kind, record) => {
+      const aliasedRecord = {
+        ...record,
+        resourceType: project.type,
+        resourceId: 'project_2',
+        type: project.type,
+        id: project.id,
+      };
+
+      const { decision } = await evaluate(kind, aliasedRecord);
+
+      expect(decision).toMatchObject({ allowed: false });
+    });
+
+    it.each([null, undefined] as const)(
+      'treats tenantId %s as a global effective record only for global queries',
+      async (recordTenantId) => {
+        const globalRecord = { ...effectivePermission, tenantId: recordTenantId };
+        const tenantDecision = await evaluate('permission', globalRecord);
+        const globalDecision = await evaluate('permission', globalRecord, {}, null);
+
+        expect(tenantDecision.decision).toMatchObject({ allowed: false });
+        expect(globalDecision.decision).toMatchObject({ allowed: true });
+      },
+    );
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)(
+      'loads global %s records through the explicit tenant option and validates each query scope',
+      async (kind, record) => {
+        const globalRecord = { ...record, tenantId: null };
+        const {
+          storage: customStorage,
+          listEffectiveRoles,
+          listEffectivePermissions,
+        } = effectiveResultStorage({});
+        if (kind === 'role') {
+          listEffectiveRoles.mockImplementation((input) =>
+            Promise.resolve(input.tenantId === null ? [globalRecord] : []),
+          );
+        } else {
+          listEffectivePermissions.mockImplementation((input) =>
+            Promise.resolve(
+              input.tenantId === null ? [globalRecord as RbacEffectivePermission] : [],
+            ),
+          );
+        }
+        const customService = new RbacService({
+          storage: customStorage,
+          tenant: { allowGlobalRolesInTenant: true },
+        });
+
+        const decision = await customService.can({
+          subject: user('custom_storage_user', tenantId),
+          tenantId,
+          ...(kind === 'role'
+            ? { roleKey: 'report_reader' }
+            : { permission: 'reports.read' }),
+          now,
+        });
+
+        expect(decision).toMatchObject({ allowed: true });
+        if (kind === 'role') {
+          expect(listEffectiveRoles).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ tenantId }),
+          );
+          expect(listEffectiveRoles).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ tenantId: null }),
+          );
+        } else {
+          expect(listEffectivePermissions).toHaveBeenNthCalledWith(
+            1,
+            expect.objectContaining({ tenantId }),
+          );
+          expect(listEffectivePermissions).toHaveBeenNthCalledWith(
+            2,
+            expect.objectContaining({ tenantId: null }),
+          );
+        }
+      },
+    );
+
+    it.each([
+      ['role', effectiveRole],
+      ['permission', effectivePermission],
+    ] as const)('denies tenant %s records returned by the global query', async (kind, record) => {
+      const {
+        storage: customStorage,
+        listEffectiveRoles,
+        listEffectivePermissions,
+      } = effectiveResultStorage({});
+      if (kind === 'role') {
+        listEffectiveRoles.mockImplementation((input) =>
+          Promise.resolve(input.tenantId === null ? [record] : []),
+        );
+      } else {
+        listEffectivePermissions.mockImplementation((input) =>
+          Promise.resolve(input.tenantId === null ? [record] : []),
+        );
+      }
+      const customService = new RbacService({
+        storage: customStorage,
+        tenant: { allowGlobalRolesInTenant: true },
+      });
+
+      const decision = await customService.can({
+        subject: user('custom_storage_user', tenantId),
+        tenantId,
+        ...(kind === 'role'
+          ? { roleKey: 'report_reader' }
+          : { permission: 'reports.read' }),
+        now,
+      });
+
+      expect(decision).toMatchObject({ allowed: false });
+    });
+
+    it('keeps malformed effective permissions fail closed', async () => {
+      const { storage: customStorage } = effectiveResultStorage({
+        permissions: [
+          effectivePermission,
+          { ...effectivePermission, permission: 'reports..read' },
+        ],
+      });
+      const customService = new RbacService({ storage: customStorage });
+
+      await expect(
+        customService.can({
+          subject: user('custom_storage_user', tenantId),
+          tenantId,
+          permission: 'reports.read',
+          now,
+        }),
+      ).resolves.toMatchObject({ allowed: false, reason: 'denied_storage_error' });
+
+      const throwingService = new RbacService({
+        storage: customStorage,
+        storageErrors: 'throw',
+      });
+      await expect(
+        throwingService.can({
+          subject: user('custom_storage_user', tenantId),
+          tenantId,
+          permission: 'reports.read',
+          now,
+        }),
+      ).rejects.toBeInstanceOf(RbacStorageError);
     });
   });
 

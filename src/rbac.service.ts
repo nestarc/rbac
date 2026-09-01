@@ -282,9 +282,7 @@ export class RbacService {
     }
 
     try {
-      const roles = (await this.listEffectiveRolesForTenant(input, subject, tenantId)).filter(
-        (role) => matchesResource(role, input.resource),
-      );
+      const roles = await this.listEffectiveRolesForTenant(input, subject, tenantId);
       const matchedRoleKeys = unique(
         roles.filter((role) => role.roleKey === roleKey).map((role) => role.roleKey),
       );
@@ -326,9 +324,11 @@ export class RbacService {
     }
 
     try {
-      const effectivePermissions = (
-        await this.listEffectivePermissionsForTenant(input, subject, tenantId)
-      ).filter((permission) => matchesResource(permission, input.resource));
+      const effectivePermissions = await this.listEffectivePermissionsForTenant(
+        input,
+        subject,
+        tenantId,
+      );
       const matches = this.matchPermissions(effectivePermissions, requirement.permissions);
       const allowed =
         requirement.mode === 'all'
@@ -818,9 +818,15 @@ export class RbacService {
       resource: input.resource,
       now,
     });
+    const validTenantRoles = this.validEffectiveRecords(
+      tenantRoles,
+      tenantId,
+      input.resource,
+      now,
+    );
 
     if (tenantId === null || this.options.tenant?.allowGlobalRolesInTenant !== true) {
-      return tenantRoles;
+      return validTenantRoles;
     }
 
     const globalRoles = await this.options.storage.listEffectiveRoles({
@@ -830,7 +836,10 @@ export class RbacService {
       now,
     });
 
-    return [...tenantRoles, ...globalRoles];
+    return [
+      ...validTenantRoles,
+      ...this.validEffectiveRecords(globalRoles, null, input.resource, now),
+    ];
   }
 
   private async listEffectivePermissionsForTenant(
@@ -845,9 +854,15 @@ export class RbacService {
       resource: input.resource,
       now,
     });
+    const validTenantPermissions = this.validEffectiveRecords(
+      tenantPermissions,
+      tenantId,
+      input.resource,
+      now,
+    );
 
     if (tenantId === null || this.options.tenant?.allowGlobalRolesInTenant !== true) {
-      return tenantPermissions;
+      return validTenantPermissions;
     }
 
     const globalPermissions = await this.options.storage.listEffectivePermissions({
@@ -857,7 +872,53 @@ export class RbacService {
       now,
     });
 
-    return [...tenantPermissions, ...globalPermissions];
+    return [
+      ...validTenantPermissions,
+      ...this.validEffectiveRecords(globalPermissions, null, input.resource, now),
+    ];
+  }
+
+  private validEffectiveRecords<T extends RbacEffectiveRole>(
+    records: T[],
+    tenantId: string | null,
+    resource: RbacResourceRef | undefined,
+    now: Date,
+  ): T[] {
+    return records.filter((record) =>
+      this.isValidEffectiveRecord(record, tenantId, resource, now),
+    );
+  }
+
+  private isValidEffectiveRecord(
+    record: unknown,
+    tenantId: string | null,
+    resource: RbacResourceRef | undefined,
+    now: Date,
+  ): record is RbacEffectiveRole {
+    if (record === null || typeof record !== 'object') return false;
+
+    const effectiveRecord = record as Partial<RbacEffectiveRole>;
+    if ((effectiveRecord.tenantId ?? null) !== tenantId) return false;
+
+    const expiresAt = effectiveRecord.expiresAt;
+    if (expiresAt !== null && expiresAt !== undefined) {
+      if (!(expiresAt instanceof Date)) return false;
+
+      const expiresAtTime = expiresAt.getTime();
+      if (!Number.isFinite(expiresAtTime) || expiresAtTime < now.getTime()) return false;
+    }
+
+    const resourceType = effectiveRecord.resourceType ?? null;
+    const resourceId = effectiveRecord.resourceId ?? null;
+    if ((resourceType === null) !== (resourceId === null)) return false;
+    if (
+      resourceType !== null &&
+      (!isNonEmptyString(resourceType) || !isNonEmptyString(resourceId))
+    ) {
+      return false;
+    }
+
+    return matchesResource({ resourceType, resourceId }, resource);
   }
 
   private async logAudit(event: RbacAuditEvent): Promise<void> {

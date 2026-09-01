@@ -156,7 +156,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | ---: | --- | --- | --- | --- | --- | --- |
 | 1 | `RBAC-M01` | P0 | `DONE` | L | 없음 | trusted tenant source와 request identity conflict fail-closed |
 | 2 | `RBAC-M02` | P0 | `DONE` | M | 없음 | canonical API-key context source와 legacy conflict 처리 |
-| 3 | `RBAC-M03` | P0 | `READY` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
+| 3 | `RBAC-M03` | P0 | `DONE` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
 | 4 | `RBAC-M04` | P1 | `READY` | M | 없음 | inbound runtime enum/shape fail-closed validation |
 | 5 | `RBAC-M05` | P1 | `READY` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
 | 6 | `RBAC-M06` | P1 | `READY` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
@@ -270,20 +270,20 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M03` — custom storage result 방어 검증
 
-- 상태: `P0 / READY`
+- 상태: `P0 / DONE`
 - 문제: public custom storage가 반환한 effective role/permission에서 service가 resource는 일부 재확인하지만 tenant/expiry 값을 충분히 재검증하지 않는다. effective row interface에는 subject field가 없으므로 조회된 row만으로 subject provenance를 재검증할 수는 없다(`src/interfaces/storage.ts:31-43`).
 
 완료 조건:
 
-- [ ] requested tenant와 다른 effective record는 deny한다.
-- [ ] tenant request에서 global role을 허용하는 기존 option은 명시적으로만 예외 처리한다.
-- [ ] global query는 global record만 허용한다.
-- [ ] built-in 계약과 같이 `expiresAt < now`만 expired이며 `expiresAt === now`는 active로 유지한다. 이 boundary를 바꾸려면 별도 breaking ADR이 필요하다.
-- [ ] expired, invalid Date, partial/malformed resource pair는 fail closed한다. malformed permission이 현재 normalize 경로에서 이미 deny되는 동작도 regression으로 고정한다.
-- [ ] `revokedAt`은 현재 effective interface에 없으므로 검증한다고 주장하지 않는다. 필드를 optional/required로 추가할지와 semver를 ADR로 결정한 뒤에만 해당 검증을 추가한다.
-- [ ] `tenantId: undefined`/`null`과 global record 의미를 interface 및 test로 고정한다.
-- [ ] role check와 permission check가 같은 defense-in-depth 규칙을 사용한다.
-- [ ] InMemory/Prisma built-in adapters와 custom adapter contract가 통과한다.
+- [x] requested tenant와 다른 effective record는 deny한다.
+- [x] tenant request에서 global role을 허용하는 기존 option은 명시적으로만 예외 처리한다.
+- [x] global query는 global record만 허용한다.
+- [x] built-in 계약과 같이 `expiresAt < now`만 expired이며 `expiresAt === now`는 active로 유지한다. 이 boundary를 바꾸려면 별도 breaking ADR이 필요하다.
+- [x] expired, invalid Date, partial/malformed resource pair는 fail closed한다. malformed permission이 현재 normalize 경로에서 이미 deny되는 동작도 regression으로 고정한다.
+- [x] `revokedAt`은 현재 effective interface에 없으므로 검증한다고 주장하지 않는다. 필드를 optional/required로 추가할지와 semver를 ADR로 결정한 뒤에만 해당 검증을 추가한다.
+- [x] `tenantId: undefined`/`null`과 global record 의미를 interface 및 test로 고정한다.
+- [x] role check와 permission check가 같은 defense-in-depth 규칙을 사용한다.
+- [x] InMemory/Prisma built-in adapters와 custom adapter contract가 통과한다.
 
 검증: 프로필 A/B/C2/C3, adversarial adapter table, real PostgreSQL contract, global-role/expiry-equality regression.
 
@@ -727,7 +727,7 @@ Tenancy ecosystem: published exact tuple E2E
 
 - [x] `RBAC-M01`: trusted/default tenant conflict HTTP + direct `can` + strict `assignRole` matrix.
 - [x] `RBAC-M02`: canonical/legacy conflict와 API Keys packed Guard→RBAC fixture.
-- [ ] `RBAC-M03`: adversarial custom storage tenant/expiry contract.
+- [x] `RBAC-M03`: adversarial custom storage tenant/expiry contract.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
@@ -738,10 +738,10 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M02 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`/`RBAC-M02`를 반복하지 않고 `RBAC-M03`만 선택한다.
-3. wrong-tenant, expired(`< now`), invalid-Date effective role/permission을 반환하는 adversarial adapter RED test와 equality(`=== now`) 회귀를 추가한다.
-4. role/permission check에 같은 outbound storage defense-in-depth 계약을 적용하고 built-in/custom/real-DB contract를 검증한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M03 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`/`RBAC-M02`/`RBAC-M03`를 반복하지 않고 `RBAC-M04`만 선택한다.
+3. invalid `mode`, `tenantMode`, Date, subject/resource/requirement shape 표를 만들고 현재 완화 동작을 RED로 고정한다.
+4. inbound caller/config runtime discriminant를 작은 assertion layer에서 fail closed하고 JS/CJS packed consumer와 HTTP E2E를 검증한다.
 5. 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
@@ -753,6 +753,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-08-30 | 조사 기준선 | `DONE` | `v0.2.1 / 69bf0e1` | 기준선 확정 | 14 files/205 tests, lint/typecheck, fresh coverage, audits, release/CI/source 검토 | `RBAC-M01` 시작 |
 | 2026-09-01 | `RBAC-M01` | `DONE` | `main@2dd5a8c` | uncommitted working tree | authoritative resolver/default-source reconciliation, direct `can()` tenant conflict deny, strict `assignRole()` subject/role/binding reconciliation, HTTP/audit/docs 완료; A/B/C1/C2 PASS | `RBAC-M02` 시작 |
 | 2026-09-01 | `RBAC-M02` | `DONE` | `main@224e887` | uncommitted working tree | canonical `request.apiKey`, exact opaque IDs, dual-source conflict deny, API Keys 0.3.2 packed Guard→RBAC CI/release gate, docs/migration 완료; A/B/D PASS | `RBAC-M03` 시작 |
+| 2026-09-01 | `RBAC-M03` | `DONE` | `main@b076ff6` | uncommitted working tree | custom effective row를 query tenant/global provenance, finite Date/expiry, resource pair로 재검증하고 resource alias 우회를 차단; A/B/C2/C3와 build PASS | `RBAC-M04` 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -780,4 +781,18 @@ Commands and exact results: git fetch --prune --tags PASS; initial RED targeted 
 Unverified paths and reason: Prisma 6/C3와 Prisma 7 real-DB는 storage/Prisma 코드를 변경하지 않았고 RBAC-M02 필수 profile(A/B/D)이 아니어서 실행하지 않았다.
 External PR/release evidence: 없음. API Keys 0.3.2 public tarball을 fixture에서 exact strict install했으나 현재 RBAC 결과는 commit/PR/release 전 working tree다. TEN-ECO-NEXT는 RBAC patch publish 뒤 별도 external task로 남는다.
 Next exact action: RBAC-M03의 wrong-tenant, expired, invalid-Date custom storage effective result RED test와 expiresAt === now 회귀를 추가한다.
+```
+
+### 2026-09-01 RBAC-M03 인계
+
+```text
+Task: RBAC-M03
+State: DONE
+Start ref / end ref: main@b076ff6 / main@b076ff6 + uncommitted RBAC-M03 working tree
+Changed files: docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/interfaces/storage.ts, src/rbac.service.ts, test/contract/storage-contract.ts, test/unit/rbac-service.spec.ts
+Contract decision: service는 tenant/global storage query 각각의 결과를 merge 전에 같은 predicate로 재검증한다. tenant query는 exact tenant row만, explicit global query는 tenantId null/undefined global row만 받으며 tenant.allowGlobalRolesInTenant:true만 두 번째 global query를 연다. expiresAt은 null/undefined면 non-expiring, genuine finite Date이면서 now보다 이르면 expired, equality면 active다. resource scope는 양쪽 nullish 또는 populated string pair만 받고 검증된 resourceType/resourceId로 새 comparison object를 만들어 type/id alias 주입을 차단한다. invalid tenant/expiry/resource row는 per-row ineligible로 처리해 ordinary no-match deny를 유지하고 malformed permission은 기존 normalize/storage-error fail-closed 의미를 보존한다. effective interface에 없는 subject provenance와 revokedAt은 검증한다고 주장하거나 필드를 추가하지 않는다.
+Commands and exact results: git fetch --prune --tags PASS; GitHub Release v0.2.1과 npm latest 0.2.1 기준선 재확인; baseline npm run typecheck PASS, npm test PASS (14 files, 227 tests); initial RED focused run에서 2 files/75 tests 중 6 failures로 wrong-tenant/expired/global-in-tenant-query 허용 재현; final focused run PASS (2 files, 79 tests); npm run lint PASS; npm run typecheck PASS; npm test PASS (14 files, 245 tests); fresh npm run test:coverage PASS (13 files, 238 tests; statements 94.96%, branches 88.22%, functions 97.09%, lines 95.84%); Prisma 7.10.0 generate/migration PASS, PostgreSQL 16 C2 PASS (1 file, 29 tests, skip 0); disposable worktree Prisma 6.19.3 generate/migration C3 PASS (1 file, 29 tests, skip 0); npm run build PASS; independent bypass/regression review에서 resource type/id alias 우회를 발견·수정했고 role/permission 회귀로 확인; git diff --check PASS.
+Unverified paths and reason: HTTP C1과 packed consumer D는 inbound HTTP/package 경로를 바꾸지 않고 RBAC-M03 명시 검증 profile이 A/B/C2/C3이므로 실행하지 않았다. raw RBAC_STORAGE를 직접 소비하는 외부 코드는 RbacService 경계를 우회하므로 이번 방어의 적용 대상이 아니다.
+External PR/release evidence: 없음. origin/main, GitHub Release, npm latest는 계속 v0.2.1/69bf0e1 기준이며 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M04의 invalid mode, tenantMode, Date, subject/resource/requirement runtime shape 표와 RED JS/as-any 테스트를 추가한다.
 ```
