@@ -101,17 +101,32 @@ const mapSubject = (
   return subject;
 };
 
+const hasPopulatedApiKeySource = (request: HttpRequest): boolean =>
+  (request.apiKey !== undefined && request.apiKey !== null) ||
+  (request.apiKeyContext !== undefined && request.apiKeyContext !== null);
+
+const hasSameIdentity = (left: RbacSubject, right: RbacSubject): boolean =>
+  left.type === right.type && left.id === right.id && left.tenantId === right.tenantId;
+
 export const defaultHttpSubjectResolver = (): RbacSubjectResolver => (context) => {
   const request = context.switchToHttp().getRequest<HttpRequest>();
   const rbacSubject = request[RBAC_SUBJECT_REQUEST_KEY];
   const normalizedSubject = normalizeSubject(rbacSubject);
+  const userSubject = mapSubject('user', request.user, ['id', 'sub', 'userId']);
+  const apiKeySubject = resolveApiKeySubject(request);
 
-  if (normalizedSubject !== undefined) {
-    return normalizedSubject;
+  if (hasPopulatedApiKeySource(request) && apiKeySubject === undefined) {
+    return undefined;
   }
 
-  return (
-    mapSubject('user', request.user, ['id', 'sub', 'userId']) ??
-    resolveApiKeySubject(request)
+  const candidates = [normalizedSubject, userSubject, apiKeySubject].filter(
+    (subject): subject is RbacSubject => subject !== undefined,
   );
+  const selected = candidates[0];
+
+  if (selected === undefined || candidates.some((subject) => !hasSameIdentity(selected, subject))) {
+    return undefined;
+  }
+
+  return selected;
 };

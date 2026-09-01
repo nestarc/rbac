@@ -89,6 +89,23 @@ describe('RbacService', () => {
     });
   });
 
+  it('does not share permissions between subject types with the same id', async () => {
+    await createAssignedRole('report_admin', ['reports.read']);
+
+    await expect(
+      service.can({
+        subject: { type: 'service_account', id: 'user_1', tenantId },
+        tenantId,
+        permission: 'reports.read',
+        resource: project,
+        now,
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_no_matching_permission',
+    });
+  });
+
   it('adds safe details to allowed permission decisions', async () => {
     await createAssignedRole('report_admin', ['reports.read']);
 

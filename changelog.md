@@ -6,6 +6,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Security
 
+- The default HTTP subject resolver now reconciles every valid
+  `request.rbacSubject`, `request.user`, and API-key identity and fails closed when
+  their exact subject type, ID, or tenant ID differs. A conflicting or malformed
+  populated API-key source can no longer be hidden behind a higher-priority user.
 - `request.apiKey` is now the canonical Nestarc API key identity source. RBAC
   fails closed when a populated legacy `request.apiKeyContext` resolves to a
   different key or tenant ID.
@@ -19,6 +23,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Non-empty string `request.user.type` values remain supported compatibility
+  namespaces in the default resolver; applications that require a fixed `user`
+  namespace should configure `subjectResolver`. Subject types remain isolated even
+  when their IDs are equal.
 - Invalid runtime permission/tenant modes and malformed `can()` or Guard
   subject, resource, requirement, and non-finite `Date` shapes now fail closed
   with `RBAC_CONFIG_ERROR` instead of falling back to permissive defaults or

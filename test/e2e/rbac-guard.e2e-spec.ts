@@ -1,6 +1,16 @@
 import 'reflect-metadata';
 
-import { Controller, Get, Module, Post, type ExecutionContext } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Injectable,
+  Module,
+  Post,
+  type ExecutionContext,
+  type MiddlewareConsumer,
+  type NestMiddleware,
+  type NestModule,
+} from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -78,6 +88,44 @@ class TestRbacController {
   @Get('/metadata-required')
   metadataRequired() {
     return { ok: true };
+  }
+}
+
+@Injectable()
+class ConflictingSubjectMiddleware implements NestMiddleware {
+  use(request: Record<string, unknown>, _response: unknown, next: () => void): void {
+    request.user = { id: 'principal_1', tenantId };
+    request.apiKey = { keyId: 'principal_1', tenantId };
+    next();
+  }
+}
+
+@Controller()
+class DefaultSubjectController {
+  @Can('reports.read')
+  @Get('/default-subject-conflict')
+  readReports() {
+    return { ok: true };
+  }
+}
+
+@Module({
+  imports: [
+    RbacModule.forRoot({
+      storage: new InMemoryRbacStorage(),
+      tenant: { requiredByDefault: true },
+      requireMetadata: true,
+    }),
+  ],
+  controllers: [DefaultSubjectController],
+  providers: [
+    ConflictingSubjectMiddleware,
+    { provide: APP_GUARD, useClass: RbacGuard },
+  ],
+})
+class DefaultSubjectTestModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(ConflictingSubjectMiddleware).forRoutes(DefaultSubjectController);
   }
 }
 
@@ -227,5 +275,25 @@ describe('RbacGuard HTTP behavior', () => {
       .expect(403);
 
     expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
+  });
+});
+
+describe('RbacGuard default HTTP subject source policy', () => {
+  it('returns RBAC_SUBJECT_MISSING before authorization for conflicting sources', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [DefaultSubjectTestModule],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+
+    try {
+      await app.init();
+      const response = await request(app.getHttpServer() as App)
+        .get('/default-subject-conflict')
+        .expect(401);
+
+      expect(response.body).toMatchObject({ code: 'RBAC_SUBJECT_MISSING' });
+    } finally {
+      await app.close();
+    }
   });
 });

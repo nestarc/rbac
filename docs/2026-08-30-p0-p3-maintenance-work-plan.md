@@ -158,7 +158,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 2 | `RBAC-M02` | P0 | `DONE` | M | 없음 | canonical API-key context source와 legacy conflict 처리 |
 | 3 | `RBAC-M03` | P0 | `DONE` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
 | 4 | `RBAC-M04` | P1 | `DONE` | M | 없음 | inbound runtime enum/shape fail-closed validation |
-| 5 | `RBAC-M05` | P1 | `READY` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
+| 5 | `RBAC-M05` | P1 | `DONE` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
 | 6 | `RBAC-M06` | P1 | `READY` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
 | 7 | `RBAC-M07` | P1 | `BLOCKED` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
 | 8 | `RBAC-M08` | P1 | `READY` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
@@ -308,16 +308,16 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M05` — subject namespace/source 신뢰 정책
 
-- 상태: `P1 / READY (RBAC-M02 완료)`
+- 상태: `P1 / DONE`
 - 문제: default resolver가 `request.user.type`을 그대로 받아 fallback namespace를 바꾸거나 user/API-key 동시 source의 우선순위가 의도와 다를 수 있다.
 
 완료 조건:
 
-- [ ] 현재 test가 보존하는 custom `request.user.type` 동작을 호환성 계약으로 분류하고, default `user` 고정으로 바꾸려면 deprecation/migration과 semver를 결정한다.
-- [ ] 고정 namespace를 선택한 경우 canonical API key는 `api_key`, default user는 `user`를 사용하고 type override는 custom subject resolver에서만 허용한다.
-- [ ] 기존 type override 보존을 선택한 경우 허용 범위, source conflict, deprecation 여부를 명시하고 이를 고정 namespace 보장처럼 문서화하지 않는다.
-- [ ] user/API-key/RBAC_SUBJECT 동시 존재 시 authority와 conflict 정책을 문서화한다.
-- [ ] 동일 ID가 다른 subject type으로 권한을 공유하지 않는다.
+- [x] 현재 test가 보존하는 custom `request.user.type` 동작을 호환성 계약으로 분류하고, default `user` 고정으로 바꾸려면 deprecation/migration과 semver를 결정한다.
+- [x] 고정 namespace는 선택하지 않았다. canonical API key의 `api_key`는 고정하되 default user의 non-empty string type override를 0.x 호환성 계약으로 유지한다.
+- [x] 기존 type override의 허용 범위(non-empty string), source conflict, 0.x deprecation 없음과 fixed namespace가 필요할 때의 custom resolver migration을 문서화했다.
+- [x] user/API-key/RBAC_SUBJECT 동시 존재 시 exact `(type, id, tenantId)` reconciliation과 agreeing-source precedence를 문서화했다.
+- [x] 동일 ID가 다른 subject type으로 권한을 공유하지 않는다.
 
 검증: source conflict matrix와 Guard E2E.
 
@@ -729,6 +729,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M02`: canonical/legacy conflict와 API Keys packed Guard→RBAC fixture.
 - [x] `RBAC-M03`: adversarial custom storage tenant/expiry contract.
 - [x] `RBAC-M04`: invalid runtime discriminant/shape unit table, packed CJS/ESM consumer, HTTP config-error E2E.
+- [x] `RBAC-M05`: default HTTP subject source conflict matrix, namespace isolation, Guard HTTP E2E.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
@@ -739,11 +740,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M04 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`/`RBAC-M02`/`RBAC-M03`/`RBAC-M04`를 반복하지 않고 `RBAC-M05`만 선택한다.
-3. 현재 보존 중인 `request.user.type='service_account'` fixture와 user/API-key/RBAC_SUBJECT 동시 source 동작을 표로 만든다.
-4. fixed namespace 대 compatibility/deprecation 선택을 ADR로 먼저 기록한 뒤 선택한 source conflict matrix와 Guard E2E를 RED로 고정한다.
-5. 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M05 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`/`RBAC-M02`/`RBAC-M03`/`RBAC-M04`/`RBAC-M05`를 반복하지 않고 `RBAC-M06`만 선택한다.
+3. whitespace tenant/subject/role/binding/resource/permission의 create→assign→can→event 표를 만들고 API-key exact/no-trim fixture를 함께 고정한다.
+4. service와 두 adapter가 assertion이 반환한 canonical identifier를 실제 query/write/event에 사용하는지 RED round-trip으로 확인한다.
+5. 프로필 A/B/C2/C3와 event payload를 검증하고 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -756,6 +757,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M02` | `DONE` | `main@224e887` | uncommitted working tree | canonical `request.apiKey`, exact opaque IDs, dual-source conflict deny, API Keys 0.3.2 packed Guard→RBAC CI/release gate, docs/migration 완료; A/B/D PASS | `RBAC-M03` 시작 |
 | 2026-09-01 | `RBAC-M03` | `DONE` | `main@b076ff6` | uncommitted working tree | custom effective row를 query tenant/global provenance, finite Date/expiry, resource pair로 재검증하고 resource alias 우회를 차단; A/B/C2/C3와 build PASS | `RBAC-M04` 시작 |
 | 2026-09-01 | `RBAC-M04` | `DONE` | `main@13dc26a` | uncommitted working tree | invalid mode/tenantMode와 Date/subject/resource/requirement runtime shape를 작은 assertion layer에서 `RBAC_CONFIG_ERROR` 또는 기존 resolver deny로 fail closed; A/B, HTTP E2E, packed CJS/ESM consumer PASS | `RBAC-M05` 시작 |
+| 2026-09-01 | `RBAC-M05` | `DONE` | `main@c3297c8` | uncommitted working tree | custom user type 호환성을 유지하고 valid RBAC subject/user/API-key identity를 exact tuple로 조정해 conflict를 subject missing으로 fail closed; namespace isolation, A/B, Guard E2E와 build PASS | `RBAC-M06` 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -811,4 +813,18 @@ Commands and exact results: git fetch --prune --tags PASS; baseline npm run type
 Unverified paths and reason: Prisma C2/C3는 storage/adapters/schema를 변경하지 않았고 RBAC-M04 검증 범위가 unit table, packed JS consumer, HTTP E2E이므로 실행하지 않았다.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M05의 request.user.type='service_account' fixture와 user/API-key/RBAC_SUBJECT 동시 source authority를 표로 만들고 namespace compatibility ADR을 작성한다.
+```
+
+### 2026-09-01 RBAC-M05 인계
+
+```text
+Task: RBAC-M05
+State: DONE
+Start ref / end ref: main@c3297c8 / main@c3297c8 + uncommitted RBAC-M05 working tree
+Changed files: README.md, changelog.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, docs/adr/0001-default-http-subject-source-policy.md, docs/guards.md, docs/spec.md, src/resolvers/default-http-subject.resolver.ts, test/e2e/rbac-guard.e2e-spec.ts, test/unit/default-resolvers.spec.ts, test/unit/rbac-module.spec.ts, test/unit/rbac-service.spec.ts
+Contract decision: default request.user mapping은 non-empty string type override를 0.x 호환성 계약으로 유지하고 deprecation을 예약하지 않는다. fixed user namespace가 필요한 consumer는 authoritative custom subjectResolver로 migration한다. default resolver는 valid request.rbacSubject, request.user, canonical/legacy API-key 결과의 exact (type, id, tenantId) tuple을 모두 조정하고 conflict면 undefined로 fail closed한다. agreeing source는 rbacSubject > user > canonical apiKey > legacy fallback 순으로 attributes를 선택한다. populated API-key source 자체가 malformed이거나 canonical/legacy가 충돌하면 다른 valid source 뒤에 숨기지 않는다. canonical API key는 api_key이며 subject type은 binding identity의 일부라 같은 ID의 다른 type과 권한을 공유하지 않는다.
+Commands and exact results: git fetch --prune --tags PASS; origin/main 69bf0e1, GitHub Release v0.2.1과 npm latest 0.2.1 기준선 재확인; baseline npm run typecheck PASS; initial focused RED는 2 files/84 tests 중 6 failures로 source precedence 우회 재현; npm run lint PASS; npm run typecheck PASS; npm test PASS (14 files, 289 tests); fresh npm run test:coverage PASS (13 files, 280 tests; statements 95.23%, branches 89.28%, functions 97.31%, lines 96.09%); npm run test:e2e PASS (1 file, 9 tests); npm run build PASS; git diff --check PASS.
+Unverified paths and reason: Prisma C2/C3와 packed consumer D는 storage/adapter/package export를 변경하지 않았고 RBAC-M05 명시 검증 범위가 source conflict matrix와 Guard E2E이므로 실행하지 않았다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree이며 public release/npm 기준선은 계속 v0.2.1이다.
+Next exact action: RBAC-M06의 whitespace identifier create→assign→can→event 표와 API-key exact/no-trim fixture를 RED로 추가한다.
 ```

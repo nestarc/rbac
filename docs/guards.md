@@ -80,6 +80,38 @@ export class AppModule {}
 With `requireMetadata: true`, routes without RBAC metadata deny unless they use
 `@SkipRbac()`. Auth guards should run before RBAC so a subject is available.
 
+## Subject Sources and Namespaces
+
+Without a configured `subjectResolver`, RBAC reads valid identities from
+`request.rbacSubject`, `request.user`, and the API-key carriers. If more than one
+valid source is present, their exact `(type, id, tenantId)` tuples must agree or
+the guard fails closed with `RBAC_SUBJECT_MISSING` before authorization. When they
+agree, the selected record keeps the precedence `rbacSubject`, `user`, then the
+canonical `apiKey` (or deprecated `apiKeyContext` fallback). A malformed or
+internally conflicting populated API-key source also fails closed when a user or
+RBAC subject is present.
+
+The default user mapping reads `id`, `sub`, then `userId`. A non-empty string
+`request.user.type` remains the subject type for compatibility; otherwise the type
+is `user`. This means the default user carrier does not promise a fixed `user`
+namespace. Configure a custom `subjectResolver` if the application must force one:
+
+```ts
+RbacModule.forRoot({
+  storage,
+  subjectResolver: (context) => {
+    const request = context.switchToHttp().getRequest();
+    return { type: 'user', id: request.user.sub, tenantId: request.user.tenantId };
+  },
+});
+```
+
+A configured resolver is authoritative and is not reconciled with these default
+HTTP carriers. Canonical API-key records always map to `api_key`. Subject type is
+part of identity, so the same ID in `user`, `service_account`, and `api_key`
+namespaces does not share bindings. Authentication and guard ordering remain the
+application's responsibility.
+
 ## Tenant Modes
 
 - `tenant: 'required'` denies when no tenant ID can be resolved.

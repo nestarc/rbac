@@ -136,6 +136,14 @@ Use `@Can()` or `@RequirePermissions()` for permissions, `@RequireRole()` for ro
 keys, and `@SkipRbac()` for health checks or public routes. See
 [docs/guards.md](docs/guards.md).
 
+The default HTTP subject resolver reconciles valid `request.rbacSubject`,
+`request.user`, and API-key identities by exact `(type, id, tenantId)`. Conflicting
+sources fail closed before authorization. `request.user.type` remains a supported
+custom namespace for compatibility and defaults to `user` only when absent;
+configure `subjectResolver` when the application requires a fixed namespace.
+Subject type is part of identity, so equal IDs in different namespaces never share
+role bindings. See [the subject source policy](docs/guards.md#subject-sources-and-namespaces).
+
 ## Tenant-Aware Checks
 
 Tenant-aware checks reconcile the tenant ID from the subject, request fields,
@@ -329,7 +337,7 @@ RbacModule.forRoot({
 
 ## Security Notes
 
-- Authentication is not included. Use your existing auth guard to attach `request.user`, `request.rbacSubject`, or a custom `subjectResolver`.
+- Authentication is not included. Use your existing auth guard to attach `request.user`, `request.rbacSubject`, or a custom `subjectResolver`; simultaneous default HTTP sources must resolve to the same exact subject identity.
 - Tenant-required routes fail closed when tenant identity is missing.
 - Wildcards are limited to `*` and suffix wildcards such as `reports.*`.
 - Global roles do not apply inside tenants by default.

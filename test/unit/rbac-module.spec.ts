@@ -783,6 +783,43 @@ describe('RbacGuard', () => {
     });
   });
 
+  it('denies before authorization when default HTTP subject sources conflict', async () => {
+    const can = vi.fn();
+
+    class ReportsController {
+      @Can('reports.read')
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(
+        contextFor(ReportsController, handler, {
+          user: { id: 'user_1', tenantId: 'tenant_1' },
+          apiKey: { keyId: 'key_1', tenantId: 'tenant_1' },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'RBAC_SUBJECT_MISSING' },
+    });
+    expect(can).not.toHaveBeenCalled();
+  });
+
   it('uses required tenant mode by default when configured', async () => {
     const can = vi.fn((input: RbacCanInput) => {
       void input;

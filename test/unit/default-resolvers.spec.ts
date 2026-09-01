@@ -36,7 +36,7 @@ describe('default HTTP RBAC resolvers', () => {
       };
       const context = httpContext({
         rbacSubject: subject,
-        user: { id: 'user_1', tenantId: 'tenant_user' },
+        user: { type: 'service_account', id: 'svc_1', tenantId: 'tenant_subject' },
       });
 
       expect(defaultHttpSubjectResolver()(context)).toBe(subject);
@@ -85,6 +85,98 @@ describe('default HTTP RBAC resolvers', () => {
         tenantId: 'tenant_user',
         attributes: user,
       });
+    });
+
+    it('preserves a custom request user namespace as a compatibility contract', () => {
+      const user = {
+        id: 'svc_1',
+        type: 'service_account',
+        tenantId: 'tenant_user',
+      };
+
+      expect(defaultHttpSubjectResolver()(httpContext({ user }))).toEqual({
+        type: 'service_account',
+        id: 'svc_1',
+        tenantId: 'tenant_user',
+        attributes: user,
+      });
+    });
+
+    it.each([undefined, '', 42])('defaults an invalid request user type %j to user', (type) => {
+      const user = { id: 'user_1', type };
+
+      expect(defaultHttpSubjectResolver()(httpContext({ user }))).toEqual({
+        type: 'user',
+        id: 'user_1',
+        attributes: user,
+      });
+    });
+
+    it('selects the highest-authority source when all subject carriers agree', () => {
+      const rbacSubject: RbacSubject = {
+        type: 'api_key',
+        id: 'key_1',
+        tenantId: 'tenant_key',
+      };
+
+      expect(
+        defaultHttpSubjectResolver()(httpContext({
+          rbacSubject,
+          user: { type: 'api_key', id: 'key_1', tenantId: 'tenant_key' },
+          apiKey: { keyId: 'key_1', tenantId: 'tenant_key' },
+        })),
+      ).toBe(rbacSubject);
+    });
+
+    it.each([
+      {
+        name: 'RBAC subject and user type',
+        request: {
+          rbacSubject: { type: 'service_account', id: 'principal_1', tenantId: 'tenant_1' },
+          user: { type: 'user', id: 'principal_1', tenantId: 'tenant_1' },
+        },
+      },
+      {
+        name: 'RBAC subject and user id',
+        request: {
+          rbacSubject: { type: 'user', id: 'user_1', tenantId: 'tenant_1' },
+          user: { type: 'user', id: 'user_2', tenantId: 'tenant_1' },
+        },
+      },
+      {
+        name: 'RBAC subject and user tenant',
+        request: {
+          rbacSubject: { type: 'user', id: 'user_1', tenantId: 'tenant_1' },
+          user: { type: 'user', id: 'user_1', tenantId: 'tenant_2' },
+        },
+      },
+      {
+        name: 'user and API key namespace',
+        request: {
+          user: { id: 'principal_1', tenantId: 'tenant_1' },
+          apiKey: { keyId: 'principal_1', tenantId: 'tenant_1' },
+        },
+      },
+      {
+        name: 'all three carriers',
+        request: {
+          rbacSubject: { type: 'user', id: 'user_1', tenantId: 'tenant_1' },
+          user: { type: 'user', id: 'user_1', tenantId: 'tenant_1' },
+          apiKey: { keyId: 'key_1', tenantId: 'tenant_1' },
+        },
+      },
+    ])('fails closed when $name sources conflict', ({ request }) => {
+      expect(defaultHttpSubjectResolver()(httpContext(request))).toBeUndefined();
+    });
+
+    it('does not hide a canonical/legacy API-key conflict behind a valid user source', () => {
+      expect(
+        defaultHttpSubjectResolver()(httpContext({
+          user: { id: 'user_1', tenantId: 'tenant_1' },
+          apiKey: { keyId: 'key_1', tenantId: 'tenant_1' },
+          apiKeyContext: { keyId: 'stale_key', tenantId: 'tenant_1' },
+        })),
+      ).toBeUndefined();
     });
 
     it('maps request user records from userId when id and sub are absent', () => {

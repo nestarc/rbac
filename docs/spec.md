@@ -317,15 +317,26 @@ Resolution order:
 1. Configured `subjectResolver`, when present.
 2. `request.rbacSubject`.
 3. `request.user`.
-4. `request.apiKeyContext`.
-5. `request.apiKey`.
+4. `request.apiKey`.
+5. Deprecated `request.apiKeyContext` fallback.
+
+The configured resolver is authoritative. The default resolver instead resolves
+every valid HTTP carrier and requires their exact `(type, id, tenantId)` tuples to
+agree. A conflict returns no subject. Agreeing sources keep the precedence above
+for the selected attributes. A populated malformed API-key carrier or conflicting
+canonical/legacy API-key pair also returns no subject.
 
 Default `request.user` mapping:
 
 - `id` comes from `id`, `sub`, or `userId`.
-- `type` defaults to `user`.
+- a non-empty string `type` is preserved as a compatibility namespace and otherwise
+  defaults to `user`.
 - `tenantId` is copied when present.
 - original user object is stored as `attributes`.
+
+Subject type is part of identity; equal IDs with different types do not share
+bindings. Applications that require a fixed `user` namespace must configure a
+custom resolver.
 
 Default API key mapping:
 
