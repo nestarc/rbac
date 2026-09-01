@@ -19,6 +19,11 @@ PostgreSQL tables:
 Apply `prisma/migrations/0001_init_rbac.sql` through the app's migration workflow
 or translate the SQL into the migration system already used by the app.
 
+RBAC does not automatically rewrite existing identifiers. Before adopting a
+version with canonical identifier enforcement, inventory outer whitespace in the
+RBAC tenant, role, binding, subject, resource, and permission columns, resolve any
+trim-induced uniqueness collisions, and migrate those values explicitly.
+
 ```bash
 npm run prisma:generate
 ```

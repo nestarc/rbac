@@ -23,6 +23,14 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- `RbacService`, `InMemoryRbacStorage`, and `PrismaRbacStorage` now use one
+  canonical identifier policy. Leading and trailing whitespace is removed from
+  tenant, non-API-key subject, role, binding, resource, and permission identifiers;
+  whitespace-only values are rejected. Audit and policy-change events use the same
+  canonical values as storage and authorization decisions.
+- API-key subject IDs and source tenant IDs remain exact opaque strings at the
+  subject boundary. RBAC does not trim, coerce, case-fold, or Unicode-normalize
+  those source identity values.
 - Non-empty string `request.user.type` values remain supported compatibility
   namespaces in the default resolver; applications that require a fixed `user`
   namespace should configure `subjectResolver`. Subject types remain isolated even

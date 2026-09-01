@@ -159,8 +159,8 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 3 | `RBAC-M03` | P0 | `DONE` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
 | 4 | `RBAC-M04` | P1 | `DONE` | M | 없음 | inbound runtime enum/shape fail-closed validation |
 | 5 | `RBAC-M05` | P1 | `DONE` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
-| 6 | `RBAC-M06` | P1 | `READY` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
-| 7 | `RBAC-M07` | P1 | `BLOCKED` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
+| 6 | `RBAC-M06` | P1 | `DONE` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
+| 7 | `RBAC-M07` | P1 | `READY` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
 | 8 | `RBAC-M08` | P1 | `READY` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
 | 9 | `RBAC-M09` | P1 | `DECISION` | M | 없음 | Node/Nest/Prisma 지원·semver 계약 |
 | 10 | `RBAC-M10` | P1 | `BLOCKED` | M | `RBAC-M09` | 선택한 Nest/Prisma 하한 compatibility gate |
@@ -325,23 +325,23 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M06` — 식별자 canonicalization 단일화
 
-- 상태: `P1 / READY (RBAC-M01, RBAC-M02 완료)`
+- 상태: `P1 / DONE`
 - 문제: assertion이 trim한 값을 반환해도 일부 호출자가 버려 write와 can/storage/event의 identity가 다를 수 있다.
 
 완료 조건:
 
-- [ ] tenant, subject, role, binding, resource ID, role key와 permission의 whitespace/empty 정책을 정의한다.
-- [ ] API Keys에서 온 identity ID는 `RBAC-M02`의 opaque exact/no-trim 계약을 보존한다. producer contract에 맞는 exact value인지 검증하고 부적합하면 reject하되 consumer가 trim/coerce로 repair하지 않는다.
-- [ ] service, both adapters, audit/change events가 같은 canonical value를 사용한다.
-- [ ] create→assign→can과 update/delete가 같은 identity를 찾는다.
-- [ ] existing non-canonical data의 reject/migration 정책을 기록한다.
-- [ ] Unicode normalization/case folding은 별도 결정으로 둔다.
+- [x] tenant, subject, role, binding, resource ID, role key와 permission의 whitespace/empty 정책을 정의한다.
+- [x] API Keys에서 온 identity ID는 `RBAC-M02`의 opaque exact/no-trim 계약을 보존한다. producer contract에 맞는 exact value인지 검증하고 부적합하면 reject하되 consumer가 trim/coerce로 repair하지 않는다.
+- [x] service, both adapters, audit/change events가 같은 canonical value를 사용한다.
+- [x] create→assign→can과 update/delete가 같은 identity를 찾는다.
+- [x] existing non-canonical data의 reject/migration 정책을 기록한다.
+- [x] Unicode normalization/case folding은 별도 결정으로 둔다.
 
 검증: 프로필 A/B/C2/C3, adapter round-trip, event payload.
 
 ### `RBAC-M07` — mutation outcome과 best-effort event 정합성
 
-- 상태: `P1 / BLOCKED (RBAC-M06)`
+- 상태: `P1 / READY (RBAC-M06 완료)`
 - 문제: duplicate create/assign, missing update, no-op delete/grant/revoke도 성공 audit/change event를 낼 수 있다. storage commit 뒤 audit/publisher를 호출하고 예외를 삼키는 현재 구조에서는 외부 delivery의 transaction 원자성이나 exactly-once를 보장할 수 없다(`src/rbac.service.ts:818-836`).
 
 완료 조건:
@@ -730,6 +730,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M03`: adversarial custom storage tenant/expiry contract.
 - [x] `RBAC-M04`: invalid runtime discriminant/shape unit table, packed CJS/ESM consumer, HTTP config-error E2E.
 - [x] `RBAC-M05`: default HTTP subject source conflict matrix, namespace isolation, Guard HTTP E2E.
+- [x] `RBAC-M06`: service/InMemory/Prisma identifier round-trip, API-key exact identity, event payload와 non-canonical effective-row fail-closed contract.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
@@ -740,11 +741,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M05 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`/`RBAC-M02`/`RBAC-M03`/`RBAC-M04`/`RBAC-M05`를 반복하지 않고 `RBAC-M06`만 선택한다.
-3. whitespace tenant/subject/role/binding/resource/permission의 create→assign→can→event 표를 만들고 API-key exact/no-trim fixture를 함께 고정한다.
-4. service와 두 adapter가 assertion이 반환한 canonical identifier를 실제 query/write/event에 사용하는지 RED round-trip으로 확인한다.
-5. 프로필 A/B/C2/C3와 event payload를 검증하고 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M06 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M06`을 반복하지 않고 `RBAC-M07`만 선택한다.
+3. create-existing, update-missing/no-change, duplicate assign, grant-existing, revoke-absent/already-revoked outcome/event matrix를 RED로 만든다.
+4. additive optional mutation-result capability와 legacy custom adapter fallback을 분리해 built-in adapter의 실제 변경에만 성공 audit/change publish가 시도되는지 확인한다.
+5. 프로필 A/B/C2/C3와 audit-log integration을 검증하고 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -758,6 +759,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M03` | `DONE` | `main@b076ff6` | uncommitted working tree | custom effective row를 query tenant/global provenance, finite Date/expiry, resource pair로 재검증하고 resource alias 우회를 차단; A/B/C2/C3와 build PASS | `RBAC-M04` 시작 |
 | 2026-09-01 | `RBAC-M04` | `DONE` | `main@13dc26a` | uncommitted working tree | invalid mode/tenantMode와 Date/subject/resource/requirement runtime shape를 작은 assertion layer에서 `RBAC_CONFIG_ERROR` 또는 기존 resolver deny로 fail closed; A/B, HTTP E2E, packed CJS/ESM consumer PASS | `RBAC-M05` 시작 |
 | 2026-09-01 | `RBAC-M05` | `DONE` | `main@c3297c8` | uncommitted working tree | custom user type 호환성을 유지하고 valid RBAC subject/user/API-key identity를 exact tuple로 조정해 conflict를 subject missing으로 fail closed; namespace isolation, A/B, Guard E2E와 build PASS | `RBAC-M06` 시작 |
+| 2026-09-01 | `RBAC-M06` | `DONE` | `main@7e4f9cf` | uncommitted working tree | service/InMemory/Prisma가 공통 outer-whitespace canonicalization을 사용하고 API-key subject identity는 exact 보존; create→assign→can, update/delete/list, audit/change event, non-canonical storage deny와 A/B/C1/C2/C3 PASS | `RBAC-M07` 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -827,4 +829,18 @@ Commands and exact results: git fetch --prune --tags PASS; origin/main 69bf0e1, 
 Unverified paths and reason: Prisma C2/C3와 packed consumer D는 storage/adapter/package export를 변경하지 않았고 RBAC-M05 명시 검증 범위가 source conflict matrix와 Guard E2E이므로 실행하지 않았다.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree이며 public release/npm 기준선은 계속 v0.2.1이다.
 Next exact action: RBAC-M06의 whitespace identifier create→assign→can→event 표와 API-key exact/no-trim fixture를 RED로 추가한다.
+```
+
+### 2026-09-01 RBAC-M06 인계
+
+```text
+Task: RBAC-M06
+State: DONE
+Start ref / end ref: main@7e4f9cf / main@7e4f9cf + uncommitted RBAC-M06 working tree
+Changed files: README.md, changelog.md, docs/prisma.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/utils/canonicalization.ts, src/rbac.service.ts, src/adapters/in-memory-rbac.storage.ts, src/adapters/prisma-rbac.storage.ts, test/contract/storage-contract.ts, test/unit/rbac-service.spec.ts
+Contract decision: tenant, non-API-key subject type/ID, role ID/key, binding ID, resource type/ID와 permission은 경계에서 outer whitespace를 한 번 제거하고 whitespace-only를 reject한다. service와 두 built-in adapter는 같은 helper/permission normalizer를 사용하며 query/write/decision/audit/change event에 canonical value를 전달한다. exact `type === 'api_key'` subject의 ID와 source tenant 값은 non-empty인지 검증하되 trim/coerce하지 않아 `" Key_Å "`와 `"Key_Å"`를 다른 identity로 유지한다. 일반 tenant scope는 canonical tenant ID를 사용한다. case folding과 Unicode normalization은 하지 않는다. 기존 Prisma row는 자동 수정하거나 alias하지 않으며 collision inventory 뒤 명시 migration해야 한다. non-canonical effective identifiers는 authorization에서 제외하고 non-canonical/malformed stored permission은 storage error로 fail closed한다.
+Commands and exact results: initial focused RED observed (2 files/105 tests 중 2 failures: adapter가 spaced tenant/key를 저장했고 service role-key assignment가 생성 role을 찾지 못함); npm run typecheck PASS; npm run lint PASS; npm test PASS (14 files, 301 tests); fresh npm run test:coverage PASS (13 files, 292 tests; statements 95.66%, branches 89.9%, functions 98.53%, lines 96.49%); npm run test:e2e PASS (1 file, 9 tests); npm run build PASS; Prisma 7.10.0 generate/migration와 PostgreSQL 16 C2 PASS (1 file, 31 tests, skip 0); disposable exact Prisma 6.19.3 generate/migration와 PostgreSQL 16 C3 PASS (1 file, 31 tests, skip 0); git diff --check PASS. 최초 sandbox npm test는 로컬 listen EPERM으로 실패했고 동일 명령을 허용된 환경에서 재실행해 301/301 PASS를 확인했다.
+Unverified paths and reason: packed consumer/package dry-run/audit 프로필 D는 public export나 package metadata를 변경하지 않고 RBAC-M06 명시 검증 profile이 A/B/C2/C3와 event payload이므로 실행하지 않았다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다. C2/C3 검증용 임시 PostgreSQL 16 container와 Prisma 6 checkout은 검증 뒤 제거했다.
+Next exact action: RBAC-M07의 create-existing, update-missing/no-change, duplicate assign, grant-existing, revoke-absent/already-revoked outcome/event matrix를 RED로 추가한다.
 ```

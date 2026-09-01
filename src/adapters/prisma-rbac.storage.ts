@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { RbacConfigError } from '../errors';
 import { normalizePermission, normalizePermissions } from '../utils';
+import {
+  canonicalizeIdentifier,
+  canonicalizeResource,
+  canonicalizeSubject,
+  canonicalizeTenantId,
+} from '../utils/canonicalization';
 import type {
   AssignRoleStorageInput,
   DeleteRoleInput,
@@ -73,7 +79,34 @@ export interface PrismaRbacClientLike extends PrismaRbacTransactionClientLike {
   $transaction<T>(fn: (tx: PrismaRbacTransactionClientLike) => Promise<T>): Promise<T>;
 }
 
-const normalizeTenantId = (tenantId: string | null | undefined): string | null => tenantId ?? null;
+const normalizeTenantId = (tenantId: string | null | undefined): string | null =>
+  canonicalizeTenantId(tenantId) ?? null;
+
+const canonicalizeUpsertRoleInput = (input: UpsertRoleInput): UpsertRoleInput =>
+  'roleId' in input
+    ? {
+        ...input,
+        roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
+        ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
+        ...(input.key !== undefined ? { key: canonicalizeIdentifier(input.key, 'role key') } : {}),
+        ...(input.permissions !== undefined
+          ? { permissions: normalizePermissions(input.permissions) }
+          : {}),
+      }
+    : {
+        ...input,
+        tenantId: canonicalizeTenantId(input.tenantId),
+        key: canonicalizeIdentifier(input.key, 'role key'),
+        permissions: normalizePermissions(input.permissions),
+      };
+
+const canonicalizeAssignInput = (input: AssignRoleStorageInput): AssignRoleStorageInput => ({
+  ...input,
+  tenantId: canonicalizeTenantId(input.tenantId),
+  subject: canonicalizeSubject(input.subject),
+  roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
+  ...(input.resource !== undefined ? { resource: canonicalizeResource(input.resource) } : {}),
+});
 
 const newId = (prefix: string): string => `${prefix}_${randomUUID()}`;
 
@@ -243,8 +276,9 @@ export class PrismaRbacStorage implements RbacStorage {
   constructor(private readonly prisma: PrismaRbacClientLike) {}
 
   async findRole(input: FindRoleInput): Promise<RbacRole | null> {
+    const key = canonicalizeIdentifier(input.key, 'role key');
     const role = (await this.prisma.rbacRole.findFirst({
-      where: roleWhere(normalizeTenantId(input.tenantId), input.key),
+      where: roleWhere(normalizeTenantId(input.tenantId), key),
       include: { permissions: { include: { permission: true } } },
     })) as PrismaRoleRecord | null;
 
@@ -263,77 +297,74 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async upsertRole(input: UpsertRoleInput): Promise<RbacRole> {
-    return this.upsertRoleWithRetry(input, false);
+    return this.upsertRoleWithRetry(canonicalizeUpsertRoleInput(input), false);
   }
 
-  private async upsertRoleWithRetry(
-    input: UpsertRoleInput,
-    retried: boolean,
-  ): Promise<RbacRole> {
+  private async upsertRoleWithRetry(input: UpsertRoleInput, retried: boolean): Promise<RbacRole> {
     try {
       return await this.prisma.$transaction(async (tx) => {
-      const hasExplicitRoleId = 'roleId' in input;
-      const explicitRoleId = hasExplicitRoleId ? input.roleId : undefined;
-      let existing: PrismaRoleRecord | null;
+        const hasExplicitRoleId = 'roleId' in input;
+        const explicitRoleId = hasExplicitRoleId ? input.roleId : undefined;
+        let existing: PrismaRoleRecord | null;
 
-      if (hasExplicitRoleId) {
-        existing = (await tx.rbacRole.findFirst({
-          where: { id: explicitRoleId },
+        if (hasExplicitRoleId) {
+          existing = (await tx.rbacRole.findFirst({
+            where: { id: explicitRoleId },
+          })) as PrismaRoleRecord | null;
+        } else {
+          existing = (await tx.rbacRole.findFirst({
+            where: roleWhere(normalizeTenantId(input.tenantId), input.key),
+          })) as PrismaRoleRecord | null;
+        }
+
+        const id = existing?.id ?? explicitRoleId ?? newId('role');
+        const key = input.key ?? existing?.key ?? id;
+        const tenantId =
+          input.tenantId !== undefined
+            ? normalizeTenantId(input.tenantId)
+            : (existing?.tenantId ?? null);
+
+        if (hasExplicitRoleId) {
+          await this.assertUniqueRoleKey(tx, id, tenantId, key);
+        }
+
+        const role = (await tx.rbacRole.upsert({
+          where: { id },
+          create: {
+            id,
+            key,
+            tenantId,
+            name: input.name,
+            description: input.description,
+            isSystem: input.isSystem ?? false,
+          },
+          update: {
+            key,
+            ...(input.tenantId !== undefined ? { tenantId } : {}),
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.isSystem !== undefined ? { isSystem: input.isSystem } : {}),
+          },
+        })) as PrismaRoleRecord;
+
+        if (input.permissions !== undefined) {
+          await this.replaceRolePermissions(tx, role.id, input.permissions);
+        }
+
+        const reloaded = (await tx.rbacRole.findFirst({
+          where: { id: role.id },
+          include: { permissions: { include: { permission: true } } },
         })) as PrismaRoleRecord | null;
-      } else {
-        existing = (await tx.rbacRole.findFirst({
-          where: roleWhere(normalizeTenantId(input.tenantId), input.key),
-        })) as PrismaRoleRecord | null;
-      }
 
-      const id = existing?.id ?? explicitRoleId ?? newId('role');
-      const key = input.key ?? existing?.key ?? id;
-      const tenantId =
-        input.tenantId !== undefined
-          ? normalizeTenantId(input.tenantId)
-          : (existing?.tenantId ?? null);
+        if (!reloaded) {
+          throw new RbacConfigError({
+            operation: 'upsertRole',
+            reason: 'role_not_found_after_upsert',
+            roleId: role.id,
+          });
+        }
 
-      if (hasExplicitRoleId) {
-        await this.assertUniqueRoleKey(tx, id, tenantId, key);
-      }
-
-      const role = (await tx.rbacRole.upsert({
-        where: { id },
-        create: {
-          id,
-          key,
-          tenantId,
-          name: input.name,
-          description: input.description,
-          isSystem: input.isSystem ?? false,
-        },
-        update: {
-          key,
-          ...(input.tenantId !== undefined ? { tenantId } : {}),
-          ...(input.name !== undefined ? { name: input.name } : {}),
-          ...(input.description !== undefined ? { description: input.description } : {}),
-          ...(input.isSystem !== undefined ? { isSystem: input.isSystem } : {}),
-        },
-      })) as PrismaRoleRecord;
-
-      if (input.permissions !== undefined) {
-        await this.replaceRolePermissions(tx, role.id, input.permissions);
-      }
-
-      const reloaded = (await tx.rbacRole.findFirst({
-        where: { id: role.id },
-        include: { permissions: { include: { permission: true } } },
-      })) as PrismaRoleRecord | null;
-
-      if (!reloaded) {
-        throw new RbacConfigError({
-          operation: 'upsertRole',
-          reason: 'role_not_found_after_upsert',
-          roleId: role.id,
-        });
-      }
-
-      return toRole(reloaded);
+        return toRole(reloaded);
       });
     } catch (error) {
       if (!retried && isPrismaUniqueConstraintError(error)) {
@@ -345,15 +376,17 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async deleteRole(input: DeleteRoleInput): Promise<void> {
-    await this.prisma.rbacRole.deleteMany({ where: { id: input.roleId } });
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+    await this.prisma.rbacRole.deleteMany({ where: { id: roleId } });
   }
 
   async grantPermission(input: GrantPermissionInput): Promise<void> {
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const permission = normalizePermission(input.permission);
 
     await this.prisma.$transaction(async (tx) => {
       const role = (await tx.rbacRole.findFirst({
-        where: { id: input.roleId },
+        where: { id: roleId },
       })) as PrismaRoleRecord | null;
       if (!role) return;
 
@@ -365,15 +398,16 @@ export class PrismaRbacStorage implements RbacStorage {
 
       await tx.rbacRolePermission.upsert({
         where: {
-          roleId_permissionId: { roleId: input.roleId, permissionId: permissionRecord.id },
+          roleId_permissionId: { roleId, permissionId: permissionRecord.id },
         },
-        create: { roleId: input.roleId, permissionId: permissionRecord.id },
+        create: { roleId, permissionId: permissionRecord.id },
         update: {},
       });
     });
   }
 
   async revokePermission(input: RevokePermissionInput): Promise<void> {
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const permission = normalizePermission(input.permission);
     const permissionRecord = (await this.prisma.rbacPermission.findFirst({
       where: { key: permission },
@@ -382,13 +416,14 @@ export class PrismaRbacStorage implements RbacStorage {
     if (!permissionRecord) return;
 
     await this.prisma.rbacRolePermission.deleteMany({
-      where: { roleId: input.roleId, permissionId: permissionRecord.id },
+      where: { roleId, permissionId: permissionRecord.id },
     });
   }
 
   async listRolePermissions(input: ListRolePermissionsInput): Promise<string[]> {
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const links = (await this.prisma.rbacRolePermission.findMany({
-      where: { roleId: input.roleId },
+      where: { roleId },
       include: { permission: true },
       orderBy: { permission: { key: 'asc' } },
     })) as Array<{ permission: { key: string } }>;
@@ -397,7 +432,7 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async assignRole(input: AssignRoleStorageInput): Promise<RbacRoleBinding> {
-    return this.assignRoleWithRetry(input, false);
+    return this.assignRoleWithRetry(canonicalizeAssignInput(input), false);
   }
 
   private async assignRoleWithRetry(
@@ -413,51 +448,51 @@ export class PrismaRbacStorage implements RbacStorage {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-      const existing = (await tx.rbacRoleBinding.findFirst({
-        where: {
-          tenantId,
-          subjectType: input.subject.type,
-          subjectId: input.subject.id,
-          roleId: input.roleId,
-          resourceType,
-          resourceId,
-          revokedAt: null,
-        },
-      })) as PrismaBindingRecord | null;
+        const existing = (await tx.rbacRoleBinding.findFirst({
+          where: {
+            tenantId,
+            subjectType: input.subject.type,
+            subjectId: input.subject.id,
+            roleId: input.roleId,
+            resourceType,
+            resourceId,
+            revokedAt: null,
+          },
+        })) as PrismaBindingRecord | null;
 
-      if (existing) {
-        if (isActiveBinding(existing, now)) {
-          return toBinding(existing);
+        if (existing) {
+          if (isActiveBinding(existing, now)) {
+            return toBinding(existing);
+          }
+
+          const reactivated = (await tx.rbacRoleBinding.update({
+            where: { id: existing.id },
+            data: {
+              expiresAt,
+              revokedAt: null,
+              metadata: encodedMetadata ?? null,
+            },
+          })) as PrismaBindingRecord;
+
+          return toBinding(reactivated);
         }
 
-        const reactivated = (await tx.rbacRoleBinding.update({
-          where: { id: existing.id },
+        const binding = (await tx.rbacRoleBinding.create({
           data: {
+            id: newId('binding'),
+            tenantId,
+            subjectType: input.subject.type,
+            subjectId: input.subject.id,
+            roleId: input.roleId,
+            resourceType,
+            resourceId,
             expiresAt,
             revokedAt: null,
-            metadata: encodedMetadata ?? null,
+            ...(encodedMetadata !== undefined ? { metadata: encodedMetadata } : {}),
           },
         })) as PrismaBindingRecord;
 
-        return toBinding(reactivated);
-      }
-
-      const binding = (await tx.rbacRoleBinding.create({
-        data: {
-          id: newId('binding'),
-          tenantId,
-          subjectType: input.subject.type,
-          subjectId: input.subject.id,
-          roleId: input.roleId,
-          resourceType,
-          resourceId,
-          expiresAt,
-          revokedAt: null,
-          ...(encodedMetadata !== undefined ? { metadata: encodedMetadata } : {}),
-        },
-      })) as PrismaBindingRecord;
-
-      return toBinding(binding);
+        return toBinding(binding);
       });
     } catch (error) {
       if (!retried && isPrismaUniqueConstraintError(error)) {
@@ -469,25 +504,27 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async revokeRole(input: RevokeRoleStorageInput): Promise<void> {
+    const bindingId = canonicalizeIdentifier(input.bindingId, 'bindingId');
     await this.prisma.$transaction(async (tx) => {
       const existing = (await tx.rbacRoleBinding.findFirst({
-        where: { id: input.bindingId },
+        where: { id: bindingId },
       })) as PrismaBindingRecord | null;
 
       if (!existing || existing.revokedAt) return;
 
       await tx.rbacRoleBinding.update({
-        where: { id: input.bindingId },
+        where: { id: bindingId },
         data: { revokedAt: cloneDate(input.revokedAt) ?? new Date() },
       });
     });
   }
 
   async listBindings(input: ListBindingsStorageInput): Promise<RbacRoleBinding[]> {
+    const subject = canonicalizeSubject(input.subject);
     const bindings = (await this.prisma.rbacRoleBinding.findMany({
       where: {
-        subjectType: input.subject.type,
-        subjectId: input.subject.id,
+        subjectType: subject.type,
+        subjectId: subject.id,
         ...(input.tenantId !== undefined ? { tenantId: normalizeTenantId(input.tenantId) } : {}),
       },
       orderBy: { id: 'asc' },
@@ -586,19 +623,21 @@ export class PrismaRbacStorage implements RbacStorage {
     input: ListEffectiveRolesInput,
     now: Date,
   ): Record<string, unknown> {
+    const subject = canonicalizeSubject(input.subject);
     const tenantId = normalizeTenantId(input.tenantId);
-    const resourceFilter = input.resource
+    const resource = input.resource ? canonicalizeResource(input.resource) : undefined;
+    const resourceFilter = resource
       ? {
           OR: [
             { resourceType: null, resourceId: null },
-            { resourceType: input.resource.type, resourceId: input.resource.id },
+            { resourceType: resource.type, resourceId: resource.id },
           ],
         }
       : { resourceType: null, resourceId: null };
 
     return {
-      subjectType: input.subject.type,
-      subjectId: input.subject.id,
+      subjectType: subject.type,
+      subjectId: subject.id,
       tenantId,
       revokedAt: null,
       role: { tenantId },

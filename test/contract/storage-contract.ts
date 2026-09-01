@@ -483,6 +483,99 @@ export function runRbacStorageContract({ createStorage }: RbacStorageContractOpt
       expect(permissionsOf(effectivePermissions)).toEqual(['reports.*', 'reports.read']);
     });
 
+    it('canonicalizes identifier whitespace across adapter round trips', async () => {
+      const role = await storage.upsertRole({
+        tenantId: ' tenant_canonical ',
+        key: ' canonical_reader ',
+        permissions: [' reports.read '],
+      });
+
+      expect(role).toMatchObject({
+        tenantId: 'tenant_canonical',
+        key: 'canonical_reader',
+        permissions: ['reports.read'],
+      });
+      await expect(
+        storage.findRole({ tenantId: ' tenant_canonical ', key: ' canonical_reader ' }),
+      ).resolves.toMatchObject({ id: role.id });
+
+      const binding = await storage.assignRole({
+        tenantId: ' tenant_canonical ',
+        subject: {
+          type: ' service_account ',
+          id: ' worker_1 ',
+          tenantId: ' tenant_canonical ',
+        },
+        roleId: ` ${role.id} `,
+        resource: { type: ' project ', id: ' project_1 ' },
+      });
+
+      expect(binding).toMatchObject({
+        tenantId: 'tenant_canonical',
+        subjectType: 'service_account',
+        subjectId: 'worker_1',
+        roleId: role.id,
+        resourceType: 'project',
+        resourceId: 'project_1',
+      });
+      await expect(
+        storage.listEffectivePermissions({
+          tenantId: ' tenant_canonical ',
+          subject: {
+            type: ' service_account ',
+            id: ' worker_1 ',
+            tenantId: ' tenant_canonical ',
+          },
+          resource: { type: ' project ', id: ' project_1 ' },
+        }),
+      ).resolves.toEqual([
+        expect.objectContaining({ roleId: role.id, permission: 'reports.read' }),
+      ]);
+
+      await storage.grantPermission({ roleId: ` ${role.id} `, permission: ' reports.export ' });
+      expect((await storage.listRolePermissions({ roleId: ` ${role.id} ` })).sort()).toEqual([
+        'reports.export',
+        'reports.read',
+      ]);
+      await storage.revokePermission({ roleId: ` ${role.id} `, permission: ' reports.export ' });
+      const updatedRole = await storage.upsertRole({
+        roleId: ` ${role.id} `,
+        key: ' canonical_editor ',
+      });
+      expect(updatedRole).toMatchObject({ id: role.id, key: 'canonical_editor' });
+      await expect(
+        storage.findRole({ tenantId: 'tenant_canonical', key: ' canonical_editor ' }),
+      ).resolves.toMatchObject({ id: role.id });
+      await storage.revokeRole({ bindingId: ` ${binding.id} ` });
+      await expect(
+        storage.listEffectivePermissions({
+          tenantId: 'tenant_canonical',
+          subject: { type: 'service_account', id: 'worker_1' },
+          resource: { type: 'project', id: 'project_1' },
+        }),
+      ).resolves.toEqual([]);
+
+      await storage.deleteRole({ roleId: ` ${role.id} ` });
+      await expect(storage.listRoles({ tenantId: ' tenant_canonical ' })).resolves.toEqual([]);
+    });
+
+    it('preserves API-key subject ids as exact opaque values', async () => {
+      const role = await createRole('api_key_reader', ['api.read']);
+      const exactSubject = { type: 'api_key' as const, id: ' Key_\u212B ', tenantId };
+
+      await storage.assignRole({ tenantId, subject: exactSubject, roleId: role.id });
+
+      await expect(
+        storage.listEffectivePermissions({ tenantId, subject: exactSubject }),
+      ).resolves.toEqual([expect.objectContaining({ permission: 'api.read' })]);
+      await expect(
+        storage.listEffectivePermissions({
+          tenantId,
+          subject: { ...exactSubject, id: exactSubject.id.trim() },
+        }),
+      ).resolves.toEqual([]);
+    });
+
     it('returns effective roles from unscoped and matching scoped bindings', async () => {
       const unscopedRole = await createRole('unscoped_role', []);
       const scopedRole = await createRole('scoped_role', []);

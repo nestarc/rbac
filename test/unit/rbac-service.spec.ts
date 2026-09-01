@@ -474,6 +474,216 @@ describe('RbacService', () => {
     );
   });
 
+  it('uses canonical identifiers for create, assign, can, audit, and change events', async () => {
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const log = vi.fn<(event: RbacAuditEvent) => void>();
+    const canonicalService = new RbacService({
+      storage: new InMemoryRbacStorage(),
+      now: () => now,
+      auditLogger: { log },
+      changePublisher: { publish },
+    });
+    const role = await canonicalService.createRole({
+      tenantId: ' tenant_canonical ',
+      key: ' report_reader ',
+      permissions: [' reports.read '],
+    });
+    const binding = await canonicalService.assignRole({
+      tenantId: ' tenant_canonical ',
+      subject: {
+        type: ' service_account ',
+        id: ' worker_1 ',
+        tenantId: ' tenant_canonical ',
+      },
+      roleKey: ' report_reader ',
+      resource: { type: ' project ', id: ' project_1 ' },
+    });
+    const decision = await canonicalService.can({
+      tenantId: ' tenant_canonical ',
+      subject: {
+        type: ' service_account ',
+        id: ' worker_1 ',
+        tenantId: ' tenant_canonical ',
+      },
+      permission: ' reports.read ',
+      resource: { type: ' project ', id: ' project_1 ' },
+      now,
+    });
+
+    expect(role).toMatchObject({
+      tenantId: 'tenant_canonical',
+      key: 'report_reader',
+      permissions: ['reports.read'],
+    });
+    expect(binding).toMatchObject({
+      tenantId: 'tenant_canonical',
+      subjectType: 'service_account',
+      subjectId: 'worker_1',
+      resourceType: 'project',
+      resourceId: 'project_1',
+    });
+    expect(decision).toMatchObject({
+      allowed: true,
+      tenantId: 'tenant_canonical',
+      subject: {
+        type: 'service_account',
+        id: 'worker_1',
+        tenantId: 'tenant_canonical',
+      },
+      permission: 'reports.read',
+      permissions: ['reports.read'],
+      resource: { type: 'project', id: 'project_1' },
+    });
+    const createdAudit = log.mock.calls[0]?.[0];
+    const assignedAudit = log.mock.calls[1]?.[0];
+    expect(createdAudit).toMatchObject({ tenantId: 'tenant_canonical' });
+    expect(createdAudit?.metadata).toMatchObject({ roleKey: 'report_reader' });
+    expect(assignedAudit).toMatchObject({
+      tenantId: 'tenant_canonical',
+      subjectType: 'service_account',
+      subjectId: 'worker_1',
+    });
+    expect(assignedAudit?.metadata).toMatchObject({
+      roleKey: 'report_reader',
+      resource: { type: 'project', id: 'project_1' },
+    });
+    expect(publish).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        tenantId: 'tenant_canonical',
+        roleKey: 'report_reader',
+        permissions: ['reports.read'],
+      }),
+    );
+    expect(publish).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        tenantId: 'tenant_canonical',
+        subject: { type: 'service_account', id: 'worker_1' },
+        roleKey: 'report_reader',
+        resource: { type: 'project', id: 'project_1' },
+      }),
+    );
+  });
+
+  it('keeps API-key subject ids exact instead of repairing them with trim', async () => {
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const exactService = new RbacService({
+      storage: new InMemoryRbacStorage(),
+      changePublisher: { publish },
+    });
+    const exactTenantId = ` ${tenantId} `;
+    const role = await exactService.createRole({
+      tenantId: exactTenantId,
+      key: 'api_key_reader',
+      permissions: ['api.read'],
+    });
+    const exactSubject = {
+      type: 'api_key' as const,
+      id: ' Key_\u212B ',
+      tenantId: exactTenantId,
+    };
+
+    await exactService.assignRole({
+      tenantId: exactTenantId,
+      subject: exactSubject,
+      roleId: role.id,
+    });
+
+    expect(publish).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'role.assigned',
+        tenantId,
+        subject: { type: 'api_key', id: exactSubject.id },
+      }),
+    );
+
+    await expect(
+      exactService.can({ tenantId: exactTenantId, subject: exactSubject, permission: 'api.read' }),
+    ).resolves.toMatchObject({
+      allowed: true,
+      tenantId,
+      subject: exactSubject,
+    });
+    await expect(
+      exactService.can({
+        tenantId: exactTenantId,
+        subject: { ...exactSubject, id: exactSubject.id.trim() },
+        permission: 'api.read',
+      }),
+    ).resolves.toMatchObject({ allowed: false });
+  });
+
+  it('canonicalizes update, permission, revoke, list, and delete identifiers', async () => {
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const writeService = new RbacService({
+      storage: new InMemoryRbacStorage(),
+      changePublisher: { publish },
+    });
+    const role = await writeService.createRole({
+      tenantId,
+      key: 'writer',
+      permissions: [],
+    });
+    const updated = await writeService.updateRole({
+      roleId: ` ${role.id} `,
+      key: ' canonical_writer ',
+    });
+    await writeService.grantPermission({
+      roleId: ` ${role.id} `,
+      permission: ' reports.write ',
+    });
+    const binding = await writeService.assignRole({
+      tenantId,
+      subject: user('writer_1', tenantId),
+      roleId: ` ${role.id} `,
+    });
+
+    expect(updated).toMatchObject({ id: role.id, key: 'canonical_writer' });
+    await expect(writeService.listPermissions({ roleId: ` ${role.id} ` })).resolves.toEqual([
+      'reports.write',
+    ]);
+    await expect(writeService.listRoles({ tenantId: ` ${tenantId} ` })).resolves.toEqual([
+      expect.objectContaining({ id: role.id, key: 'canonical_writer' }),
+    ]);
+    await expect(
+      writeService.listBindings({
+        tenantId: ` ${tenantId} `,
+        subject: { type: ' user ', id: ' writer_1 ', tenantId: ` ${tenantId} ` },
+      }),
+    ).resolves.toEqual([expect.objectContaining({ id: binding.id, roleId: role.id })]);
+
+    await writeService.revokePermission({
+      roleId: ` ${role.id} `,
+      permission: ' reports.write ',
+    });
+    await writeService.revokeRole({ bindingId: ` ${binding.id} ` });
+    await writeService.deleteRole({ roleId: ` ${role.id} ` });
+
+    expect(publish.mock.calls.map(([event]) => event)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'role.updated',
+          roleId: role.id,
+          roleKey: 'canonical_writer',
+        }),
+        expect.objectContaining({
+          type: 'permission.granted',
+          roleId: role.id,
+          permissions: ['reports.write'],
+        }),
+        expect.objectContaining({
+          type: 'permission.revoked',
+          roleId: role.id,
+          permissions: ['reports.write'],
+        }),
+        expect.objectContaining({ type: 'role.revoked', bindingId: binding.id }),
+        expect.objectContaining({ type: 'role.deleted', roleId: role.id }),
+      ]),
+    );
+  });
+
   it('does not publish change events when storage writes fail', async () => {
     const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
     const failingStorage = {
@@ -1177,9 +1387,7 @@ describe('RbacService', () => {
       const decision = await customService.can({
         subject: user('custom_storage_user', tenant ?? undefined),
         tenantId: tenant,
-        ...(kind === 'role'
-          ? { roleKey: 'report_reader' }
-          : { permission: 'reports.read' }),
+        ...(kind === 'role' ? { roleKey: 'report_reader' } : { permission: 'reports.read' }),
         resource: project,
         now,
       });
@@ -1314,9 +1522,7 @@ describe('RbacService', () => {
         const decision = await customService.can({
           subject: user('custom_storage_user', tenantId),
           tenantId,
-          ...(kind === 'role'
-            ? { roleKey: 'report_reader' }
-            : { permission: 'reports.read' }),
+          ...(kind === 'role' ? { roleKey: 'report_reader' } : { permission: 'reports.read' }),
           now,
         });
 
@@ -1369,9 +1575,7 @@ describe('RbacService', () => {
       const decision = await customService.can({
         subject: user('custom_storage_user', tenantId),
         tenantId,
-        ...(kind === 'role'
-          ? { roleKey: 'report_reader' }
-          : { permission: 'reports.read' }),
+        ...(kind === 'role' ? { roleKey: 'report_reader' } : { permission: 'reports.read' }),
         now,
       });
 
@@ -1380,10 +1584,7 @@ describe('RbacService', () => {
 
     it('keeps malformed effective permissions fail closed', async () => {
       const { storage: customStorage } = effectiveResultStorage({
-        permissions: [
-          effectivePermission,
-          { ...effectivePermission, permission: 'reports..read' },
-        ],
+        permissions: [effectivePermission, { ...effectivePermission, permission: 'reports..read' }],
       });
       const customService = new RbacService({ storage: customStorage });
 
@@ -1408,6 +1609,34 @@ describe('RbacService', () => {
           now,
         }),
       ).rejects.toBeInstanceOf(RbacStorageError);
+    });
+
+    it.each([
+      { roleKey: ' report_reader ' },
+      { roleId: ' role_1 ' },
+      { bindingId: ' binding_1 ' },
+      { tenantId: ` ${tenantId} ` },
+      { resourceType: ' project ', resourceId: project.id },
+      { resourceType: project.type, resourceId: ` ${project.id} ` },
+    ])('denies non-canonical existing effective records: %o', async (override) => {
+      const { decision } = await evaluate('permission', {
+        ...effectivePermission,
+        ...override,
+      });
+
+      expect(decision).toMatchObject({
+        allowed: false,
+        reason: 'denied_no_matching_permission',
+      });
+    });
+
+    it('fails closed on non-canonical stored permissions', async () => {
+      const { decision } = await evaluate('permission', {
+        ...effectivePermission,
+        permission: ' reports.read ',
+      });
+
+      expect(decision).toMatchObject({ allowed: false, reason: 'denied_storage_error' });
     });
   });
 

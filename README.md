@@ -184,6 +184,25 @@ await rbac.can({
 });
 ```
 
+## Identifier Canonicalization
+
+`RbacService` and both built-in storage adapters trim leading and trailing
+whitespace from tenant IDs, non-API-key subject types and IDs, role IDs and keys,
+binding IDs, resource types and IDs, and permissions. Whitespace-only identifiers
+are rejected. The canonical value is used consistently for writes, lookups,
+authorization decisions, audit events, and policy-change events.
+
+API-key subject IDs remain exact opaque values, as do API-key tenant values on the
+resolved subject. They are never repaired by trimming or coercion, so `" key_1 "`
+and `"key_1"` identify different API keys. RBAC performs no case folding or Unicode
+normalization for any identifier.
+
+Existing Prisma rows are not rewritten automatically. Before upgrading a database
+that may contain identifiers with outer whitespace, inventory the affected role,
+binding, resource, tenant, and permission columns; resolve any collisions that
+trimming would create; then migrate them to canonical values. Non-canonical
+effective rows fail closed during authorization rather than being silently aliased.
+
 ## Resource-Scoped Roles
 
 Resource-scoped bindings let one subject hold a role only for a specific object, such

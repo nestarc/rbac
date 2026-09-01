@@ -41,6 +41,13 @@ import {
   normalizePermissions,
 } from './utils';
 import {
+  canonicalizeIdentifier,
+  canonicalizeResource,
+  canonicalizeSubject,
+  canonicalizeTenantId,
+  isCanonicalIdentifier,
+} from './utils/canonicalization';
+import {
   assertCanInput,
   assertFiniteDate,
   isRbacResourceRef,
@@ -83,18 +90,19 @@ export class RbacService {
 
   async can(input: RbacCanInput): Promise<RbacDecision> {
     this.validateCanInput(input);
-    const subject = isRbacSubject(input.subject) ? input.subject : undefined;
-    const tenant = this.resolveTenant(input, subject);
+    const canonicalInput = this.canonicalizeCanInput(input);
+    const subject = isRbacSubject(canonicalInput.subject) ? canonicalInput.subject : undefined;
+    const tenant = this.resolveTenant(canonicalInput, subject);
 
     if (!subject) {
-      return this.decision(input, 'denied_subject_missing', {
+      return this.decision(canonicalInput, 'denied_subject_missing', {
         allowed: false,
         tenantId: tenant.tenantId,
       });
     }
 
     if (tenant.conflict) {
-      return this.decision(input, 'denied_tenant_conflict', {
+      return this.decision(canonicalInput, 'denied_tenant_conflict', {
         allowed: false,
         subject,
         tenantId: tenant.tenantId,
@@ -102,18 +110,18 @@ export class RbacService {
     }
 
     if (tenant.missing) {
-      return this.decision(input, 'denied_tenant_missing', {
+      return this.decision(canonicalInput, 'denied_tenant_missing', {
         allowed: false,
         subject,
         tenantId: tenant.tenantId,
       });
     }
 
-    if (this.isRoleCheck(input)) {
-      return this.canRole(input, subject, tenant.tenantId);
+    if (this.isRoleCheck(canonicalInput)) {
+      return this.canRole(canonicalInput, subject, tenant.tenantId);
     }
 
-    return this.canPermission(input, subject, tenant.tenantId);
+    return this.canPermission(canonicalInput, subject, tenant.tenantId);
   }
 
   async assertCan(input: RbacCanInput): Promise<void> {
@@ -126,7 +134,13 @@ export class RbacService {
 
   async createRole(input: CreateRoleInput): Promise<RbacRole> {
     this.validateCreateRoleInput(input);
-    const role = await this.options.storage.upsertRole(input);
+    const canonicalInput: CreateRoleInput = {
+      ...input,
+      tenantId: canonicalizeTenantId(input.tenantId),
+      key: canonicalizeIdentifier(input.key, 'role key'),
+      permissions: normalizePermissions(input.permissions),
+    };
+    const role = await this.options.storage.upsertRole(canonicalInput);
     await this.logAudit({
       type: 'rbac.role.created',
       tenantId: role.tenantId,
@@ -145,7 +159,16 @@ export class RbacService {
 
   async updateRole(input: UpdateRoleInput): Promise<RbacRole> {
     this.validateUpdateRoleInput(input);
-    const role = await this.options.storage.upsertRole(input);
+    const canonicalInput: UpdateRoleInput = {
+      ...input,
+      roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
+      ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
+      ...(input.key !== undefined ? { key: canonicalizeIdentifier(input.key, 'role key') } : {}),
+      ...(input.permissions !== undefined
+        ? { permissions: normalizePermissions(input.permissions) }
+        : {}),
+    };
+    const role = await this.options.storage.upsertRole(canonicalInput);
     await this.logAudit({
       type: 'rbac.role.updated',
       tenantId: role.tenantId,
@@ -163,59 +186,60 @@ export class RbacService {
   }
 
   async deleteRole(input: DeleteRoleInput): Promise<void> {
-    assertNonEmptyString(input.roleId, 'roleId');
-    await this.options.storage.deleteRole(input);
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+    await this.options.storage.deleteRole({ roleId });
     await this.logAudit({
       type: 'rbac.role.deleted',
-      metadata: { roleId: input.roleId },
+      metadata: { roleId },
     });
     await this.publishChange({
       type: 'role.deleted',
-      roleId: input.roleId,
+      roleId,
     });
   }
 
   async grantPermission(input: GrantPermissionInput): Promise<void> {
-    assertNonEmptyString(input.roleId, 'roleId');
-    normalizePermission(input.permission);
-    await this.options.storage.grantPermission(input);
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+    const permission = normalizePermission(input.permission);
+    await this.options.storage.grantPermission({ roleId, permission });
     await this.logAudit({
       type: 'rbac.permission.granted',
-      metadata: { roleId: input.roleId, permission: input.permission },
+      metadata: { roleId, permission },
     });
     await this.publishChange({
       type: 'permission.granted',
-      roleId: input.roleId,
-      permissions: [input.permission],
+      roleId,
+      permissions: [permission],
     });
   }
 
   async revokePermission(input: RevokePermissionInput): Promise<void> {
-    assertNonEmptyString(input.roleId, 'roleId');
-    normalizePermission(input.permission);
-    await this.options.storage.revokePermission(input);
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+    const permission = normalizePermission(input.permission);
+    await this.options.storage.revokePermission({ roleId, permission });
     await this.logAudit({
       type: 'rbac.permission.revoked',
-      metadata: { roleId: input.roleId, permission: input.permission },
+      metadata: { roleId, permission },
     });
     await this.publishChange({
       type: 'permission.revoked',
-      roleId: input.roleId,
-      permissions: [input.permission],
+      roleId,
+      permissions: [permission],
     });
   }
 
   async assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
     this.validateAssignRoleInput(input);
-    const { roleId, roleKey, role } = await this.resolveAssignRoleIdentifier(input);
-    this.validateAssignRoleBoundary(input, role);
+    const canonicalInput = this.canonicalizeAssignRoleInput(input);
+    const { roleId, roleKey, role } = await this.resolveAssignRoleIdentifier(canonicalInput);
+    this.validateAssignRoleBoundary(canonicalInput, role);
     const storageInput: AssignRoleStorageInput = {
-      tenantId: input.tenantId,
-      subject: input.subject,
+      tenantId: canonicalInput.tenantId,
+      subject: canonicalInput.subject,
       roleId,
-      resource: input.resource,
-      expiresAt: input.expiresAt,
-      metadata: input.metadata,
+      resource: canonicalInput.resource,
+      expiresAt: canonicalInput.expiresAt,
+      metadata: canonicalInput.metadata,
     };
     const binding = await this.options.storage.assignRole(storageInput);
     await this.logAudit({
@@ -227,7 +251,9 @@ export class RbacService {
         bindingId: binding.id,
         roleId: binding.roleId,
         ...(roleKey !== undefined ? { roleKey } : {}),
-        ...(input.resource !== undefined ? { resource: auditResource(input.resource) } : {}),
+        ...(canonicalInput.resource !== undefined
+          ? { resource: auditResource(canonicalInput.resource) }
+          : {}),
       },
     });
     await this.publishChange({
@@ -236,7 +262,9 @@ export class RbacService {
       subject: { type: binding.subjectType, id: binding.subjectId },
       roleId: binding.roleId,
       ...(roleKey !== undefined ? { roleKey } : {}),
-      ...(input.resource !== undefined ? { resource: auditResource(input.resource) } : {}),
+      ...(canonicalInput.resource !== undefined
+        ? { resource: auditResource(canonicalInput.resource) }
+        : {}),
       bindingId: binding.id,
     });
 
@@ -244,31 +272,40 @@ export class RbacService {
   }
 
   async revokeRole(input: RevokeRoleInput): Promise<void> {
-    assertNonEmptyString(input.bindingId, 'bindingId');
+    const bindingId = canonicalizeIdentifier(input.bindingId, 'bindingId');
     if (input.revokedAt !== undefined) {
       assertFiniteDate(input.revokedAt, 'revokeRole', 'revokedAt');
     }
-    await this.options.storage.revokeRole(input);
+    await this.options.storage.revokeRole({ ...input, bindingId });
     await this.logAudit({
       type: 'rbac.role.revoked',
-      metadata: { bindingId: input.bindingId },
+      metadata: { bindingId },
     });
     await this.publishChange({
       type: 'role.revoked',
-      bindingId: input.bindingId,
+      bindingId,
     });
   }
 
   listRoles(input: ListRolesInput): Promise<RbacRole[]> {
-    return this.options.storage.listRoles(input);
+    return this.options.storage.listRoles({
+      ...input,
+      ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
+    });
   }
 
   listPermissions(input: ListPermissionsInput): Promise<string[]> {
-    return this.options.storage.listRolePermissions(input);
+    return this.options.storage.listRolePermissions({
+      roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
+    });
   }
 
   listBindings(input: ListBindingsInput): Promise<RbacRoleBinding[]> {
-    return this.options.storage.listBindings(input);
+    return this.options.storage.listBindings({
+      ...input,
+      subject: canonicalizeSubject(input.subject),
+      ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
+    });
   }
 
   private async canRole(
@@ -477,6 +514,54 @@ export class RbacService {
 
   private validateCanInput(input: RbacCanInput): void {
     assertCanInput(input);
+  }
+
+  private canonicalizeCanInput(input: RbacCanInput): RbacCanInput {
+    const base = {
+      ...input,
+      ...(input.subject !== undefined ? { subject: canonicalizeSubject(input.subject) } : {}),
+      ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
+      ...(input.resource !== undefined ? { resource: canonicalizeResource(input.resource) } : {}),
+    };
+
+    if ('roleKey' in input && input.roleKey !== undefined) {
+      return {
+        ...base,
+        roleKey: canonicalizeIdentifier(input.roleKey, 'roleKey'),
+      } as RbacCanInput;
+    }
+
+    return {
+      ...base,
+      ...('permission' in input && input.permission !== undefined
+        ? { permission: normalizePermission(input.permission) }
+        : {}),
+      ...('permissions' in input && input.permissions !== undefined
+        ? { permissions: normalizePermissions(input.permissions) }
+        : {}),
+    } as RbacCanInput;
+  }
+
+  private canonicalizeAssignRoleInput(input: AssignRoleInput): AssignRoleInput {
+    const base = {
+      tenantId: canonicalizeTenantId(input.tenantId),
+      subject: canonicalizeSubject(input.subject),
+      ...(input.resource !== undefined ? { resource: canonicalizeResource(input.resource) } : {}),
+      ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
+      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
+    };
+
+    if ('roleId' in input && input.roleId !== undefined) {
+      return {
+        ...base,
+        roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
+      };
+    }
+
+    return {
+      ...base,
+      roleKey: canonicalizeIdentifier(input.roleKey, 'roleKey'),
+    };
   }
 
   private sanitizeDecision(decision: RbacDecision): RbacDecision {
@@ -830,12 +915,7 @@ export class RbacService {
       resource: input.resource,
       now,
     });
-    const validTenantRoles = this.validEffectiveRecords(
-      tenantRoles,
-      tenantId,
-      input.resource,
-      now,
-    );
+    const validTenantRoles = this.validEffectiveRecords(tenantRoles, tenantId, input.resource, now);
 
     if (tenantId === null || this.options.tenant?.allowGlobalRolesInTenant !== true) {
       return validTenantRoles;
@@ -896,9 +976,7 @@ export class RbacService {
     resource: RbacResourceRef | undefined,
     now: Date,
   ): T[] {
-    return records.filter((record) =>
-      this.isValidEffectiveRecord(record, tenantId, resource, now),
-    );
+    return records.filter((record) => this.isValidEffectiveRecord(record, tenantId, resource, now));
   }
 
   private isValidEffectiveRecord(
@@ -910,7 +988,37 @@ export class RbacService {
     if (record === null || typeof record !== 'object') return false;
 
     const effectiveRecord = record as Partial<RbacEffectiveRole>;
+    if (
+      !isCanonicalIdentifier(effectiveRecord.roleKey) ||
+      !isCanonicalIdentifier(effectiveRecord.roleId) ||
+      !isCanonicalIdentifier(effectiveRecord.bindingId)
+    ) {
+      return false;
+    }
     if ((effectiveRecord.tenantId ?? null) !== tenantId) return false;
+    if (
+      effectiveRecord.tenantId !== null &&
+      effectiveRecord.tenantId !== undefined &&
+      !isCanonicalIdentifier(effectiveRecord.tenantId)
+    ) {
+      return false;
+    }
+
+    if ('permission' in effectiveRecord) {
+      const permission = (effectiveRecord as Partial<RbacEffectivePermission>).permission;
+      if (typeof permission !== 'string') {
+        throw new Error('Stored permission must be a canonical string');
+      }
+      let normalizedPermission: string;
+      try {
+        normalizedPermission = normalizePermission(permission);
+      } catch {
+        throw new Error('Stored permission must be a canonical string');
+      }
+      if (normalizedPermission !== permission) {
+        throw new Error('Stored permission must be a canonical string');
+      }
+    }
 
     const expiresAt = effectiveRecord.expiresAt;
     if (expiresAt !== null && expiresAt !== undefined) {
@@ -925,7 +1033,7 @@ export class RbacService {
     if ((resourceType === null) !== (resourceId === null)) return false;
     if (
       resourceType !== null &&
-      (!isNonEmptyString(resourceType) || !isNonEmptyString(resourceId))
+      (!isCanonicalIdentifier(resourceType) || !isCanonicalIdentifier(resourceId))
     ) {
       return false;
     }
