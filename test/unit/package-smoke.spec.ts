@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
@@ -86,5 +87,113 @@ describe('package exports', () => {
     expect(ciWorkflow).toContain('prisma-version: 5.22.0');
     expect(ciWorkflow).toContain('prisma-version: 6.19.3');
     expect(ciWorkflow).toContain('prisma-version: 7.10.0');
+  });
+
+  it('blocks release publish on compatibility parity and main/tag ancestry', () => {
+    const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
+    const releaseWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/release.yml', import.meta.url),
+    );
+    const releaseTargetRunnerPath = fileURLToPath(
+      new URL('../../scripts/verify-release-target.cjs', import.meta.url),
+    );
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const releaseTargetRunner = readFileSync(releaseTargetRunnerPath, 'utf8');
+
+    expect(packageJson.scripts['verify:release-target']).toContain(
+      'scripts/verify-release-target.cjs',
+    );
+    expect(releaseTargetRunner).toContain("'merge-base', '--is-ancestor'");
+    expect(releaseTargetRunner).toContain('refs/remotes/origin/main');
+    expect(releaseWorkflow).toContain('fetch-depth: 0');
+    expect(releaseWorkflow).toContain('RELEASE_TARGET_COMMITISH');
+    expect(releaseWorkflow).toMatch(/node-version:\n\s+- 22\n\s+- 24/);
+    expect(releaseWorkflow).toContain('node-version: 24');
+    expect(releaseWorkflow).toContain('Nest 10.4.22');
+    expect(releaseWorkflow).toContain('prisma-version: 5.22.0');
+    expect(releaseWorkflow).toContain('prisma-version: 6.19.3');
+    expect(releaseWorkflow).toContain('prisma-version: 7.10.0');
+    expect(releaseWorkflow).toMatch(
+      /publish:\n[\s\S]*?needs:\n\s+- release-target\n\s+- verify\n\s+- modern-consumer\n\s+- nest10-consumer\n\s+- prisma-integration/,
+    );
+  });
+
+  it('verifies the release checkout and ancestry graph', () => {
+    const releaseTargetModule = createRequire(import.meta.url)(
+      '../../scripts/verify-release-target.cjs',
+    ) as {
+      verifyReleaseTarget(input: {
+        tagName: string;
+        targetCommitish: string;
+        packageVersion: string;
+        git: (args: string[]) => string;
+      }): { tagCommit: string; targetCommit: string; mainCommit: string };
+    };
+    const verifyReleaseTarget = (
+      input: Parameters<typeof releaseTargetModule.verifyReleaseTarget>[0],
+    ) => releaseTargetModule.verifyReleaseTarget(input);
+    const commits = new Map([
+      ['refs/tags/v0.2.1', 'tag-commit'],
+      ['HEAD', 'tag-commit'],
+      ['refs/remotes/origin/main', 'main-commit'],
+    ]);
+    const ancestry = new Set(['tag-commit:main-commit', 'main-commit:main-commit']);
+    const git = (args: string[]) => {
+      if (args[0] === 'rev-parse') {
+        const ref = args.at(-1)?.replace(/\^\{commit\}$/, '');
+        const commit = ref ? commits.get(ref) : undefined;
+        if (commit) return commit;
+      }
+      if (args[0] === 'merge-base' && ancestry.has(`${args[2]}:${args[3]}`)) return '';
+      throw new Error(`Rejected git call: ${args.join(' ')}`);
+    };
+
+    expect(
+      verifyReleaseTarget({
+        tagName: 'v0.2.1',
+        targetCommitish: 'main',
+        packageVersion: '0.2.1',
+        git,
+      }),
+    ).toMatchObject({
+      tagCommit: 'tag-commit',
+      targetCommit: 'main-commit',
+      mainCommit: 'main-commit',
+    });
+    expect(
+      verifyReleaseTarget({
+        tagName: 'v0.2.1',
+        targetCommitish: 'refs/heads/main',
+        packageVersion: '0.2.1',
+        git,
+      }),
+    ).toMatchObject({ targetCommit: 'main-commit' });
+    expect(() =>
+      verifyReleaseTarget({
+        tagName: 'v0.2.2',
+        targetCommitish: 'main',
+        packageVersion: '0.2.1',
+        git,
+      }),
+    ).toThrow('does not match package.json version');
+    expect(() =>
+      verifyReleaseTarget({
+        tagName: '../v0.2.1',
+        targetCommitish: 'main',
+        packageVersion: '0.2.1',
+        git,
+      }),
+    ).toThrow('is not a safe Git ref or commit');
+    expect(() =>
+      verifyReleaseTarget({
+        tagName: 'v0.2.1',
+        targetCommitish: 'main',
+        packageVersion: '0.2.1',
+        git: (args) => (args.at(-1) === 'HEAD^{commit}' ? 'other-commit' : git(args)),
+      }),
+    ).toThrow('does not match tag commit');
   });
 });

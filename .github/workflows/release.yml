@@ -14,10 +14,145 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish to npm
+  release-target:
+    name: Verify release target
     runs-on: ubuntu-latest
-    environment: npm
+
+    steps:
+      - name: Checkout release tag and history
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Verify tag, package version, checkout, target, and main ancestry
+        run: npm run verify:release-target
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+
+  verify:
+    name: Verify (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    needs: release-target
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22
+          - 24
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify exact modern toolchain
+        run: npm ls --depth=0 @nestjs/common @nestjs/core @prisma/client prisma @prisma/adapter-pg
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: E2E
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
+
+      - name: Coverage
+        run: npm run test:coverage
+
+  modern-consumer:
+    name: Strict consumer (Node ${{ matrix.node-version }} / Nest 11.2.1 / Prisma 7.10.0)
+    runs-on: ubuntu-latest
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22
+          - 24
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify packed consumer and API key source conflict
+        run: npm run test:consumer:modern
+
+  nest10-consumer:
+    name: Strict consumer (Node 24 / Nest 10.4.22)
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Nest 10.4.22 packed consumer
+        run: npm run test:consumer:nest10
+
+  prisma-integration:
+    name: Prisma ${{ matrix.prisma-version }} Integration (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    needs: release-target
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - prisma-version: 5.22.0
+            client: legacy
+          - prisma-version: 6.19.3
+            client: legacy
+          - prisma-version: 7.10.0
+            client: modern
     services:
       postgres:
         image: postgres:16
@@ -46,48 +181,78 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate modern Prisma fixture client
+        run: npm run prisma:generate
+
+      - name: Align temporary legacy Prisma manifest
+        if: matrix.client == 'legacy'
+        run: >-
+          npm pkg set
+          "devDependencies.@prisma/client=${{ matrix.prisma-version }}"
+          "devDependencies.prisma=${{ matrix.prisma-version }}"
+
+      - name: Install exact legacy Prisma runtime
+        if: matrix.client == 'legacy'
+        run: >-
+          npm install --no-save --ignore-scripts --strict-peer-deps --no-audit --no-fund
+          @prisma/client@${{ matrix.prisma-version }} prisma@${{ matrix.prisma-version }}
+
+      - name: Verify exact modern NestJS and Prisma versions
+        if: matrix.client == 'modern'
+        run: npm ls --depth=0 @nestjs/common @nestjs/core @prisma/client prisma @prisma/adapter-pg
+
+      - name: Verify exact legacy NestJS and Prisma versions
+        if: matrix.client == 'legacy'
+        run: npm ls --depth=0 @nestjs/common @nestjs/core @prisma/client prisma
+
+      - name: Generate legacy Prisma client
+        if: matrix.client == 'legacy'
+        run: npm run prisma:generate:legacy
+
+      - name: Apply RBAC migration with modern Prisma
+        if: matrix.client == 'modern'
+        run: npm run prisma:migrate:test
+
+      - name: Apply RBAC migration with legacy Prisma
+        if: matrix.client == 'legacy'
+        run: npm run prisma:migrate:test:legacy
+
+      - name: Run Prisma contract tests
+        run: npm run test:prisma
+        env:
+          RBAC_PRISMA_CLIENT: ${{ matrix.client }}
+
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    environment: npm
+    needs:
+      - release-target
+      - verify
+      - modern-consumer
+      - nest10-consumer
+      - prisma-integration
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Generate Prisma client
-        run: npm run prisma:generate
-
-      - name: Apply RBAC migration
-        run: npm run prisma:migrate:test
-
-      - name: Run Prisma 7 PostgreSQL contract tests
-        run: npm run test:prisma
-
-      - name: Verify release tag matches package version
-        run: |
-          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-          TAG_NAME="${GITHUB_REF_NAME}"
-          TAG_VERSION="${TAG_NAME#v}"
-          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "Release tag $TAG_NAME does not match package.json version $PACKAGE_VERSION." >&2
-            exit 1
-          fi
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
-
-      - name: E2E
-        run: npm run test:e2e
-
-      - name: Build
-        run: npm run build
-
-      - name: Verify Nest 11.2.1 / Prisma 7.10.0 / API Keys 0.3.2 packed consumer
-        run: npm run test:consumer:modern
 
       - name: Verify package contents
         run: npm pack --dry-run
