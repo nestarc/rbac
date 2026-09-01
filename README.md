@@ -39,6 +39,10 @@ The adapter is required by Prisma 7 direct database clients. Prisma 5 and 6
 consumers can keep their existing engine-based `PrismaClient` setup.
 
 For focused setup notes, see [docs/installation.md](docs/installation.md).
+The tested runtime, framework, database-client, and optional integration matrix is
+documented in [docs/compatibility.md](docs/compatibility.md). Peer ranges describe
+install compatibility; the exact combinations listed there are the combinations
+continuously or explicitly verified by this repository.
 
 ## Quickstart
 

@@ -15,7 +15,10 @@ npm install -D prisma
 
 `@prisma/adapter-pg` and `pg` are required for a Prisma 7 direct PostgreSQL
 connection. Prisma 5/6 applications can omit them and keep their existing
-`PrismaClient` constructor. RBAC 0.2.1 accepts Prisma 5, 6, or 7 clients.
+`PrismaClient` constructor. RBAC 0.2.x metadata accepts Prisma 5, 6, or 7;
+Prisma 6.19.3 and 7.10.0 have real-database evidence, while the retained Prisma 5
+lower bound is pending its dedicated compatibility gate. See
+[Compatibility and support](compatibility.md) before selecting a version.
 
 The root package exports dependency-free RBAC primitives:
 

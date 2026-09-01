@@ -30,17 +30,33 @@ describe('package exports', () => {
     expect(packageJson.exports).toHaveProperty('./integrations/audit-log');
   });
 
-  it('declares the tested NestJS 11 and Prisma 7 peer contract', () => {
+  it('declares the compatibility metadata without restricting 0.2.x Node installs', () => {
     const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      engines?: Record<string, string>;
+      devDependencies: Record<string, string>;
       peerDependencies: Record<string, string>;
+      peerDependenciesMeta: Record<string, { optional?: boolean }>;
       scripts: Record<string, string>;
     };
 
+    expect(packageJson.engines).toBeUndefined();
+    expect(packageJson.devDependencies['@types/node']).toBe('22.20.1');
     expect(packageJson.peerDependencies['@nestjs/common']).toBe('>=10 <12');
     expect(packageJson.peerDependencies['@nestjs/core']).toBe('>=10 <12');
     expect(packageJson.peerDependencies['@prisma/client']).toBe('>=5 <8');
     expect(packageJson.peerDependencies.prisma).toBe('>=5 <8');
+    expect(packageJson.peerDependencies['reflect-metadata']).toBe('>=0.1.13');
+    expect(packageJson.peerDependencies.rxjs).toBe('>=7');
+    for (const optionalPeer of [
+      '@prisma/client',
+      'prisma',
+      '@nestarc/tenancy',
+      '@nestarc/api-keys',
+      '@nestarc/audit-log',
+    ]) {
+      expect(packageJson.peerDependenciesMeta[optionalPeer]?.optional).toBe(true);
+    }
     expect(packageJson.scripts['test:consumer:modern']).toContain(
       'scripts/verify-modern-consumer.cjs',
     );

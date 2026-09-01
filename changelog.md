@@ -27,9 +27,15 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
   `RbacStorage.mutationResults` protocol. It reports committed, idempotent, and
   conflicting outcomes without changing the required 0.2.x custom storage method
   signatures.
+- Added a compatibility contract that distinguishes installable peer ranges from
+  exact Node, NestJS, Prisma, and Nestarc sibling combinations with verification
+  evidence. The strict modern packed consumer now runs on Node 22 and 24.
 
 ### Changed
 
+- Aligned the maintainer TypeScript environment with Node 22 by replacing the
+  accidental Node 25 type baseline with exact `@types/node` 22.20.1. Release
+  publishing remains on Node 24.
 - Guard authorization audit is now request-final for stacked class and handler
   requirements. A later denial no longer leaves an earlier allowed event; denied
   events identify the failing requirement index, and fully allowed stacked
