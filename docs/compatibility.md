@@ -21,17 +21,18 @@ they become maintained lines.
 | Axis | 0.2.x install metadata | Exact evidence | Decision |
 | --- | --- | --- | --- |
 | NestJS 11 | `@nestjs/common` and `@nestjs/core` `>=10 <12` | Nest 11.2.1 with `reflect-metadata` 0.2.2 and RxJS 7.8.2 in the Node 22/24 strict packed consumer; source/E2E on the pinned maintainer toolchain. | Supported and continuously gated. |
-| NestJS 10 | Same retained peer range | No current packed lower-bound lane. | Retain in 0.2.x and add an exact Nest 10.4.22 packed consumer in RBAC-M10. If it cannot pass without a compatibility bypass, narrowing belongs to the 0.3 migration. |
+| NestJS 10 | Same retained peer range | Nest 10.4.22 with `reflect-metadata` 0.2.2 and RxJS 7.8.2 in a Node 24 strict packed consumer; the fixture executes CJS, ESM, Nest DI, and declaration smokes. | Supported and continuously gated. |
 | Prisma 7 | Optional `@prisma/client` and `prisma` `>=5 <8` | Prisma 7.10.0 strict packed consumer and PostgreSQL 16 contract lane. | Supported and continuously gated. Prisma 7 applications also supply the database driver adapter required by their Prisma setup. |
 | Prisma 6 | Same retained optional peer range | Prisma 6.19.3 legacy-client PostgreSQL 16 contract lane. | Supported and continuously gated. |
-| Prisma 5 | Same retained optional peer range | No current real-database lower-bound lane. | Retain the advertised 0.2.x lower bound and verify exact Prisma 5.22.0 in RBAC-M10. A failed strict lane requires a 0.3 peer-range migration, not an unannounced patch restriction. |
+| Prisma 5 | Same retained optional peer range | Prisma 5.22.0 legacy-client PostgreSQL 16 contract lane. | Supported and continuously gated. |
 | `reflect-metadata` | `>=0.1.13` | 0.2.2 in the modern packed consumer. | Keep the 0.2.x range. A future upper bound or narrower range is a compatibility change and needs migration review. |
 | RxJS | `>=7` | 7.8.2 in the modern packed consumer. | Keep the 0.2.x range; no RxJS 8 support claim exists without a dedicated lane. |
 
 The exact lanes above are representative contracts, not a full Cartesian matrix.
-In particular, the Prisma 6 database lane currently uses the pinned Nest 11
-maintainer environment; it does not independently prove every Nest 10/11 and
-Node 22/24 pairing.
+In particular, the Prisma 5 and 6 database lanes currently use the pinned Nest 11
+maintainer environment, while the Nest 10 packed lane does not install Prisma.
+These lanes do not independently prove every Nest 10/11, Prisma 5/6/7, and Node
+22/24 pairing.
 
 ## Optional Nestarc peers and imports
 

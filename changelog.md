@@ -30,6 +30,8 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 - Added a compatibility contract that distinguishes installable peer ranges from
   exact Node, NestJS, Prisma, and Nestarc sibling combinations with verification
   evidence. The strict modern packed consumer now runs on Node 22 and 24.
+- Added strict lower-bound compatibility gates for an exact NestJS 10.4.22 packed
+  consumer and a Prisma 5.22.0 PostgreSQL 16 storage contract lane.
 
 ### Changed
 

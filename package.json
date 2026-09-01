@@ -100,6 +100,7 @@
     "test": "vitest run",
     "test:e2e": "vitest run test/e2e",
     "test:consumer:modern": "npm run build && node scripts/verify-modern-consumer.cjs",
+    "test:consumer:nest10": "npm run build && node scripts/verify-nest10-consumer.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage test/unit test/contract",
     "prisma:generate": "prisma generate --config=prisma.config.ts",

@@ -91,6 +91,27 @@ jobs:
       - name: Verify packed consumer and API key source conflict
         run: npm run test:consumer:modern
 
+  nest10-consumer:
+    name: Strict consumer (Node 24 / Nest 10.4.22)
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Nest 10.4.22 packed consumer
+        run: npm run test:consumer:nest10
+
   prisma-integration:
     name: Prisma ${{ matrix.prisma-version }} Integration (PostgreSQL 16)
     runs-on: ubuntu-latest
@@ -98,6 +119,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - prisma-version: 5.22.0
+            client: legacy
           - prisma-version: 6.19.3
             client: legacy
           - prisma-version: 7.10.0

@@ -61,4 +61,30 @@ describe('package exports', () => {
       'scripts/verify-modern-consumer.cjs',
     );
   });
+
+  it('declares exact lower-bound compatibility gates', () => {
+    const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
+    const ciWorkflowPath = fileURLToPath(new URL('../../.github/workflows/ci.yml', import.meta.url));
+    const nest10RunnerPath = fileURLToPath(
+      new URL('../../scripts/verify-nest10-consumer.cjs', import.meta.url),
+    );
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
+    const nest10Runner = readFileSync(nest10RunnerPath, 'utf8');
+
+    expect(packageJson.scripts['test:consumer:nest10']).toContain(
+      'scripts/verify-nest10-consumer.cjs',
+    );
+    expect(nest10Runner).toContain("'@nestjs/common': '10.4.22'");
+    expect(nest10Runner).toContain("'@nestjs/core': '10.4.22'");
+    expect(nest10Runner).toContain("'--strict-peer-deps'");
+    expect(nest10Runner).not.toContain("'--force'");
+    expect(nest10Runner).not.toContain("'--legacy-peer-deps'");
+    expect(ciWorkflow).toContain('Nest 10.4.22');
+    expect(ciWorkflow).toContain('prisma-version: 5.22.0');
+    expect(ciWorkflow).toContain('prisma-version: 6.19.3');
+    expect(ciWorkflow).toContain('prisma-version: 7.10.0');
+  });
 });
