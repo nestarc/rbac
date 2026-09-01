@@ -11,6 +11,7 @@ describe('createStrictRbacOptions', () => {
       tenant: {
         requiredByDefault: true,
         allowGlobalRolesInTenant: false,
+        resolverMode: 'authoritative',
       },
       storageErrors: 'deny',
       logAllowedDecisions: false,
@@ -32,6 +33,7 @@ describe('createStrictRbacOptions', () => {
         tenant: {
           requiredByDefault: false,
           allowGlobalRolesInTenant: true,
+          resolverMode: 'legacy-fallback',
         },
         storageErrors: 'throw',
         logAllowedDecisions: true,
@@ -47,6 +49,7 @@ describe('createStrictRbacOptions', () => {
       tenant: {
         requiredByDefault: false,
         allowGlobalRolesInTenant: true,
+        resolverMode: 'legacy-fallback',
       },
       storageErrors: 'throw',
       logAllowedDecisions: true,

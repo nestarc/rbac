@@ -86,6 +86,7 @@ export interface RbacEvaluationStep {
   code:
     | 'subject_missing'
     | 'tenant_missing'
+    | 'tenant_conflict'
     | 'resource_missing'
     | 'resource_mismatch'
     | 'roles_loaded'
@@ -103,6 +104,7 @@ export type RbacDecisionReason =
   | 'allowed_by_role_permission'
   | 'denied_subject_missing'
   | 'denied_tenant_missing'
+  | 'denied_tenant_conflict'
   | 'denied_resource_missing'
   | 'denied_no_matching_role'
   | 'denied_no_matching_permission'

@@ -15,7 +15,11 @@ import {
   RbacSubjectMissingError,
   RbacTenantMissingError,
 } from './errors';
-import { defaultHttpSubjectResolver, resolveHttpResource, resolveHttpTenant } from './resolvers';
+import { defaultHttpSubjectResolver, resolveHttpResource } from './resolvers';
+import {
+  resolveHttpTenantSources,
+  type RbacHttpTenantSource,
+} from './resolvers/default-http-tenant.resolver';
 import { RbacService } from './rbac.service';
 import type {
   RbacBuiltInResourceDeclaration,
@@ -76,9 +80,8 @@ const isClassResolverToken = (resource: unknown): resource is RbacResourceResolv
   isRecord(resource.prototype) &&
   typeof resource.prototype.resolve === 'function';
 
-const isStringOrSymbolResolverToken = (
-  resource: unknown,
-): resource is RbacResourceResolverToken => typeof resource === 'string' || typeof resource === 'symbol';
+const isStringOrSymbolResolverToken = (resource: unknown): resource is RbacResourceResolverToken =>
+  typeof resource === 'string' || typeof resource === 'symbol';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
@@ -196,17 +199,53 @@ export class RbacGuard implements CanActivate {
     return options.tenant ?? (this.options.tenant?.requiredByDefault ? 'required' : 'optional');
   }
 
-  private resolveTenant(
+  private async resolveTenant(
     context: ExecutionContext,
     requirementOptions: RbacRequirementOptions,
     subject: RbacSubject,
-  ): Promise<string | null | undefined> | string | null | undefined {
-    const defaultTenantId = resolveHttpTenant(context, requirementOptions, subject);
-    if (defaultTenantId !== undefined || this.options.tenantResolver === undefined) {
-      return defaultTenantId;
+  ): Promise<string | null | undefined> {
+    if (requirementOptions.tenant === 'none') return null;
+
+    const httpSources = resolveHttpTenantSources(context, requirementOptions, subject);
+    const resolver = this.options.tenantResolver;
+    const resolverMode = this.options.tenant?.resolverMode ?? 'authoritative';
+
+    if (resolverMode === 'legacy-fallback' && httpSources.length > 0) {
+      await this.ensureTenantSourcesAgree(httpSources, subject);
+      return httpSources[0]?.tenantId;
     }
 
-    return this.options.tenantResolver(context, requirementOptions, subject);
+    const trustedTenantId = await resolver?.(context, requirementOptions, subject);
+    const sources =
+      trustedTenantId === undefined
+        ? httpSources
+        : [{ source: 'configuredResolver' as const, tenantId: trustedTenantId }, ...httpSources];
+
+    await this.ensureTenantSourcesAgree(sources, subject);
+
+    return trustedTenantId !== undefined ? trustedTenantId : httpSources[0]?.tenantId;
+  }
+
+  private async ensureTenantSourcesAgree(
+    sources: Array<
+      | RbacHttpTenantSource
+      | {
+          source: 'configuredResolver';
+          tenantId: string | null;
+        }
+    >,
+    subject: RbacSubject,
+  ): Promise<void> {
+    const selected = sources[0]?.tenantId;
+    if (sources.every((source) => source.tenantId === selected)) return;
+
+    await this.logAudit({
+      type: 'rbac.permission.denied',
+      subjectType: subject.type,
+      subjectId: subject.id,
+      metadata: { reason: 'tenant_source_conflict' },
+    });
+    throw mapRbacErrorToHttpException(new RbacPermissionDeniedError());
   }
 
   private async resolveResource(
@@ -255,10 +294,9 @@ export class RbacGuard implements CanActivate {
     const resolverToken = isResolverTokenRef(resource) ? resource.resolverToken : resource;
 
     try {
-      const resolver = this.moduleRef.get<RbacResourceResolver | undefined>(
-        resolverToken,
-        { strict: false },
-      );
+      const resolver = this.moduleRef.get<RbacResourceResolver | undefined>(resolverToken, {
+        strict: false,
+      });
 
       if (resolver === undefined || typeof resolver.resolve !== 'function') {
         throw new RbacResourceMissingError({
@@ -273,10 +311,7 @@ export class RbacGuard implements CanActivate {
       }
 
       throw mapRbacErrorToHttpException(
-        new RbacResourceMissingError(
-          { resolverToken: String(resolverToken) },
-          { cause: error },
-        ),
+        new RbacResourceMissingError({ resolverToken: String(resolverToken) }, { cause: error }),
       );
     }
   }

@@ -78,11 +78,13 @@ class TestRbacController {
 describe('RbacGuard HTTP behavior', () => {
   let app: Awaited<ReturnType<TestingModule['createNestApplication']>>;
   let storage: InMemoryRbacStorage;
+  let trustedTenantId: string | undefined;
 
   const httpServer = (): App => app.getHttpServer() as App;
 
   beforeEach(async () => {
     storage = new InMemoryRbacStorage();
+    trustedTenantId = undefined;
 
     @Module({
       imports: [
@@ -90,6 +92,7 @@ describe('RbacGuard HTTP behavior', () => {
           storage,
           tenant: { requiredByDefault: true },
           subjectResolver,
+          tenantResolver: () => trustedTenantId,
           requireMetadata: true,
         }),
       ],
@@ -177,6 +180,17 @@ describe('RbacGuard HTTP behavior', () => {
 
     expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
     expect(response.body).not.toHaveProperty('details');
+  });
+
+  it('fails closed when the trusted tenant conflicts with the request identity', async () => {
+    trustedTenantId = tenantId;
+    const response = await request(httpServer())
+      .get('/reports')
+      .set('x-user-id', 'viewer_1')
+      .set('x-tenant-id', 'tenant_2')
+      .expect(403);
+
+    expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
   });
 
   it('allows project invitations only for the scoped project binding', async () => {

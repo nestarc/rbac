@@ -8,6 +8,11 @@ type HttpRequest = {
   headers?: Record<string, unknown>;
 };
 
+export interface RbacHttpTenantSource {
+  source: 'subject' | 'request.tenantId' | 'request.tenant.id' | 'header';
+  tenantId: string | null;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
@@ -38,27 +43,40 @@ export const resolveHttpTenant = (
   requirementOptions: RbacRequirementOptions,
   subject: RbacSubject,
 ): string | null | undefined => {
-  if (requirementOptions.tenant === 'none') {
-    return null;
-  }
+  if (requirementOptions.tenant === 'none') return null;
+
+  return resolveHttpTenantSources(context, requirementOptions, subject)[0]?.tenantId;
+};
+
+export const resolveHttpTenantSources = (
+  context: ExecutionContext,
+  requirementOptions: RbacRequirementOptions,
+  subject: RbacSubject,
+): RbacHttpTenantSource[] => {
+  if (requirementOptions.tenant === 'none') return [];
+
+  const sources: RbacHttpTenantSource[] = [];
 
   const subjectTenantId = resolveTenantId(subject.tenantId);
   if (subjectTenantId !== undefined) {
-    return subjectTenantId;
+    sources.push({ source: 'subject', tenantId: subjectTenantId });
   }
 
   const request = context.switchToHttp().getRequest<HttpRequest>();
   const requestTenantId = resolveTenantId(request.tenantId);
   if (requestTenantId !== undefined) {
-    return requestTenantId;
+    sources.push({ source: 'request.tenantId', tenantId: requestTenantId });
   }
 
-  const tenantObjectId = isRecord(request.tenant)
-    ? resolveTenantId(request.tenant.id)
-    : undefined;
+  const tenantObjectId = isRecord(request.tenant) ? resolveTenantId(request.tenant.id) : undefined;
   if (tenantObjectId !== undefined) {
-    return tenantObjectId;
+    sources.push({ source: 'request.tenant.id', tenantId: tenantObjectId });
   }
 
-  return resolveTenantId(getHeader(request.headers, 'x-tenant-id'));
+  const headerTenantId = resolveTenantId(getHeader(request.headers, 'x-tenant-id'));
+  if (headerTenantId !== undefined) {
+    sources.push({ source: 'header', tenantId: headerTenantId });
+  }
+
+  return sources;
 };

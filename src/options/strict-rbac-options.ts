@@ -7,13 +7,13 @@ export function createStrictRbacOptions(options: RbacModuleOptions): RbacModuleO
     tenant: {
       requiredByDefault: options.tenant?.requiredByDefault ?? true,
       allowGlobalRolesInTenant: options.tenant?.allowGlobalRolesInTenant ?? false,
+      resolverMode: options.tenant?.resolverMode ?? 'authoritative',
     },
     storageErrors: options.storageErrors ?? 'deny',
     logAllowedDecisions: options.logAllowedDecisions ?? false,
     writeValidation: {
       rejectTenantMismatch: options.writeValidation?.rejectTenantMismatch ?? true,
-      rejectResourceWithoutTenant:
-        options.writeValidation?.rejectResourceWithoutTenant ?? true,
+      rejectResourceWithoutTenant: options.writeValidation?.rejectResourceWithoutTenant ?? true,
       rejectGlobalRoleInTenantBinding:
         options.writeValidation?.rejectGlobalRoleInTenantBinding ?? false,
     },

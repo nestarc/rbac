@@ -24,6 +24,8 @@ import {
   type RbacResourceResolverFn,
   type RbacRequirementOptions,
 } from '../../src';
+import { createApiKeySubjectResolver } from '../../src/integrations/api-keys';
+import { createTenancyTenantResolver } from '../../src/integrations/tenancy';
 
 const getHandler = (target: object, key: string) =>
   Object.getOwnPropertyDescriptor(target, key)?.value as () => unknown;
@@ -280,7 +282,7 @@ describe('RbacGuard', () => {
     ]);
   });
 
-  it('uses configured tenant resolver only after default HTTP tenant sources are missing', async () => {
+  it('uses the configured tenant resolver as the authoritative source by default', async () => {
     class ReportsController {
       @Can('reports.read', { tenant: 'required' })
       read() {
@@ -292,7 +294,7 @@ describe('RbacGuard', () => {
       .fn()
       .mockReturnValueOnce({ type: 'user', id: 'user_1', tenantId: 'subject_tenant' })
       .mockReturnValueOnce({ type: 'user', id: 'user_2' });
-    const tenantResolver = vi.fn(() => 'fallback_tenant');
+    const tenantResolver = vi.fn(() => 'subject_tenant');
     const can = vi.fn((input: RbacCanInput) => {
       void input;
       return Promise.resolve({
@@ -317,10 +319,8 @@ describe('RbacGuard', () => {
     }).compile();
     const guard = moduleRef.get(RbacGuard);
 
-    await expect(
-      guard.canActivate(contextFor(ReportsController, handler, {})),
-    ).resolves.toBe(true);
-    expect(tenantResolver).not.toHaveBeenCalled();
+    await expect(guard.canActivate(contextFor(ReportsController, handler, {}))).resolves.toBe(true);
+    expect(tenantResolver).toHaveBeenCalledTimes(1);
     expect(can).toHaveBeenLastCalledWith(
       expect.objectContaining({
         tenantId: 'subject_tenant',
@@ -328,16 +328,311 @@ describe('RbacGuard', () => {
       }),
     );
 
-    await expect(
-      guard.canActivate(contextFor(ReportsController, handler, {})),
-    ).resolves.toBe(true);
-    expect(tenantResolver).toHaveBeenCalledTimes(1);
+    await expect(guard.canActivate(contextFor(ReportsController, handler, {}))).resolves.toBe(true);
+    expect(tenantResolver).toHaveBeenCalledTimes(2);
     expect(can).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        tenantId: 'fallback_tenant',
+        tenantId: 'subject_tenant',
         tenantMode: 'required',
       }),
     );
+  });
+
+  it.each([
+    ['subject', {}, { type: 'user' as const, id: 'user_1', tenantId: 'tenant_untrusted' }],
+    ['request field', { tenantId: 'tenant_untrusted' }, { type: 'user' as const, id: 'user_1' }],
+    [
+      'request object',
+      { tenant: { id: 'tenant_untrusted' } },
+      { type: 'user' as const, id: 'user_1' },
+    ],
+    [
+      'header',
+      { headers: { 'x-tenant-id': 'tenant_untrusted' } },
+      { type: 'user' as const, id: 'user_1' },
+    ],
+  ])(
+    'denies configured tenant conflicts with the %s source before authorization',
+    async (_source, request, resolvedSubject) => {
+      class ReportsController {
+        @Can('reports.read', { tenant: 'required' })
+        read() {
+          return undefined;
+        }
+      }
+      const handler = getHandler(ReportsController.prototype, 'read');
+      const can = vi.fn();
+      const log = vi.fn<(event: RbacAuditEvent) => void>();
+      const moduleRef = await Test.createTestingModule({
+        providers: [
+          Reflector,
+          RbacGuard,
+          { provide: RbacService, useValue: { can } },
+          {
+            provide: RBAC_OPTIONS,
+            useValue: {
+              storage: new InMemoryRbacStorage(),
+              subjectResolver: () => resolvedSubject,
+              tenantResolver: () => 'tenant_trusted',
+              auditLogger: { log },
+            } satisfies RbacModuleOptions,
+          },
+        ],
+      }).compile();
+
+      await expect(
+        moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler, request)),
+      ).rejects.toMatchObject({
+        response: {
+          message: 'Permission denied',
+          code: 'RBAC_PERMISSION_DENIED',
+        },
+      });
+      expect(can).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith({
+        type: 'rbac.permission.denied',
+        subjectType: 'user',
+        subjectId: 'user_1',
+        metadata: { reason: 'tenant_source_conflict' },
+      });
+    },
+  );
+
+  it('denies an API-key subject tenant that conflicts with the tenancy context', async () => {
+    class ReportsController {
+      @Can('reports.read', { tenant: 'required' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const can = vi.fn();
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: createApiKeySubjectResolver(),
+            tenantResolver: createTenancyTenantResolver(() => 'tenant_als'),
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(
+        contextFor(ReportsController, handler, {
+          apiKey: { keyId: 'key_1', tenantId: 'tenant_api_key' },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'RBAC_PERMISSION_DENIED' },
+    });
+    expect(can).not.toHaveBeenCalled();
+  });
+
+  it('preserves an authoritative null as an explicit global tenant', async () => {
+    class ReportsController {
+      @Can('system.read')
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const can = vi.fn(() =>
+      Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      }),
+    );
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => ({ type: 'user', id: 'user_global' }),
+            tenantResolver: () => null,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).resolves.toBe(true);
+    expect(can).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null }));
+  });
+
+  it('supports explicit legacy default-first tenant resolution', async () => {
+    class ReportsController {
+      @Can('reports.read', { tenant: 'required' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const tenantResolver = vi.fn(() => 'tenant_trusted');
+    const can = vi.fn(() =>
+      Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      }),
+    );
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+            tenantResolver,
+            tenant: { resolverMode: 'legacy-fallback' },
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).resolves.toBe(true);
+    expect(tenantResolver).not.toHaveBeenCalled();
+    expect(can).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant_1' }));
+  });
+
+  it('falls back to consistent HTTP sources only when the authoritative resolver is undefined', async () => {
+    class ReportsController {
+      @Can('reports.read', { tenant: 'required' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const can = vi.fn(() =>
+      Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      }),
+    );
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => ({ type: 'user', id: 'user_1' }),
+            tenantResolver: () => undefined,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(
+        contextFor(ReportsController, handler, {
+          tenantId: 'tenant_http',
+          headers: { 'x-tenant-id': 'tenant_http' },
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(can).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant_http' }));
+  });
+
+  it('treats authoritative null as global and skips all tenant sources for tenant none', async () => {
+    class ReportsController {
+      @Can('system.read', { tenant: 'none' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const tenantResolver = vi.fn(() => null);
+    const can = vi.fn(() =>
+      Promise.resolve({
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+      }),
+    );
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+            tenantResolver,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(
+        contextFor(ReportsController, handler, {
+          tenantId: 'tenant_other',
+          headers: { 'x-tenant-id': 'tenant_other' },
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(tenantResolver).not.toHaveBeenCalled();
+    expect(can).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: null,
+        tenantMode: 'none',
+      }),
+    );
+  });
+
+  it('denies conflicting default HTTP tenant sources without a configured resolver', async () => {
+    class ReportsController {
+      @Can('reports.read', { tenant: 'required' })
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const can = vi.fn();
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(
+        contextFor(ReportsController, handler, {
+          headers: { 'x-tenant-id': 'tenant_other' },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      response: { code: 'RBAC_PERMISSION_DENIED' },
+    });
+    expect(can).not.toHaveBeenCalled();
   });
 
   it('uses the default HTTP subject resolver when no subject resolver is configured', async () => {
@@ -507,7 +802,9 @@ describe('RbacGuard', () => {
     await expect(
       moduleRef
         .get(RbacGuard)
-        .canActivate(contextFor(ReportsController, handler, { params: { projectId: ' project_1 ' } })),
+        .canActivate(
+          contextFor(ReportsController, handler, { params: { projectId: ' project_1 ' } }),
+        ),
     ).resolves.toBe(true);
 
     expect(can.mock.calls[0]?.[0]).toMatchObject({
@@ -517,17 +814,15 @@ describe('RbacGuard', () => {
   });
 
   it.each([
-    [
-      'query',
-      { type: 'project', idQuery: 'projectId' },
-      { query: { projectId: 'project_1' } },
-    ],
+    ['query', { type: 'project', idQuery: 'projectId' }, { query: { projectId: 'project_1' } }],
     [
       'header',
       { type: 'project', idHeader: 'x-project-id' },
       { headers: { 'x-project-id': 'project_1' } },
     ],
-  ] satisfies Array<[string, NonNullable<RbacRequirementOptions['resource']>, Record<string, unknown>]>)(
+  ] satisfies Array<
+    [string, NonNullable<RbacRequirementOptions['resource']>, Record<string, unknown>]
+  >)(
     'resolves resources from built-in HTTP %s declarations',
     async (_source, resource, request) => {
       const can = vi.fn((input: RbacCanInput) => {

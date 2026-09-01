@@ -2,6 +2,25 @@
 
 All notable changes to `@nestarc/rbac` will be documented in this file.
 
+## Unreleased
+
+### Security
+
+- Configured tenant resolvers are now authoritative by default. RBAC denies before
+  authorization when the resolver conflicts with the selected subject,
+  `request.tenantId`, `request.tenant.id`, or `x-tenant-id`.
+- Direct `can()` calls deny conflicting non-null subject/input tenant IDs, including
+  attempts to bypass reconciliation with `tenantMode: 'none'`.
+- Strict `assignRole()` validation now reconciles subject, binding, and role tenants
+  before writing a binding.
+
+### Changed
+
+- Added the deprecated `tenant.resolverMode: 'legacy-fallback'` opt-in for consumers
+  that temporarily need the pre-hardening default-first resolver precedence.
+- Tenant source conflicts emit only the `tenant_source_conflict` audit category;
+  raw request headers and subject attributes are not included.
+
 ## 0.2.1 - 2026-08-30
 
 Prisma 7 compatibility release for the NestJS 11 ecosystem lane.

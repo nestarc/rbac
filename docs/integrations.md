@@ -34,7 +34,11 @@ RbacModule.forRoot({
 ```
 
 The helper only calls the callback and returns its `string`, `null`, or `undefined`
-tenant ID result.
+tenant ID result. `RbacGuard` treats a configured resolver as authoritative: a
+string or `null` must agree with subject/request/header tenant identity, while
+`undefined` delegates to consistent HTTP sources. Conflicts fail closed before the
+permission lookup. The deprecated `tenant.resolverMode: 'legacy-fallback'` option
+exists only for migration from the old default-first precedence.
 
 ## API Keys
 

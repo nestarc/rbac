@@ -11,6 +11,11 @@ export interface RbacWriteValidationOptions {
   rejectGlobalRoleInTenantBinding?: boolean | undefined;
 }
 
+export type RbacTenantResolverMode =
+  | 'authoritative'
+  /** @deprecated Use the authoritative default and migrate request tenant sources. */
+  | 'legacy-fallback';
+
 export type RbacPolicyChangeEventType =
   | 'role.created'
   | 'role.updated'
@@ -47,6 +52,11 @@ export interface RbacModuleOptions {
     | {
         requiredByDefault?: boolean | undefined;
         allowGlobalRolesInTenant?: boolean | undefined;
+        /**
+         * Controls whether a configured tenantResolver is authoritative.
+         * `legacy-fallback` preserves the pre-0.2.2 default-first behavior and is deprecated.
+         */
+        resolverMode?: RbacTenantResolverMode | undefined;
       }
     | undefined;
   storageErrors?: 'deny' | 'throw' | undefined;

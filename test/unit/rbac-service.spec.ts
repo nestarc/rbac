@@ -185,10 +185,8 @@ describe('RbacService', () => {
       }),
     ).resolves.toMatchObject({
       allowed: false,
-      reason: 'denied_no_matching_permission',
+      reason: 'denied_tenant_conflict',
       tenantId: 'tenant_2',
-      matchedRoleKeys: [],
-      matchedPermissions: [],
     });
   });
 
@@ -313,6 +311,32 @@ describe('RbacService', () => {
     });
   });
 
+  it('rejects subject and binding tenant mismatches in strict role assignments', async () => {
+    const strictService = new RbacService({
+      storage,
+      writeValidation: { rejectTenantMismatch: true },
+    });
+    const role = await strictService.createRole({
+      tenantId,
+      key: 'tenant_viewer',
+      permissions: ['reports.read'],
+    });
+
+    await expect(
+      strictService.assignRole({
+        tenantId,
+        subject: user('user_1', 'tenant_2'),
+        roleId: role.id,
+      }),
+    ).rejects.toMatchObject({
+      details: {
+        reason: 'subject_tenant_mismatch',
+        subjectTenantId: 'tenant_2',
+        bindingTenantId: tenantId,
+      },
+    });
+  });
+
   it('rejects resource-scoped bindings without tenant when strict write validation is enabled', async () => {
     const strictService = new RbacService({
       storage,
@@ -426,13 +450,15 @@ describe('RbacService', () => {
       grantPermission: vi.fn(() => Promise.resolve(undefined)),
       revokePermission: vi.fn(() => Promise.resolve(undefined)),
       listRolePermissions: vi.fn(() => Promise.resolve([])),
-      assignRole: vi.fn(() => Promise.resolve({
-        id: 'binding_1',
-        tenantId: null,
-        subjectType: 'user',
-        subjectId: 'user_1',
-        roleId: 'role_1',
-      })),
+      assignRole: vi.fn(() =>
+        Promise.resolve({
+          id: 'binding_1',
+          tenantId: null,
+          subjectType: 'user',
+          subjectId: 'user_1',
+          roleId: 'role_1',
+        }),
+      ),
       revokeRole: vi.fn(() => Promise.resolve(undefined)),
       listBindings: vi.fn(() => Promise.resolve([])),
       listEffectiveRoles: vi.fn(() => Promise.resolve([])),
@@ -718,6 +744,44 @@ describe('RbacService', () => {
     });
   });
 
+  it('denies direct checks when subject and explicit tenant ids conflict', async () => {
+    const listEffectivePermissions = vi.spyOn(storage, 'listEffectivePermissions');
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId: 'tenant_2',
+        permission: 'reports.read',
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_tenant_conflict',
+      details: {
+        evaluationPath: [{ code: 'tenant_conflict', outcome: 'deny' }],
+        safeMessage: 'denied_tenant_conflict',
+      },
+    });
+    expect(listEffectivePermissions).not.toHaveBeenCalled();
+  });
+
+  it('does not let tenantMode none bypass an explicit cross-tenant conflict', async () => {
+    const listEffectivePermissions = vi.spyOn(storage, 'listEffectivePermissions');
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId: 'tenant_2',
+        tenantMode: 'none',
+        permission: 'system.read',
+      }),
+    ).resolves.toMatchObject({
+      allowed: false,
+      reason: 'denied_tenant_conflict',
+      tenantId: null,
+    });
+    expect(listEffectivePermissions).not.toHaveBeenCalled();
+  });
+
   it('allows explicit null tenantId for route-level global checks', async () => {
     const globalRole = await service.createRole({
       tenantId: null,
@@ -751,23 +815,27 @@ describe('RbacService', () => {
     const writeStorage = {
       findRole: vi.fn(() => Promise.resolve(null)),
       listRoles: vi.fn(() => Promise.resolve([])),
-      upsertRole: vi.fn(() => Promise.resolve({
-        id: 'role_1',
-        key: 'role',
-        tenantId: null,
-        permissions: [],
-      })),
+      upsertRole: vi.fn(() =>
+        Promise.resolve({
+          id: 'role_1',
+          key: 'role',
+          tenantId: null,
+          permissions: [],
+        }),
+      ),
       deleteRole: vi.fn(() => Promise.resolve(undefined)),
       grantPermission: vi.fn(() => Promise.resolve(undefined)),
       revokePermission: vi.fn(() => Promise.resolve(undefined)),
       listRolePermissions: vi.fn(() => Promise.resolve([])),
-      assignRole: vi.fn(() => Promise.resolve({
-        id: 'binding_1',
-        tenantId: null,
-        subjectType: 'user',
-        subjectId: 'user_1',
-        roleId: 'role_1',
-      })),
+      assignRole: vi.fn(() =>
+        Promise.resolve({
+          id: 'binding_1',
+          tenantId: null,
+          subjectType: 'user',
+          subjectId: 'user_1',
+          roleId: 'role_1',
+        }),
+      ),
       revokeRole: vi.fn(() => Promise.resolve(undefined)),
       listBindings: vi.fn(() => Promise.resolve([])),
       listEffectiveRoles: vi.fn(() => Promise.resolve([])),
@@ -778,7 +846,8 @@ describe('RbacService', () => {
     const invalidWrites = [
       () => writeService.createRole({ tenantId: ' ', key: 'role', permissions: [] }),
       () => writeService.createRole({ tenantId: null, key: ' ', permissions: [] }),
-      () => writeService.createRole({ tenantId: null, key: 'role', permissions: ['bad permission'] }),
+      () =>
+        writeService.createRole({ tenantId: null, key: 'role', permissions: ['bad permission'] }),
       () => writeService.updateRole({ roleId: ' ', key: 'role' }),
       () => writeService.deleteRole({ roleId: ' ' }),
       () => writeService.grantPermission({ roleId: ' ', permission: 'reports.read' }),

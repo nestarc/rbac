@@ -44,6 +44,7 @@ import {
 interface ResolvedTenant {
   tenantId: string | null;
   missing: boolean;
+  conflict: boolean;
 }
 
 interface PermissionRequirement {
@@ -63,11 +64,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function hasSubject(subject: RbacSubject | undefined): subject is RbacSubject {
-  return (
-    subject !== undefined &&
-    isNonEmptyString(subject.type) &&
-    isNonEmptyString(subject.id)
-  );
+  return subject !== undefined && isNonEmptyString(subject.type) && isNonEmptyString(subject.id);
 }
 
 function unique(values: string[]): string[] {
@@ -90,6 +87,14 @@ export class RbacService {
     if (!subject) {
       return this.decision(input, 'denied_subject_missing', {
         allowed: false,
+        tenantId: tenant.tenantId,
+      });
+    }
+
+    if (tenant.conflict) {
+      return this.decision(input, 'denied_tenant_conflict', {
+        allowed: false,
+        subject,
         tenantId: tenant.tenantId,
       });
     }
@@ -388,11 +393,19 @@ export class RbacService {
     const mode =
       input.tenantMode ?? (this.options.tenant?.requiredByDefault ? 'required' : 'optional');
 
+    const explicitTenantId = this.normalizeTenantForComparison(input.tenantId);
+    const subjectTenantId = this.normalizeTenantForComparison(subject?.tenantId);
+    const conflict =
+      explicitTenantId !== undefined &&
+      explicitTenantId !== null &&
+      subjectTenantId !== undefined &&
+      explicitTenantId !== subjectTenantId;
+
     if (mode === 'none') {
-      return { tenantId: null, missing: false };
+      return { tenantId: null, missing: false, conflict };
     }
     if (input.tenantId === null) {
-      return { tenantId: null, missing: mode === 'required' };
+      return { tenantId: null, missing: mode === 'required', conflict: false };
     }
 
     const rawTenantId = input.tenantId !== undefined ? input.tenantId : subject?.tenantId;
@@ -401,7 +414,17 @@ export class RbacService {
     return {
       tenantId,
       missing: mode === 'required' && tenantId === null,
+      conflict,
     };
+  }
+
+  private normalizeTenantForComparison(
+    tenantId: string | null | undefined,
+  ): string | null | undefined {
+    if (tenantId === null) return null;
+    if (isNonEmptyString(tenantId)) return tenantId.trim();
+
+    return undefined;
   }
 
   private resolvePermissionRequirement(input: RbacCanInput): PermissionRequirement {
@@ -419,7 +442,9 @@ export class RbacService {
     } catch {
       return {
         permission: typeof permission === 'string' ? permission : undefined,
-        permissions: rawPermissions.filter((candidate): candidate is string => typeof candidate === 'string'),
+        permissions: rawPermissions.filter(
+          (candidate): candidate is string => typeof candidate === 'string',
+        ),
         mode,
         invalid: true,
       };
@@ -490,6 +515,7 @@ export class RbacService {
   private validateAssignRoleInput(input: AssignRoleInput): void {
     this.validateOptionalTenantId(input.tenantId);
     this.validateSubjectForWrite(input.subject);
+    this.validateAssignRoleSubjectTenant(input);
     const hasRoleId = 'roleId' in input && input.roleId !== undefined;
     const hasRoleKey = 'roleKey' in input && input.roleKey !== undefined;
     if (hasRoleId === hasRoleKey) {
@@ -509,14 +535,32 @@ export class RbacService {
     }
   }
 
+  private validateAssignRoleSubjectTenant(input: AssignRoleInput): void {
+    if (
+      this.options.writeValidation?.rejectTenantMismatch !== true ||
+      input.subject.tenantId === undefined
+    ) {
+      return;
+    }
+
+    const subjectTenantId = input.subject.tenantId?.trim() ?? null;
+    const bindingTenantId = input.tenantId?.trim() ?? null;
+    if (subjectTenantId === bindingTenantId) return;
+
+    throw new RbacConfigError({
+      operation: 'assignRole',
+      reason: 'subject_tenant_mismatch',
+      subjectTenantId,
+      bindingTenantId,
+    });
+  }
+
   private async resolveAssignRoleIdentifier(
     input: AssignRoleInput,
   ): Promise<{ roleId: string; roleKey?: string | undefined; role?: RbacRole | undefined }> {
     if ('roleId' in input && input.roleId !== undefined) {
       const roleId = input.roleId.trim();
-      const role = this.assignRoleNeedsResolvedRole()
-        ? await this.findRoleById(roleId)
-        : undefined;
+      const role = this.assignRoleNeedsResolvedRole() ? await this.findRoleById(roleId) : undefined;
       if (this.assignRoleNeedsResolvedRole() && role === undefined) {
         throw new RbacRoleNotFoundError({ roleId });
       }
@@ -605,10 +649,7 @@ export class RbacService {
     this.validateOptionalTenantId(subject?.tenantId, 'subject.tenantId');
   }
 
-  private validateOptionalTenantId(
-    tenantId: string | null | undefined,
-    name = 'tenantId',
-  ): void {
+  private validateOptionalTenantId(tenantId: string | null | undefined, name = 'tenantId'): void {
     if (tenantId !== null && tenantId !== undefined) {
       assertNonEmptyString(tenantId, name);
     }
@@ -721,6 +762,8 @@ export class RbacService {
         return { subject: true };
       case 'denied_tenant_missing':
         return { tenant: true };
+      case 'denied_tenant_conflict':
+        return undefined;
       case 'denied_resource_missing':
       case 'denied_resource_mismatch':
         return { resource: true };
@@ -735,9 +778,9 @@ export class RbacService {
     }
   }
 
-  private evaluationStep(reason: RbacDecisionReason): NonNullable<
-    RbacDecisionDetails['evaluationPath']
-  >[number] {
+  private evaluationStep(
+    reason: RbacDecisionReason,
+  ): NonNullable<RbacDecisionDetails['evaluationPath']>[number] {
     switch (reason) {
       case 'allowed_by_role':
         return { code: 'role_matched', outcome: 'allow' };
@@ -747,6 +790,8 @@ export class RbacService {
         return { code: 'subject_missing', outcome: 'deny' };
       case 'denied_tenant_missing':
         return { code: 'tenant_missing', outcome: 'deny' };
+      case 'denied_tenant_conflict':
+        return { code: 'tenant_conflict', outcome: 'deny' };
       case 'denied_resource_missing':
         return { code: 'resource_missing', outcome: 'deny' };
       case 'denied_resource_mismatch':
@@ -823,9 +868,7 @@ export class RbacService {
     }
   }
 
-  private async publishChange(
-    event: Omit<RbacPolicyChangeEvent, 'occurredAt'>,
-  ): Promise<void> {
+  private async publishChange(event: Omit<RbacPolicyChangeEvent, 'occurredAt'>): Promise<void> {
     try {
       await this.options.changePublisher?.publish({
         occurredAt: this.options.now?.() ?? new Date(),

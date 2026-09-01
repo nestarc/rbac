@@ -91,8 +91,38 @@ When an option is not set on the decorator, the guard uses
 `tenant.requiredByDefault` from `RbacModule.forRoot()`.
 
 Default HTTP tenant resolution checks the subject `tenantId`, `request.tenantId`,
-`request.tenant.id`, and the `x-tenant-id` header. A custom `tenantResolver` runs
-as the final fallback when those sources are missing.
+`request.tenant.id`, and the `x-tenant-id` header. Every populated source must
+agree; a conflict denies before authorization.
+
+A configured `tenantResolver` is authoritative by default. RBAC always calls it
+for tenant-aware requirements and reconciles its result with every populated HTTP
+source. A string selects that tenant, `null` explicitly selects global scope, and
+`undefined` delegates to the consistent HTTP sources. A conflict, including a
+tenant-bound subject conflicting with an authoritative global (`null`) result,
+denies with `RBAC_PERMISSION_DENIED` and records only the
+`tenant_source_conflict` audit category.
+
+`tenant: 'none'` is an explicit global authorization requirement. It resolves to
+`null` without calling the configured resolver or inspecting HTTP tenant carriers.
+For a temporary migration from versions that used HTTP sources first, opt in to
+the deprecated behavior explicitly:
+
+```ts
+RbacModule.forRoot({
+  storage,
+  tenantResolver,
+  tenant: { resolverMode: 'legacy-fallback' },
+});
+```
+
+Remove this opt-in after the authentication/tenancy middleware writes consistent
+tenant identity. Even in legacy mode, conflicting populated HTTP sources deny.
+
+Direct `RbacService.can()` calls similarly require a non-null explicit `tenantId`
+to match `subject.tenantId`. An explicit `tenantId: null` selects global scope;
+`tenantMode: 'none'` also selects global scope but does not permit two different
+non-null tenant IDs. With strict write validation, `assignRole()` requires the
+subject tenant and binding tenant to agree before reconciling the role tenant.
 
 ## Resource Declarations
 

@@ -138,9 +138,14 @@ keys, and `@SkipRbac()` for health checks or public routes. See
 
 ## Tenant-Aware Checks
 
-Tenant-aware checks use a tenant ID from the subject, request, headers, or a custom
-tenant resolver. When `tenant.requiredByDefault` is true, protected routes deny if
-no tenant can be resolved.
+Tenant-aware checks reconcile the tenant ID from the subject, request fields,
+headers, and a custom tenant resolver. When configured, the custom resolver is
+authoritative: its string or explicit global `null` result must agree with every
+populated HTTP source, while `undefined` falls back to consistent HTTP sources.
+Conflicts deny before authorization. When `tenant.requiredByDefault` is true,
+protected routes also deny if no tenant can be resolved. See
+[the tenant source policy](docs/guards.md#tenant-modes) for global checks and the
+deprecated `legacy-fallback` migration option.
 
 ```ts
 import { InMemoryRbacStorage, RbacModule } from '@nestarc/rbac';
