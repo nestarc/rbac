@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { InMemoryRbacStorage, RbacService } from '../../src';
 import { createAuditLogRbacLogger } from '../../src/integrations/audit-log';
 
 describe('createAuditLogRbacLogger', () => {
@@ -57,5 +58,24 @@ describe('createAuditLogRbacLogger', () => {
     expect(serialized).not.toContain('private@example.com');
     expect(serialized).not.toContain('secret-token');
     expect(serialized).not.toContain('secret-key');
+  });
+
+  it('forwards only committed built-in mutation audit events', async () => {
+    const auditLog = { log: vi.fn<(...args: unknown[]) => void>() };
+    const service = new RbacService({
+      storage: new InMemoryRbacStorage(),
+      auditLogger: createAuditLogRbacLogger({ auditLog }),
+    });
+    const input = { tenantId: 'tenant_1', key: 'audit_writer', permissions: [] };
+
+    const role = await service.createRole(input);
+    await service.createRole(input);
+    await service.updateRole({ roleId: role.id });
+    await service.deleteRole({ roleId: 'missing_role' });
+
+    expect(auditLog.log).toHaveBeenCalledTimes(1);
+    expect(auditLog.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'rbac.role.created', result: 'success' }),
+    );
   });
 });

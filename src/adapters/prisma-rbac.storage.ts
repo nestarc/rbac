@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { RbacConfigError } from '../errors';
 import { normalizePermission, normalizePermissions } from '../utils';
 import {
@@ -9,6 +10,7 @@ import {
 } from '../utils/canonicalization';
 import type {
   AssignRoleStorageInput,
+  CreateRoleInput,
   DeleteRoleInput,
   FindRoleInput,
   GrantPermissionInput,
@@ -22,8 +24,11 @@ import type {
   RbacRole,
   RbacRoleBinding,
   RbacStorage,
+  RbacMutationResult,
+  RbacStorageMutationCapability,
   RevokePermissionInput,
   RevokeRoleStorageInput,
+  UpdateRoleInput,
   UpsertRoleInput,
 } from '../interfaces';
 
@@ -63,6 +68,7 @@ type PrismaDelegate = {
   findMany(args?: Record<string, unknown>): Promise<unknown[]>;
   create(args: Record<string, unknown>): Promise<unknown>;
   update(args: Record<string, unknown>): Promise<unknown>;
+  updateMany?(args: Record<string, unknown>): Promise<unknown>;
   upsert(args: Record<string, unknown>): Promise<unknown>;
   delete(args: Record<string, unknown>): Promise<unknown>;
   deleteMany(args?: Record<string, unknown>): Promise<unknown>;
@@ -266,14 +272,54 @@ const isActiveBinding = (binding: PrismaBindingRecord, now: Date): boolean =>
   binding.revokedAt === null &&
   (binding.expiresAt === null || binding.expiresAt.getTime() >= now.getTime());
 
+const sameDate = (left: Date | null, right: Date | null): boolean =>
+  left === null ? right === null : right !== null && left.getTime() === right.getTime();
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isPrismaUniqueConstraintError = (error: unknown): boolean =>
   isRecord(error) && error.code === 'P2002';
 
+const mutationCount = (value: unknown): number =>
+  isRecord(value) && typeof value.count === 'number' ? value.count : 0;
+
+const samePermissions = (record: PrismaRoleRecord, permissions: string[]): boolean => {
+  const stored = record.permissions?.map((entry) => entry.permission.key).sort() ?? [];
+  const requested = [...permissions].sort();
+
+  return (
+    stored.length === requested.length && stored.every((value, index) => value === requested[index])
+  );
+};
+
+const roleInputChangesRecord = (record: PrismaRoleRecord, input: UpsertRoleInput): boolean => {
+  if (input.key !== undefined && input.key !== record.key) return true;
+  if (input.tenantId !== undefined && normalizeTenantId(input.tenantId) !== record.tenantId) {
+    return true;
+  }
+  if (input.name !== undefined && input.name !== record.name) return true;
+  if (input.description !== undefined && input.description !== record.description) return true;
+  if (input.isSystem !== undefined && input.isSystem !== record.isSystem) return true;
+
+  return input.permissions !== undefined && !samePermissions(record, input.permissions);
+};
+
 export class PrismaRbacStorage implements RbacStorage {
   constructor(private readonly prisma: PrismaRbacClientLike) {}
+
+  readonly mutationResults: RbacStorageMutationCapability = {
+    createRole: (input: CreateRoleInput) =>
+      this.upsertRoleWithRetry(canonicalizeUpsertRoleInput(input), false, true),
+    updateRole: (input: UpdateRoleInput) =>
+      this.upsertRoleWithRetry(canonicalizeUpsertRoleInput(input), false, false),
+    deleteRole: (input: DeleteRoleInput) => this.deleteRoleWithResult(input),
+    grantPermission: (input: GrantPermissionInput) => this.grantPermissionWithResult(input, false),
+    revokePermission: (input: RevokePermissionInput) => this.revokePermissionWithResult(input),
+    assignRole: (input: AssignRoleStorageInput) =>
+      this.assignRoleWithRetry(canonicalizeAssignInput(input), false),
+    revokeRole: (input: RevokeRoleStorageInput) => this.revokeRoleWithResult(input),
+  };
 
   async findRole(input: FindRoleInput): Promise<RbacRole | null> {
     const key = canonicalizeIdentifier(input.key, 'role key');
@@ -297,10 +343,20 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async upsertRole(input: UpsertRoleInput): Promise<RbacRole> {
-    return this.upsertRoleWithRetry(canonicalizeUpsertRoleInput(input), false);
+    const result = await this.upsertRoleWithRetry(canonicalizeUpsertRoleInput(input), false, true);
+    if (result.value) return result.value;
+
+    throw new RbacConfigError({
+      operation: 'upsertRole',
+      reason: result.reason ?? 'mutation_result_missing_value',
+    });
   }
 
-  private async upsertRoleWithRetry(input: UpsertRoleInput, retried: boolean): Promise<RbacRole> {
+  private async upsertRoleWithRetry(
+    input: UpsertRoleInput,
+    retried: boolean,
+    allowMissingExplicitRole: boolean,
+  ): Promise<RbacMutationResult<RbacRole>> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const hasExplicitRoleId = 'roleId' in input;
@@ -310,11 +366,21 @@ export class PrismaRbacStorage implements RbacStorage {
         if (hasExplicitRoleId) {
           existing = (await tx.rbacRole.findFirst({
             where: { id: explicitRoleId },
+            include: { permissions: { include: { permission: true } } },
           })) as PrismaRoleRecord | null;
         } else {
           existing = (await tx.rbacRole.findFirst({
             where: roleWhere(normalizeTenantId(input.tenantId), input.key),
+            include: { permissions: { include: { permission: true } } },
           })) as PrismaRoleRecord | null;
+        }
+
+        if (hasExplicitRoleId && !existing && !allowMissingExplicitRole) {
+          return { outcome: 'conflict', reason: 'role_not_found' };
+        }
+
+        if (existing && !roleInputChangesRecord(existing, input)) {
+          return { outcome: 'no-op', value: toRole(existing) };
         }
 
         const id = existing?.id ?? explicitRoleId ?? newId('role');
@@ -364,11 +430,11 @@ export class PrismaRbacStorage implements RbacStorage {
           });
         }
 
-        return toRole(reloaded);
+        return { outcome: existing ? 'updated' : 'created', value: toRole(reloaded) };
       });
     } catch (error) {
       if (!retried && isPrismaUniqueConstraintError(error)) {
-        return this.upsertRoleWithRetry(input, true);
+        return this.upsertRoleWithRetry(input, true, allowMissingExplicitRole);
       }
 
       throw error;
@@ -376,47 +442,82 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async deleteRole(input: DeleteRoleInput): Promise<void> {
+    await this.deleteRoleWithResult(input);
+  }
+
+  private async deleteRoleWithResult(input: DeleteRoleInput): Promise<RbacMutationResult> {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
-    await this.prisma.rbacRole.deleteMany({ where: { id: roleId } });
+    const deleted = await this.prisma.rbacRole.deleteMany({ where: { id: roleId } });
+
+    return { outcome: mutationCount(deleted) > 0 ? 'deleted' : 'no-op' };
   }
 
   async grantPermission(input: GrantPermissionInput): Promise<void> {
+    await this.grantPermissionWithResult(input, false);
+  }
+
+  private async grantPermissionWithResult(
+    input: GrantPermissionInput,
+    retried: boolean,
+  ): Promise<RbacMutationResult> {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const permission = normalizePermission(input.permission);
 
-    await this.prisma.$transaction(async (tx) => {
-      const role = (await tx.rbacRole.findFirst({
-        where: { id: roleId },
-      })) as PrismaRoleRecord | null;
-      if (!role) return;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const role = (await tx.rbacRole.findFirst({
+          where: { id: roleId },
+        })) as PrismaRoleRecord | null;
+        if (!role) return { outcome: 'conflict', reason: 'role_not_found' };
 
-      const permissionRecord = (await tx.rbacPermission.upsert({
-        where: { key: permission },
-        create: { id: newId('permission'), key: permission },
-        update: {},
-      })) as { id: string; key: string };
+        const permissionRecord = (await tx.rbacPermission.upsert({
+          where: { key: permission },
+          create: { id: newId('permission'), key: permission },
+          update: {},
+        })) as { id: string; key: string };
+        const existing = await tx.rbacRolePermission.findFirst({
+          where: { roleId, permissionId: permissionRecord.id },
+        });
+        if (existing) return { outcome: 'no-op' };
 
-      await tx.rbacRolePermission.upsert({
-        where: {
-          roleId_permissionId: { roleId, permissionId: permissionRecord.id },
-        },
-        create: { roleId, permissionId: permissionRecord.id },
-        update: {},
+        await tx.rbacRolePermission.create({
+          data: { roleId, permissionId: permissionRecord.id },
+        });
+
+        return { outcome: 'created' };
       });
-    });
+    } catch (error) {
+      if (!retried && isPrismaUniqueConstraintError(error)) {
+        return this.grantPermissionWithResult({ roleId, permission }, true);
+      }
+
+      throw error;
+    }
   }
 
   async revokePermission(input: RevokePermissionInput): Promise<void> {
+    await this.revokePermissionWithResult(input);
+  }
+
+  private async revokePermissionWithResult(
+    input: RevokePermissionInput,
+  ): Promise<RbacMutationResult> {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const permission = normalizePermission(input.permission);
-    const permissionRecord = (await this.prisma.rbacPermission.findFirst({
-      where: { key: permission },
-    })) as { id: string } | null;
+    return this.prisma.$transaction(async (tx) => {
+      const role = await tx.rbacRole.findFirst({ where: { id: roleId } });
+      if (!role) return { outcome: 'conflict', reason: 'role_not_found' };
 
-    if (!permissionRecord) return;
+      const permissionRecord = (await tx.rbacPermission.findFirst({
+        where: { key: permission },
+      })) as { id: string } | null;
+      if (!permissionRecord) return { outcome: 'no-op' };
 
-    await this.prisma.rbacRolePermission.deleteMany({
-      where: { roleId, permissionId: permissionRecord.id },
+      const deleted = await tx.rbacRolePermission.deleteMany({
+        where: { roleId, permissionId: permissionRecord.id },
+      });
+
+      return { outcome: mutationCount(deleted) > 0 ? 'deleted' : 'no-op' };
     });
   }
 
@@ -432,13 +533,19 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async assignRole(input: AssignRoleStorageInput): Promise<RbacRoleBinding> {
-    return this.assignRoleWithRetry(canonicalizeAssignInput(input), false);
+    const result = await this.assignRoleWithRetry(canonicalizeAssignInput(input), false);
+    if (result.value) return result.value;
+
+    throw new RbacConfigError({
+      operation: 'assignRole',
+      reason: result.reason ?? 'mutation_result_missing_value',
+    });
   }
 
   private async assignRoleWithRetry(
     input: AssignRoleStorageInput,
     retried: boolean,
-  ): Promise<RbacRoleBinding> {
+  ): Promise<RbacMutationResult<RbacRoleBinding>> {
     const tenantId = normalizeTenantId(input.tenantId);
     const resourceType = input.resource?.type ?? null;
     const resourceId = input.resource?.id ?? null;
@@ -448,6 +555,9 @@ export class PrismaRbacStorage implements RbacStorage {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const role = await tx.rbacRole.findFirst({ where: { id: input.roleId } });
+        if (!role) return { outcome: 'conflict', reason: 'role_not_found' };
+
         const existing = (await tx.rbacRoleBinding.findFirst({
           where: {
             tenantId,
@@ -462,7 +572,13 @@ export class PrismaRbacStorage implements RbacStorage {
 
         if (existing) {
           if (isActiveBinding(existing, now)) {
-            return toBinding(existing);
+            return { outcome: 'no-op', value: toBinding(existing) };
+          }
+          if (
+            sameDate(existing.expiresAt, expiresAt) &&
+            isDeepStrictEqual(existing.metadata, encodedMetadata ?? null)
+          ) {
+            return { outcome: 'no-op', value: toBinding(existing) };
           }
 
           const reactivated = (await tx.rbacRoleBinding.update({
@@ -474,7 +590,7 @@ export class PrismaRbacStorage implements RbacStorage {
             },
           })) as PrismaBindingRecord;
 
-          return toBinding(reactivated);
+          return { outcome: 'updated', value: toBinding(reactivated) };
         }
 
         const binding = (await tx.rbacRoleBinding.create({
@@ -492,7 +608,7 @@ export class PrismaRbacStorage implements RbacStorage {
           },
         })) as PrismaBindingRecord;
 
-        return toBinding(binding);
+        return { outcome: 'created', value: toBinding(binding) };
       });
     } catch (error) {
       if (!retried && isPrismaUniqueConstraintError(error)) {
@@ -504,18 +620,30 @@ export class PrismaRbacStorage implements RbacStorage {
   }
 
   async revokeRole(input: RevokeRoleStorageInput): Promise<void> {
+    await this.revokeRoleWithResult(input);
+  }
+
+  private async revokeRoleWithResult(input: RevokeRoleStorageInput): Promise<RbacMutationResult> {
     const bindingId = canonicalizeIdentifier(input.bindingId, 'bindingId');
-    await this.prisma.$transaction(async (tx) => {
+    const revokedAt = cloneDate(input.revokedAt) ?? new Date();
+    if (this.prisma.rbacRoleBinding.updateMany) {
+      const updated = await this.prisma.rbacRoleBinding.updateMany({
+        where: { id: bindingId, revokedAt: null },
+        data: { revokedAt },
+      });
+
+      return { outcome: mutationCount(updated) > 0 ? 'updated' : 'no-op' };
+    }
+
+    return this.prisma.$transaction(async (tx) => {
       const existing = (await tx.rbacRoleBinding.findFirst({
         where: { id: bindingId },
       })) as PrismaBindingRecord | null;
+      if (!existing || existing.revokedAt) return { outcome: 'no-op' };
 
-      if (!existing || existing.revokedAt) return;
+      await tx.rbacRoleBinding.update({ where: { id: bindingId }, data: { revokedAt } });
 
-      await tx.rbacRoleBinding.update({
-        where: { id: bindingId },
-        data: { revokedAt: cloneDate(input.revokedAt) ?? new Date() },
-      });
+      return { outcome: 'updated' };
     });
   }
 

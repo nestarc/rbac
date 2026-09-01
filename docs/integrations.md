@@ -153,8 +153,22 @@ RbacModule.forRoot({
 });
 ```
 
-RBAC publishes change events after successful role, permission, and binding
-mutations. Publisher failures are swallowed by default, matching audit logger
-behavior, so cache invalidation hooks must be monitored by the consuming
-application. The package does not provide distributed cache consistency or a
-broker integration.
+With either built-in adapter, or a custom adapter that implements
+`RbacStorage.mutationResults`, RBAC attempts an audit event and a change event at
+most once for each committed service mutation. Duplicate active assignments,
+already granted permissions, and missing/already-applied deletes or revocations
+are no-ops and do not emit success events. `createRole()` emits an update event
+when it changes an existing tenant/key role, while `updateRole()` rejects a
+missing role instead of upserting it.
+
+Custom adapters without the optional mutation-result capability retain the
+deprecated 0.2.x result-less fallback. RBAC cannot observe whether those adapter
+methods performed a write, so a resolved adapter-internal no-op can still produce
+a success event. Implement `RbacStorageMutationCapability` before the fallback's
+earliest removal in 0.3.
+
+Audit and publisher calls happen after storage commit and are best effort. Their
+failures are swallowed so they do not change the mutation result. Consumers must
+monitor delivery and must not treat these hooks as external exactly-once,
+storage-plus-publisher atomicity, a transactional outbox, distributed cache
+consistency, or a broker integration.

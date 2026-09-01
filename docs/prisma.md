@@ -70,6 +70,22 @@ const storage = new PrismaRbacStorage(prisma);
 Prisma 5 and 6 consumers can keep the `prisma-client-js` generator, datasource
 URL in the schema, and their existing `new PrismaClient()` setup.
 
+## Mutation Outcomes And Concurrency
+
+`PrismaRbacStorage` implements the optional outcome-aware mutation capability
+used by `RbacService`. Role create/update decisions and assignment reactivation
+are made inside the adapter transaction; delete and revoke outcomes use the
+database mutation count. PostgreSQL uniqueness constraints serialize competing
+role-key and active-binding inserts. On a unique race the adapter retries the
+lookup, so one identical concurrent create/assignment reports `created` and the
+remaining invocations report `no-op`.
+
+An identical duplicate does not update the row merely to produce an event.
+Service-level `updateRole()` reports a missing role as a conflict and never calls
+the explicit legacy `upsertRole()` creation path. Audit and change publishers run
+after the database transaction and remain best effort; they are not part of the
+Prisma transaction and do not provide distributed exactly-once delivery.
+
 ## NestJS Registration
 
 ```ts
@@ -123,8 +139,9 @@ npm run test:prisma
 
 The integration test uses exact Prisma 7.10.0 with `@prisma/adapter-pg` against
 PostgreSQL 16. It runs the same contract behavior as the in-memory adapter and
-verifies resource-scoped bindings, expirations, revocation, concurrency handling,
-metadata round trips, and permission matching. CI repeats the same 28-test
+verifies resource-scoped bindings, expirations, revocation, mutation outcomes,
+concurrent duplicate event suppression, metadata round trips, and permission
+matching. CI repeats the same 34-test
 PostgreSQL contract with exact Prisma 6.19.3 and its legacy engine client. The separate
 `npm run test:consumer:modern` gate packs the package and performs a fresh strict
 install with exact NestJS 11.2.1 and Prisma 7.10.0 before checking CommonJS, ESM,

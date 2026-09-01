@@ -14,7 +14,9 @@ import type {
   DeleteRoleInput,
   FindRoleInput,
   ListRolesInput,
+  CreateRoleInput,
   RbacRole,
+  UpdateRoleInput,
   UpsertRoleInput,
 } from './role';
 import type { RbacSubject } from './subject';
@@ -45,7 +47,36 @@ export interface RbacEffectivePermission extends RbacEffectiveRole {
   permission: string;
 }
 
+export type RbacMutationOutcome = 'created' | 'updated' | 'deleted' | 'no-op' | 'conflict';
+
+export type RbacMutationConflictReason = 'role_not_found' | 'duplicate';
+
+export interface RbacMutationResult<T = undefined> {
+  outcome: RbacMutationOutcome;
+  value?: T | undefined;
+  reason?: RbacMutationConflictReason | undefined;
+}
+
+/**
+ * Optional mutation-result protocol used to distinguish committed changes from
+ * idempotent no-ops without changing the legacy RbacStorage method signatures.
+ */
+export interface RbacStorageMutationCapability {
+  createRole(input: CreateRoleInput): Promise<RbacMutationResult<RbacRole>>;
+  updateRole(input: UpdateRoleInput): Promise<RbacMutationResult<RbacRole>>;
+  deleteRole(input: DeleteRoleInput): Promise<RbacMutationResult>;
+  grantPermission(input: GrantPermissionInput): Promise<RbacMutationResult>;
+  revokePermission(input: RevokePermissionInput): Promise<RbacMutationResult>;
+  assignRole(input: AssignRoleStorageInput): Promise<RbacMutationResult<RbacRoleBinding>>;
+  revokeRole(input: RevokeRoleStorageInput): Promise<RbacMutationResult>;
+}
+
 export interface RbacStorage {
+  /**
+   * Additive 0.2.x capability for outcome-aware writes. Custom adapters that
+   * omit it use the deprecated result-less best-effort event fallback.
+   */
+  readonly mutationResults?: RbacStorageMutationCapability | undefined;
   findRole(input: FindRoleInput): Promise<RbacRole | null>;
   listRoles(input: ListRolesInput): Promise<RbacRole[]>;
   upsertRole(input: UpsertRoleInput): Promise<RbacRole>;
@@ -57,5 +88,7 @@ export interface RbacStorage {
   revokeRole(input: RevokeRoleStorageInput): Promise<void>;
   listBindings(input: ListBindingsStorageInput): Promise<RbacRoleBinding[]>;
   listEffectiveRoles(input: ListEffectiveRolesInput): Promise<RbacEffectiveRole[]>;
-  listEffectivePermissions(input: ListEffectivePermissionsInput): Promise<RbacEffectivePermission[]>;
+  listEffectivePermissions(
+    input: ListEffectivePermissionsInput,
+  ): Promise<RbacEffectivePermission[]>;
 }

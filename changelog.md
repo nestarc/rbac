@@ -21,8 +21,27 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 - Strict `assignRole()` validation now reconciles subject, binding, and role tenants
   before writing a binding.
 
+### Added
+
+- Added the optional `RbacStorageMutationCapability` and
+  `RbacStorage.mutationResults` protocol. It reports committed, idempotent, and
+  conflicting outcomes without changing the required 0.2.x custom storage method
+  signatures.
+
 ### Changed
 
+- Built-in storage writes now emit success audit and policy-change events only for
+  committed changes. Duplicate create/assignment/grant operations and missing or
+  already-applied delete/revoke operations are no-ops without success events.
+- `updateRole()` no longer upserts a missing role. The explicit storage-level
+  `upsertRole()` contract remains available; missing service updates now throw
+  `RbacRoleNotFoundError`.
+- An existing role reached through `createRole()` now emits an update event only
+  when its requested state changes. Identical create calls do not emit an event.
+- Result-less custom storage mutation fallback remains compatible but is
+  deprecated for removal no earlier than 0.3. It cannot distinguish adapter
+  no-ops, and audit/change delivery remains non-transactional best effort after
+  storage commit.
 - `RbacService`, `InMemoryRbacStorage`, and `PrismaRbacStorage` now use one
   canonical identifier policy. Leading and trailing whitespace is removed from
   tenant, non-API-key subject, role, binding, resource, and permission identifiers;

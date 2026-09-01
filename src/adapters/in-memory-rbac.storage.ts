@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { RbacConfigError, RbacRoleNotFoundError } from '../errors';
 import { normalizePermission, normalizePermissions } from '../utils';
 import {
@@ -8,6 +9,7 @@ import {
 } from '../utils/canonicalization';
 import type {
   AssignRoleStorageInput,
+  CreateRoleInput,
   DeleteRoleInput,
   FindRoleInput,
   GrantPermissionInput,
@@ -22,8 +24,10 @@ import type {
   RbacRole,
   RbacRoleBinding,
   RbacStorage,
+  RbacStorageMutationCapability,
   RevokePermissionInput,
   RevokeRoleStorageInput,
+  UpdateRoleInput,
   UpsertRoleInput,
 } from '../interfaces';
 
@@ -141,11 +145,119 @@ function isBindingActive(binding: RbacRoleBinding, now: Date): boolean {
   return binding.expiresAt.getTime() >= now.getTime();
 }
 
+function samePermissions(stored: string[], requested: string[]): boolean {
+  const left = [...stored].sort();
+  const right = [...requested].sort();
+
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function roleInputChanges(role: RbacRole, input: UpsertRoleInput): boolean {
+  if (input.key !== undefined && input.key !== role.key) return true;
+  if (
+    input.tenantId !== undefined &&
+    normalizeTenantId(input.tenantId) !== normalizeTenantId(role.tenantId)
+  ) {
+    return true;
+  }
+  if (input.name !== undefined && input.name !== role.name) return true;
+  if (input.description !== undefined && input.description !== role.description) return true;
+  if (input.isSystem !== undefined && input.isSystem !== (role.isSystem ?? false)) return true;
+
+  return input.permissions !== undefined && !samePermissions(role.permissions, input.permissions);
+}
+
 export class InMemoryRbacStorage implements RbacStorage {
   private roleSequence = 0;
   private bindingSequence = 0;
   private readonly roles = new Map<string, RbacRole>();
   private readonly bindings = new Map<string, RbacRoleBinding>();
+
+  readonly mutationResults: RbacStorageMutationCapability = {
+    createRole: async (input: CreateRoleInput) => {
+      const canonicalInput = canonicalizeUpsertRoleInput(input) as CreateRoleInput;
+      const existing = this.findStoredRole(canonicalInput.tenantId, canonicalInput.key);
+      if (existing && !roleInputChanges(existing, canonicalInput)) {
+        return { outcome: 'no-op', value: cloneRole(existing) };
+      }
+
+      const value = await this.upsertRole(canonicalInput);
+
+      return {
+        outcome: existing === undefined ? 'created' : 'updated',
+        value,
+      };
+    },
+    updateRole: async (input: UpdateRoleInput) => {
+      const canonicalInput = canonicalizeUpsertRoleInput(input) as UpdateRoleInput;
+      const existing = this.roles.get(canonicalInput.roleId);
+      if (!existing) return { outcome: 'conflict', reason: 'role_not_found' };
+      if (!roleInputChanges(existing, canonicalInput)) {
+        return { outcome: 'no-op', value: cloneRole(existing) };
+      }
+
+      const value = await this.upsertRole(canonicalInput);
+
+      return { outcome: 'updated', value };
+    },
+    deleteRole: async (input: DeleteRoleInput) => {
+      const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+      if (!this.roles.has(roleId)) return { outcome: 'no-op' };
+
+      await this.deleteRole({ roleId });
+
+      return { outcome: 'deleted' };
+    },
+    grantPermission: async (input: GrantPermissionInput) => {
+      const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+      const role = this.roles.get(roleId);
+      if (!role) return { outcome: 'conflict', reason: 'role_not_found' };
+
+      const permission = normalizePermission(input.permission);
+      if (role.permissions.includes(permission)) return { outcome: 'no-op' };
+
+      await this.grantPermission({ roleId, permission });
+
+      return { outcome: 'created' };
+    },
+    revokePermission: async (input: RevokePermissionInput) => {
+      const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+      const role = this.roles.get(roleId);
+      if (!role) return { outcome: 'conflict', reason: 'role_not_found' };
+
+      const permission = normalizePermission(input.permission);
+      if (!role.permissions.includes(permission)) return { outcome: 'no-op' };
+
+      await this.revokePermission({ roleId, permission });
+
+      return { outcome: 'deleted' };
+    },
+    assignRole: async (input: AssignRoleStorageInput) => {
+      const canonicalInput = canonicalizeAssignInput(input);
+      if (!this.roles.has(canonicalInput.roleId)) {
+        return { outcome: 'conflict', reason: 'role_not_found' };
+      }
+
+      const existing = this.findStoredBinding(canonicalInput);
+      const before = existing ? cloneBinding(existing) : undefined;
+      const value = await this.assignRole(canonicalInput);
+
+      return {
+        outcome:
+          before === undefined ? 'created' : isDeepStrictEqual(before, value) ? 'no-op' : 'updated',
+        value,
+      };
+    },
+    revokeRole: async (input: RevokeRoleStorageInput) => {
+      const bindingId = canonicalizeIdentifier(input.bindingId, 'bindingId');
+      const binding = this.bindings.get(bindingId);
+      if (!binding || binding.revokedAt) return { outcome: 'no-op' };
+
+      await this.revokeRole({ ...input, bindingId });
+
+      return { outcome: 'updated' };
+    },
+  };
 
   findRole(input: FindRoleInput): Promise<RbacRole | null> {
     const tenantId = normalizeTenantId(input.tenantId);
@@ -223,11 +335,21 @@ export class InMemoryRbacStorage implements RbacStorage {
       key: canonicalInput.key,
       tenantId,
       permissions: normalizePermissions(canonicalInput.permissions),
-      ...(canonicalInput.name !== undefined ? { name: canonicalInput.name } : {}),
+      ...(canonicalInput.name !== undefined
+        ? { name: canonicalInput.name }
+        : existing?.name !== undefined
+          ? { name: existing.name }
+          : {}),
       ...(canonicalInput.description !== undefined
         ? { description: canonicalInput.description }
-        : {}),
-      ...(canonicalInput.isSystem !== undefined ? { isSystem: canonicalInput.isSystem } : {}),
+        : existing?.description !== undefined
+          ? { description: existing.description }
+          : {}),
+      ...(canonicalInput.isSystem !== undefined
+        ? { isSystem: canonicalInput.isSystem }
+        : existing?.isSystem !== undefined
+          ? { isSystem: existing.isSystem }
+          : {}),
     };
 
     this.roles.set(role.id, role);
@@ -455,6 +577,22 @@ export class InMemoryRbacStorage implements RbacStorage {
 
     return [...this.roles.values()].find(
       (role) => normalizeTenantId(role.tenantId) === normalizedTenantId && role.key === key,
+    );
+  }
+
+  private findStoredBinding(input: AssignRoleStorageInput): RbacRoleBinding | undefined {
+    const tenantId = normalizeTenantId(input.tenantId);
+    const { resourceType, resourceId } = bindingResource(input.resource);
+
+    return [...this.bindings.values()].find(
+      (binding) =>
+        !binding.revokedAt &&
+        normalizeTenantId(binding.tenantId) === tenantId &&
+        binding.subjectType === input.subject.type &&
+        binding.subjectId === input.subject.id &&
+        binding.roleId === input.roleId &&
+        (binding.resourceType ?? null) === resourceType &&
+        (binding.resourceId ?? null) === resourceId,
     );
   }
 

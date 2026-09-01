@@ -160,7 +160,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 4 | `RBAC-M04` | P1 | `DONE` | M | 없음 | inbound runtime enum/shape fail-closed validation |
 | 5 | `RBAC-M05` | P1 | `DONE` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
 | 6 | `RBAC-M06` | P1 | `DONE` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
-| 7 | `RBAC-M07` | P1 | `READY` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
+| 7 | `RBAC-M07` | P1 | `DONE` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
 | 8 | `RBAC-M08` | P1 | `READY` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
 | 9 | `RBAC-M09` | P1 | `DECISION` | M | 없음 | Node/Nest/Prisma 지원·semver 계약 |
 | 10 | `RBAC-M10` | P1 | `BLOCKED` | M | `RBAC-M09` | 선택한 Nest/Prisma 하한 compatibility gate |
@@ -170,8 +170,8 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 12C | `RBAC-M12C` | P2 | `BLOCKED` | S | `EXT-PRISMA7-AUDIT-FIX` | Prisma→deepmerge-ts upstream 추적 |
 | 13A | `RBAC-M13A` | P2 | `READY` | S | 없음 | 역사 문서 배너와 canonical queue link |
 | 13B | `RBAC-M13B` | P2 | `BLOCKED` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
-| 14 | `RBAC-M14` | P2 | `BLOCKED` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
-| 15 | `RBAC-M15` | P2 | `BLOCKED` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
+| 14 | `RBAC-M14` | P2 | `READY` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
+| 15 | `RBAC-M15` | P2 | `READY` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
 | 16 | `RBAC-M16` | P2 | `DECISION` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `READY` | S | 없음 | examples/Prisma docs executable smoke |
 | 18 | `RBAC-M18` | P2 | `BLOCKED` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
@@ -341,20 +341,20 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M07` — mutation outcome과 best-effort event 정합성
 
-- 상태: `P1 / READY (RBAC-M06 완료)`
+- 상태: `P1 / DONE`
 - 문제: duplicate create/assign, missing update, no-op delete/grant/revoke도 성공 audit/change event를 낼 수 있다. storage commit 뒤 audit/publisher를 호출하고 예외를 삼키는 현재 구조에서는 외부 delivery의 transaction 원자성이나 exactly-once를 보장할 수 없다(`src/rbac.service.ts:818-836`).
 
 완료 조건:
 
-- [ ] update는 missing entity를 생성하지 않는다.
-- [ ] create/upsert가 필요하면 별도 명시 API/contract다.
-- [ ] public `RbacStorage`의 required method/`Promise<void>` 변경은 custom adapter에 breaking이므로, 0.2 patch는 additive optional mutation-result capability와 legacy fallback을 우선 검토한다. required protocol은 deprecation 뒤 0.3 후보로 둔다.
-- [ ] storage mutation은 가능한 capability에서 created/updated/deleted/no-op/conflict를 반환한다.
-- [ ] built-in/capability adapter에서 실제 변경이 commit된 service invocation당 audit/change publish 시도는 각 최대 한 번이며 best effort다.
-- [ ] built-in/capability adapter의 실패/no-op write에는 성공 event가 없다.
-- [ ] 결과를 보고할 수 없는 legacy custom adapter fallback은 기존 best-effort 의미와 한계를 문서화하고 deprecation한다. 결과를 추측해 universal no-op 보장을 주장하지 않는다.
-- [ ] duplicate create/upsert와 이미 active인 duplicate assignment도 outcome/event matrix에 포함한다.
-- [ ] InMemory와 Prisma가 문서화한 concurrency 범위 안에서 동일 의미를 갖는다.
+- [x] update는 missing entity를 생성하지 않는다.
+- [x] create/upsert가 필요하면 별도 명시 API/contract다.
+- [x] public `RbacStorage`의 required method/`Promise<void>` 변경은 custom adapter에 breaking이므로, 0.2 patch는 additive optional mutation-result capability와 legacy fallback을 우선 검토한다. required protocol은 deprecation 뒤 0.3 후보로 둔다.
+- [x] storage mutation은 가능한 capability에서 created/updated/deleted/no-op/conflict를 반환한다.
+- [x] built-in/capability adapter에서 실제 변경이 commit된 service invocation당 audit/change publish 시도는 각 최대 한 번이며 best effort다.
+- [x] built-in/capability adapter의 실패/no-op write에는 성공 event가 없다.
+- [x] 결과를 보고할 수 없는 legacy custom adapter fallback은 기존 best-effort 의미와 한계를 문서화하고 deprecation한다. 결과를 추측해 universal no-op 보장을 주장하지 않는다.
+- [x] duplicate create/upsert와 이미 active인 duplicate assignment도 outcome/event matrix에 포함한다.
+- [x] InMemory와 Prisma가 문서화한 concurrency 범위 안에서 동일 의미를 갖는다.
 
 검증: 프로필 A/B/C2/C3, missing/no-op/race table, audit-log integration.
 
@@ -477,7 +477,7 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M14` — public decision/error 계약 ADR
 
-- 상태: `P2 / BLOCKED (RBAC-M03, RBAC-M07)`
+- 상태: `P2 / READY`
 
 완료 조건:
 
@@ -488,7 +488,7 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M15` — indexed role lookup
 
-- 상태: `P2 / BLOCKED (RBAC-M07)`
+- 상태: `P2 / READY`
 - 문제: strict assign validation이 role ID를 찾기 위해 `listRoles({})` 전체 scan을 사용한다.
 
 완료 조건:
@@ -731,6 +731,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M04`: invalid runtime discriminant/shape unit table, packed CJS/ESM consumer, HTTP config-error E2E.
 - [x] `RBAC-M05`: default HTTP subject source conflict matrix, namespace isolation, Guard HTTP E2E.
 - [x] `RBAC-M06`: service/InMemory/Prisma identifier round-trip, API-key exact identity, event payload와 non-canonical effective-row fail-closed contract.
+- [x] `RBAC-M07`: outcome-aware built-in mutation, missing/no-op/race matrix, audit/change event suppression과 Prisma 6/7 real-DB contract.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
@@ -741,11 +742,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M06 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M06`을 반복하지 않고 `RBAC-M07`만 선택한다.
-3. create-existing, update-missing/no-change, duplicate assign, grant-existing, revoke-absent/already-revoked outcome/event matrix를 RED로 만든다.
-4. additive optional mutation-result capability와 legacy custom adapter fallback을 분리해 built-in adapter의 실제 변경에만 성공 audit/change publish가 시도되는지 확인한다.
-5. 프로필 A/B/C2/C3와 audit-log integration을 검증하고 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M07 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M07`을 반복하지 않고 `RBAC-M08`만 선택한다.
+3. 첫 requirement allow, 다음 requirement deny인 stacked class/handler 요청의 audit 결과를 RED로 만든다.
+4. request-level 최종 결과 아래에서만 audit를 한 번 기록하고, 실패 requirement index/reason이 HTTP deny와 일치하는지 확인한다.
+5. 프로필 A/B/C1과 audit-log integration을 검증하고 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -760,6 +761,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M04` | `DONE` | `main@13dc26a` | uncommitted working tree | invalid mode/tenantMode와 Date/subject/resource/requirement runtime shape를 작은 assertion layer에서 `RBAC_CONFIG_ERROR` 또는 기존 resolver deny로 fail closed; A/B, HTTP E2E, packed CJS/ESM consumer PASS | `RBAC-M05` 시작 |
 | 2026-09-01 | `RBAC-M05` | `DONE` | `main@c3297c8` | uncommitted working tree | custom user type 호환성을 유지하고 valid RBAC subject/user/API-key identity를 exact tuple로 조정해 conflict를 subject missing으로 fail closed; namespace isolation, A/B, Guard E2E와 build PASS | `RBAC-M06` 시작 |
 | 2026-09-01 | `RBAC-M06` | `DONE` | `main@7e4f9cf` | uncommitted working tree | service/InMemory/Prisma가 공통 outer-whitespace canonicalization을 사용하고 API-key subject identity는 exact 보존; create→assign→can, update/delete/list, audit/change event, non-canonical storage deny와 A/B/C1/C2/C3 PASS | `RBAC-M07` 시작 |
+| 2026-09-01 | `RBAC-M07` | `DONE` | `main@5fc74b0` | uncommitted working tree | optional mutation-result capability로 built-in create/update/delete/grant/revoke/assign의 committed/no-op/conflict를 구분하고 missing update 생성과 no-op 성공 event를 차단; legacy fallback/deprecation 문서화, A/B/C2/C3와 audit-log, build PASS | `RBAC-M08` 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -843,4 +845,18 @@ Commands and exact results: initial focused RED observed (2 files/105 tests 중 
 Unverified paths and reason: packed consumer/package dry-run/audit 프로필 D는 public export나 package metadata를 변경하지 않고 RBAC-M06 명시 검증 profile이 A/B/C2/C3와 event payload이므로 실행하지 않았다.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다. C2/C3 검증용 임시 PostgreSQL 16 container와 Prisma 6 checkout은 검증 뒤 제거했다.
 Next exact action: RBAC-M07의 create-existing, update-missing/no-change, duplicate assign, grant-existing, revoke-absent/already-revoked outcome/event matrix를 RED로 추가한다.
+```
+
+### 2026-09-01 RBAC-M07 인계
+
+```text
+Task: RBAC-M07
+State: DONE
+Start ref / end ref: main@5fc74b0 / main@5fc74b0 + uncommitted RBAC-M07 working tree
+Changed files: README.md, changelog.md, docs/integrations.md, docs/prisma.md, docs/spec.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/interfaces/storage.ts, src/rbac.service.ts, src/adapters/in-memory-rbac.storage.ts, src/adapters/prisma-rbac.storage.ts, test/contract/storage-contract.ts, test/integration/prisma-rbac.storage.integration-spec.ts, test/unit/audit-log-integration.spec.ts, test/unit/rbac-service.spec.ts
+Contract decision: 0.2.x public RbacStorage required methods와 Promise<void> 반환형은 유지하고 optional RbacStorage.mutationResults/RbacStorageMutationCapability를 추가한다. capability는 created/updated/deleted/no-op/conflict와 필요한 role/binding value를 반환한다. RbacService.updateRole()은 capability adapter에서 missing role을 생성하지 않고 RbacRoleNotFoundError를 던지며 storage.upsertRole()은 별도 explicit legacy upsert로 남는다. createRole()은 tenant/key upsert 호환성을 유지해 new는 created, existing changed는 updated, identical은 no-op다. active duplicate assign/grant와 missing/already-applied delete/revoke는 no-op이고 성공 audit/change event가 없다. built-in/capability adapter는 실제 committed service invocation당 audit와 change publish를 각각 최대 한 번 시도한다. capability 없는 custom adapter는 결과를 추측하지 않는 기존 result-less fallback을 0.2.x에서 유지하되 deprecated이며 0.3 removal candidate다. audit/publisher는 storage commit 뒤 best effort이고 실패를 삼키므로 storage와 atomic하지 않으며 distributed exactly-once/outbox를 보장하지 않는다. Prisma는 unique race 뒤 재조회해 identical concurrent role create/assignment 하나만 created, 나머지는 no-op으로 보고한다.
+Commands and exact results: git fetch --prune --tags PASS; baseline npm run typecheck PASS; initial focused RED는 1 file/87 tests 중 update-missing이 role을 생성해 1 failure 확인; npm run lint PASS; npm run typecheck PASS; npm test PASS with HTTP port permission (14 files, 305 tests); fresh npm run test:coverage PASS (13 files, 296 tests; statements 94.28%, branches 87.22%, functions 96.92%, lines 95.47%); npm run build PASS; Prisma 7.10.0 generate/migration와 PostgreSQL 16 C2 PASS (1 file, 34 tests, skip 0); disposable exact Prisma 6.19.3 generate/migration와 PostgreSQL 16 C3 PASS (1 file, 34 tests, skip 0); audit-log integration committed-only event test PASS; git diff --check PASS. 최초 sandbox npm test는 로컬 listen EPERM으로 HTTP 9 tests가 실패했으나 unit/contract 292 tests는 통과했고, 동일 전체 명령을 허용된 환경에서 재실행해 305/305 PASS를 확인했다. 최초 sandbox C2는 localhost connect EPERM이었고 허용된 환경에서 migration과 34/34 PASS를 확인했다.
+Unverified paths and reason: packed consumer/package dry-run/audit 프로필 D는 package export 경로와 metadata를 바꾸지 않고 RBAC-M07 명시 검증 profile이 A/B/C2/C3와 audit-log integration이므로 실행하지 않았다.
+External PR/release evidence: 없음. origin/main은 69bf0e1이고 현재 결과는 commit/PR/release 전 working tree다. C2/C3 검증용 임시 PostgreSQL 16 container와 Prisma 6 worktree는 검증 뒤 제거했다.
+Next exact action: RBAC-M08의 첫 requirement allow/다음 requirement deny stacked request에서 request-level 최종 audit 하나만 남는 RED Guard/audit fixture를 추가한다.
 ```

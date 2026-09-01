@@ -474,6 +474,100 @@ describe('RbacService', () => {
     );
   });
 
+  it('emits one best-effort audit and change event only for committed built-in mutations', async () => {
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const log = vi.fn<(event: RbacAuditEvent) => void>();
+    const eventService = new RbacService({
+      storage: new InMemoryRbacStorage(),
+      now: () => now,
+      auditLogger: { log },
+      changePublisher: { publish },
+    });
+
+    const role = await eventService.createRole({
+      tenantId,
+      key: 'mutation_writer',
+      permissions: ['reports.read'],
+    });
+    await eventService.createRole({
+      tenantId,
+      key: 'mutation_writer',
+      permissions: ['reports.read'],
+    });
+    await eventService.createRole({
+      tenantId,
+      key: 'mutation_writer',
+      name: 'Mutation writer',
+      permissions: ['reports.read'],
+    });
+
+    await expect(
+      eventService.updateRole({ roleId: 'missing_role', name: 'Missing role' }),
+    ).rejects.toBeInstanceOf(RbacRoleNotFoundError);
+    await eventService.updateRole({ roleId: role.id, name: 'Mutation writer' });
+
+    const binding = await eventService.assignRole({
+      tenantId,
+      subject: user('mutation_user', tenantId),
+      roleId: role.id,
+    });
+    await eventService.assignRole({
+      tenantId,
+      subject: user('mutation_user', tenantId),
+      roleId: role.id,
+    });
+
+    await eventService.grantPermission({ roleId: role.id, permission: 'reports.read' });
+    await eventService.grantPermission({ roleId: role.id, permission: 'reports.export' });
+    await eventService.grantPermission({ roleId: role.id, permission: 'reports.export' });
+    await eventService.revokePermission({ roleId: role.id, permission: 'reports.missing' });
+    await eventService.revokePermission({ roleId: role.id, permission: 'reports.export' });
+    await eventService.revokePermission({ roleId: role.id, permission: 'reports.export' });
+
+    await eventService.revokeRole({ bindingId: 'missing_binding', revokedAt: now });
+    await eventService.revokeRole({ bindingId: binding.id, revokedAt: now });
+    await eventService.revokeRole({ bindingId: binding.id, revokedAt: now });
+
+    await eventService.deleteRole({ roleId: 'missing_role' });
+    await eventService.deleteRole({ roleId: role.id });
+    await eventService.deleteRole({ roleId: role.id });
+
+    expect(log.mock.calls.map(([event]) => event.type)).toEqual([
+      'rbac.role.created',
+      'rbac.role.updated',
+      'rbac.role.assigned',
+      'rbac.permission.granted',
+      'rbac.permission.revoked',
+      'rbac.role.revoked',
+      'rbac.role.deleted',
+    ]);
+    expect(publish.mock.calls.map(([event]) => event.type)).toEqual([
+      'role.created',
+      'role.updated',
+      'role.assigned',
+      'permission.granted',
+      'permission.revoked',
+      'role.revoked',
+      'role.deleted',
+    ]);
+  });
+
+  it('preserves the deprecated best-effort event fallback for result-less custom storage', async () => {
+    const legacyStorage = new InMemoryRbacStorage();
+    Object.defineProperty(legacyStorage, 'mutationResults', { value: undefined });
+    const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
+    const legacyService = new RbacService({ storage: legacyStorage, changePublisher: { publish } });
+    const input = { tenantId, key: 'legacy_writer', permissions: [] };
+
+    await legacyService.createRole(input);
+    await legacyService.createRole(input);
+
+    expect(publish.mock.calls.map(([event]) => event.type)).toEqual([
+      'role.created',
+      'role.created',
+    ]);
+  });
+
   it('uses canonical identifiers for create, assign, can, audit, and change events', async () => {
     const publish = vi.fn<NonNullable<RbacModuleOptions['changePublisher']>['publish']>();
     const log = vi.fn<(event: RbacAuditEvent) => void>();

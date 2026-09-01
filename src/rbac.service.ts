@@ -23,6 +23,7 @@ import type {
   RbacEffectivePermission,
   RbacEffectiveRole,
   RbacModuleOptions,
+  RbacMutationResult,
   RbacPolicyChangeEvent,
   RbacRequirementMode,
   RbacResourceRef,
@@ -140,14 +141,28 @@ export class RbacService {
       key: canonicalizeIdentifier(input.key, 'role key'),
       permissions: normalizePermissions(input.permissions),
     };
-    const role = await this.options.storage.upsertRole(canonicalInput);
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.createRole(canonicalInput)
+      : {
+          outcome: 'created' as const,
+          value: await this.options.storage.upsertRole(canonicalInput),
+        };
+    if (result.outcome === 'conflict') {
+      throw new RbacConfigError({ operation: 'createRole', reason: result.reason ?? 'conflict' });
+    }
+    const role = this.requireMutationValue('createRole', result);
+    if (result.outcome === 'no-op') return role;
+    const created = result.outcome === 'created';
+    if (!created && result.outcome !== 'updated') {
+      throw new RbacConfigError({ operation: 'createRole', reason: 'invalid_mutation_outcome' });
+    }
     await this.logAudit({
-      type: 'rbac.role.created',
+      type: created ? 'rbac.role.created' : 'rbac.role.updated',
       tenantId: role.tenantId,
       metadata: { roleId: role.id, roleKey: role.key },
     });
     await this.publishChange({
-      type: 'role.created',
+      type: created ? 'role.created' : 'role.updated',
       tenantId: role.tenantId,
       roleId: role.id,
       roleKey: role.key,
@@ -168,7 +183,20 @@ export class RbacService {
         ? { permissions: normalizePermissions(input.permissions) }
         : {}),
     };
-    const role = await this.options.storage.upsertRole(canonicalInput);
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.updateRole(canonicalInput)
+      : {
+          outcome: 'updated' as const,
+          value: await this.options.storage.upsertRole(canonicalInput),
+        };
+    if (result.outcome === 'conflict' && result.reason === 'role_not_found') {
+      throw new RbacRoleNotFoundError({ roleId: canonicalInput.roleId });
+    }
+    const role = this.requireMutationValue('updateRole', result);
+    if (result.outcome === 'no-op') return role;
+    if (result.outcome !== 'updated') {
+      throw new RbacConfigError({ operation: 'updateRole', reason: 'invalid_mutation_outcome' });
+    }
     await this.logAudit({
       type: 'rbac.role.updated',
       tenantId: role.tenantId,
@@ -187,7 +215,13 @@ export class RbacService {
 
   async deleteRole(input: DeleteRoleInput): Promise<void> {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
-    await this.options.storage.deleteRole({ roleId });
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.deleteRole({ roleId })
+      : await this.legacyMutation(() => this.options.storage.deleteRole({ roleId }), 'deleted');
+    if (result.outcome === 'no-op' || result.outcome === 'conflict') return;
+    if (result.outcome !== 'deleted') {
+      throw new RbacConfigError({ operation: 'deleteRole', reason: 'invalid_mutation_outcome' });
+    }
     await this.logAudit({
       type: 'rbac.role.deleted',
       metadata: { roleId },
@@ -201,7 +235,19 @@ export class RbacService {
   async grantPermission(input: GrantPermissionInput): Promise<void> {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const permission = normalizePermission(input.permission);
-    await this.options.storage.grantPermission({ roleId, permission });
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.grantPermission({ roleId, permission })
+      : await this.legacyMutation(
+          () => this.options.storage.grantPermission({ roleId, permission }),
+          'created',
+        );
+    if (result.outcome === 'no-op' || result.outcome === 'conflict') return;
+    if (result.outcome !== 'created' && result.outcome !== 'updated') {
+      throw new RbacConfigError({
+        operation: 'grantPermission',
+        reason: 'invalid_mutation_outcome',
+      });
+    }
     await this.logAudit({
       type: 'rbac.permission.granted',
       metadata: { roleId, permission },
@@ -216,7 +262,19 @@ export class RbacService {
   async revokePermission(input: RevokePermissionInput): Promise<void> {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const permission = normalizePermission(input.permission);
-    await this.options.storage.revokePermission({ roleId, permission });
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.revokePermission({ roleId, permission })
+      : await this.legacyMutation(
+          () => this.options.storage.revokePermission({ roleId, permission }),
+          'deleted',
+        );
+    if (result.outcome === 'no-op' || result.outcome === 'conflict') return;
+    if (result.outcome !== 'deleted' && result.outcome !== 'updated') {
+      throw new RbacConfigError({
+        operation: 'revokePermission',
+        reason: 'invalid_mutation_outcome',
+      });
+    }
     await this.logAudit({
       type: 'rbac.permission.revoked',
       metadata: { roleId, permission },
@@ -241,7 +299,20 @@ export class RbacService {
       expiresAt: canonicalInput.expiresAt,
       metadata: canonicalInput.metadata,
     };
-    const binding = await this.options.storage.assignRole(storageInput);
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.assignRole(storageInput)
+      : {
+          outcome: 'created' as const,
+          value: await this.options.storage.assignRole(storageInput),
+        };
+    if (result.outcome === 'conflict' && result.reason === 'role_not_found') {
+      throw new RbacRoleNotFoundError({ roleId });
+    }
+    const binding = this.requireMutationValue('assignRole', result);
+    if (result.outcome === 'no-op') return binding;
+    if (result.outcome !== 'created' && result.outcome !== 'updated') {
+      throw new RbacConfigError({ operation: 'assignRole', reason: 'invalid_mutation_outcome' });
+    }
     await this.logAudit({
       type: 'rbac.role.assigned',
       tenantId: binding.tenantId,
@@ -276,7 +347,14 @@ export class RbacService {
     if (input.revokedAt !== undefined) {
       assertFiniteDate(input.revokedAt, 'revokeRole', 'revokedAt');
     }
-    await this.options.storage.revokeRole({ ...input, bindingId });
+    const storageInput = { ...input, bindingId };
+    const result = this.options.storage.mutationResults
+      ? await this.options.storage.mutationResults.revokeRole(storageInput)
+      : await this.legacyMutation(() => this.options.storage.revokeRole(storageInput), 'updated');
+    if (result.outcome === 'no-op' || result.outcome === 'conflict') return;
+    if (result.outcome !== 'updated' && result.outcome !== 'deleted') {
+      throw new RbacConfigError({ operation: 'revokeRole', reason: 'invalid_mutation_outcome' });
+    }
     await this.logAudit({
       type: 'rbac.role.revoked',
       metadata: { bindingId },
@@ -1047,6 +1125,25 @@ export class RbacService {
     } catch {
       // Audit logging must not change RBAC write or authorization behavior.
     }
+  }
+
+  private requireMutationValue<T>(operation: string, result: RbacMutationResult<T>): T {
+    if (result.value !== undefined) return result.value;
+
+    throw new RbacConfigError({
+      operation,
+      reason: result.reason ?? 'mutation_result_missing_value',
+      outcome: result.outcome,
+    });
+  }
+
+  private async legacyMutation(
+    mutation: () => Promise<void>,
+    outcome: 'created' | 'updated' | 'deleted',
+  ): Promise<RbacMutationResult> {
+    await mutation();
+
+    return { outcome };
   }
 
   private async publishChange(event: Omit<RbacPolicyChangeEvent, 'occurredAt'>): Promise<void> {

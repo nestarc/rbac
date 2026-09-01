@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RbacConfigError } from '../../src';
 import { user } from '../fixtures/subjects';
-import type { RbacResourceRef, RbacRole, RbacStorage } from '../../src';
+import type {
+  RbacResourceRef,
+  RbacRole,
+  RbacStorage,
+  RbacStorageMutationCapability,
+} from '../../src';
 
 interface RbacStorageContractOptions {
   createStorage: () => RbacStorage;
@@ -27,6 +32,12 @@ function metadataNestedValue(bindingMetadata: Record<string, unknown> | undefine
   const nested = bindingMetadata?.nested as { value: string } | undefined;
 
   return nested?.value ?? '';
+}
+
+function mutationResults(storage: RbacStorage): RbacStorageMutationCapability {
+  expect(storage.mutationResults).toBeDefined();
+
+  return storage.mutationResults as RbacStorageMutationCapability;
 }
 
 export function runRbacStorageContract({ createStorage }: RbacStorageContractOptions): void {
@@ -80,6 +91,76 @@ export function runRbacStorageContract({ createStorage }: RbacStorageContractOpt
           }),
         ]),
       );
+    });
+
+    it('reports committed and idempotent mutation outcomes without upserting missing updates', async () => {
+      const mutations = mutationResults(storage);
+      const createInput = {
+        tenantId,
+        key: 'outcome_writer',
+        permissions: ['reports.read'],
+      };
+      const created = await mutations.createRole(createInput);
+      expect(created).toMatchObject({ outcome: 'created' });
+      expect(created.value).toBeDefined();
+
+      await expect(mutations.createRole(createInput)).resolves.toMatchObject({ outcome: 'no-op' });
+      await expect(
+        mutations.createRole({ ...createInput, name: 'Outcome writer' }),
+      ).resolves.toMatchObject({ outcome: 'updated' });
+      await expect(
+        mutations.updateRole({ roleId: 'missing_outcome_role', name: 'Missing' }),
+      ).resolves.toEqual({ outcome: 'conflict', reason: 'role_not_found' });
+      await expect(storage.listRoles({})).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 'missing_outcome_role' })]),
+      );
+      await expect(
+        mutations.updateRole({ roleId: created.value?.id ?? '', name: 'Outcome writer' }),
+      ).resolves.toMatchObject({ outcome: 'no-op' });
+
+      const roleId = created.value?.id ?? '';
+      await expect(
+        mutations.grantPermission({ roleId, permission: 'reports.read' }),
+      ).resolves.toEqual({ outcome: 'no-op' });
+      await expect(
+        mutations.grantPermission({ roleId, permission: 'reports.export' }),
+      ).resolves.toEqual({ outcome: 'created' });
+      await expect(
+        mutations.grantPermission({ roleId, permission: 'reports.export' }),
+      ).resolves.toEqual({ outcome: 'no-op' });
+      await expect(
+        mutations.revokePermission({ roleId, permission: 'reports.missing' }),
+      ).resolves.toEqual({ outcome: 'no-op' });
+      await expect(
+        mutations.revokePermission({ roleId, permission: 'reports.export' }),
+      ).resolves.toEqual({ outcome: 'deleted' });
+      await expect(
+        mutations.revokePermission({ roleId, permission: 'reports.export' }),
+      ).resolves.toEqual({ outcome: 'no-op' });
+
+      const assignment = {
+        tenantId,
+        subject: user('outcome_user', tenantId),
+        roleId,
+      };
+      const assigned = await mutations.assignRole(assignment);
+      expect(assigned).toMatchObject({ outcome: 'created' });
+      await expect(mutations.assignRole(assignment)).resolves.toMatchObject({ outcome: 'no-op' });
+      await expect(mutations.revokeRole({ bindingId: 'missing_outcome_binding' })).resolves.toEqual(
+        { outcome: 'no-op' },
+      );
+      await expect(mutations.revokeRole({ bindingId: assigned.value?.id ?? '' })).resolves.toEqual({
+        outcome: 'updated',
+      });
+      await expect(mutations.revokeRole({ bindingId: assigned.value?.id ?? '' })).resolves.toEqual({
+        outcome: 'no-op',
+      });
+
+      await expect(mutations.deleteRole({ roleId: 'missing_outcome_role' })).resolves.toEqual({
+        outcome: 'no-op',
+      });
+      await expect(mutations.deleteRole({ roleId })).resolves.toEqual({ outcome: 'deleted' });
+      await expect(mutations.deleteRole({ roleId })).resolves.toEqual({ outcome: 'no-op' });
     });
 
     it('grants and revokes permissions idempotently', async () => {

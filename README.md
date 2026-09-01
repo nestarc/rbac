@@ -203,6 +203,33 @@ binding, resource, tenant, and permission columns; resolve any collisions that
 trimming would create; then migrate them to canonical values. Non-canonical
 effective rows fail closed during authorization rather than being silently aliased.
 
+## Mutation Outcomes And Events
+
+Both built-in storage adapters expose the optional `RbacStorage.mutationResults`
+capability. `RbacService` uses its `created`, `updated`, `deleted`, `no-op`, and
+`conflict` outcomes so each committed write attempts at most one audit event and
+one policy-change event. Idempotent duplicates, missing deletes/revocations, and
+other no-ops do not emit success events. `updateRole()` never creates a missing
+role and throws `RbacRoleNotFoundError`; the legacy storage-level `upsertRole()`
+remains the explicit upsert API.
+
+`createRole()` keeps its existing upsert-by-tenant-and-key behavior. A new role
+emits `role.created`, a changed existing role emits `role.updated`, and an
+identical duplicate emits neither. Duplicate active assignments and already
+granted permissions are also no-ops; reactivating an expired assignment is an
+update.
+
+Custom adapters should implement `RbacStorageMutationCapability` through the
+optional property. Adapters without it remain source-compatible in 0.2.x, but
+use a deprecated result-less fallback: RBAC must assume a resolved mutation
+changed storage and may emit a success event for an adapter-internal no-op. This
+fallback is a 0.3 removal candidate.
+
+Audit and change delivery remains best effort after storage commit. Logger or
+publisher failures do not roll back writes, and RBAC does not promise external
+exactly-once delivery, atomic storage-plus-publisher transactions, or a
+transactional outbox.
+
 ## Resource-Scoped Roles
 
 Resource-scoped bindings let one subject hold a role only for a specific object, such

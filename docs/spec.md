@@ -402,13 +402,13 @@ Evaluation sequence:
 
 HTTP mapping:
 
-| Case | HTTP status | Code |
-|---|---:|---|
-| Missing subject | 401 | `RBAC_SUBJECT_MISSING` |
-| Missing required tenant | 403 | `RBAC_TENANT_MISSING` |
-| Missing required resource | 403 | `RBAC_RESOURCE_MISSING` |
-| Permission denied | 403 | `RBAC_PERMISSION_DENIED` |
-| Storage failure with `storageErrors: 'throw'` | 500 | `RBAC_STORAGE_ERROR` |
+| Case                                          | HTTP status | Code                     |
+| --------------------------------------------- | ----------: | ------------------------ |
+| Missing subject                               |         401 | `RBAC_SUBJECT_MISSING`   |
+| Missing required tenant                       |         403 | `RBAC_TENANT_MISSING`    |
+| Missing required resource                     |         403 | `RBAC_RESOURCE_MISSING`  |
+| Permission denied                             |         403 | `RBAC_PERMISSION_DENIED` |
+| Storage failure with `storageErrors: 'throw'` |         500 | `RBAC_STORAGE_ERROR`     |
 
 Guard constraints:
 
@@ -559,6 +559,7 @@ Input validation:
 
 ```ts
 export interface RbacStorage {
+  readonly mutationResults?: RbacStorageMutationCapability;
   findRole(input: FindRoleInput): Promise<RbacRole | null>;
   upsertRole(input: UpsertRoleInput): Promise<RbacRole>;
   deleteRole(input: DeleteRoleInput): Promise<void>;
@@ -572,7 +573,29 @@ export interface RbacStorage {
   listBindings(input: ListBindingsStorageInput): Promise<RbacRoleBinding[]>;
 
   listEffectiveRoles(input: ListEffectiveRolesInput): Promise<RbacEffectiveRole[]>;
-  listEffectivePermissions(input: ListEffectivePermissionsInput): Promise<RbacEffectivePermission[]>;
+  listEffectivePermissions(
+    input: ListEffectivePermissionsInput,
+  ): Promise<RbacEffectivePermission[]>;
+}
+```
+
+```ts
+export type RbacMutationOutcome = 'created' | 'updated' | 'deleted' | 'no-op' | 'conflict';
+
+export interface RbacMutationResult<T = undefined> {
+  outcome: RbacMutationOutcome;
+  value?: T;
+  reason?: 'role_not_found' | 'duplicate';
+}
+
+export interface RbacStorageMutationCapability {
+  createRole(input: CreateRoleInput): Promise<RbacMutationResult<RbacRole>>;
+  updateRole(input: UpdateRoleInput): Promise<RbacMutationResult<RbacRole>>;
+  deleteRole(input: DeleteRoleInput): Promise<RbacMutationResult>;
+  grantPermission(input: GrantPermissionInput): Promise<RbacMutationResult>;
+  revokePermission(input: RevokePermissionInput): Promise<RbacMutationResult>;
+  assignRole(input: AssignRoleStorageInput): Promise<RbacMutationResult<RbacRoleBinding>>;
+  revokeRole(input: RevokeRoleStorageInput): Promise<RbacMutationResult>;
 }
 ```
 
@@ -604,6 +627,16 @@ export interface RbacEffectivePermission {
 Contract requirements:
 
 - Write operations are idempotent where PRD requires idempotency.
+- Built-in and outcome-capable adapters report a committed change separately
+  from `no-op` and `conflict`; only committed changes produce success audit and
+  policy-change events.
+- `updateRole()` does not create a missing role. `RbacStorage.upsertRole()` remains
+  the explicit legacy storage upsert.
+- Result-less custom adapters remain compatible in 0.2.x through a deprecated
+  best-effort fallback, which cannot suppress events for adapter-internal no-ops.
+- Audit and policy-change delivery is attempted after storage commit. It is not
+  transactionally atomic with storage and does not guarantee external exactly-once
+  delivery.
 - Effective roles and permissions only include active bindings.
 - Expired and revoked bindings are never returned as effective roles or permissions.
 - Tenant and resource filters are honored by the adapter and rechecked by service logic.
@@ -848,15 +881,15 @@ Build a small Nest test app with:
 
 Expected matrix:
 
-| Scenario | Expected |
-|---|---:|
-| no subject | 401 |
-| subject but no tenant on tenant-required route | 403 |
-| subject with wrong tenant role | 403 |
-| viewer role with read permission | 200 |
-| viewer role with write request | 403 |
-| matching project resource binding | 200 or 201 |
-| different project resource binding | 403 |
+| Scenario                                       |   Expected |
+| ---------------------------------------------- | ---------: |
+| no subject                                     |        401 |
+| subject but no tenant on tenant-required route |        403 |
+| subject with wrong tenant role                 |        403 |
+| viewer role with read permission               |        200 |
+| viewer role with write request                 |        403 |
+| matching project resource binding              | 200 or 201 |
+| different project resource binding             |        403 |
 
 Coverage target:
 

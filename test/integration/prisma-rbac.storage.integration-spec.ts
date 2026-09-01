@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RbacService } from '../../src';
 import { PrismaRbacStorage } from '../../src/prisma';
 import type { PrismaRbacClientLike } from '../../src/prisma';
 import { runRbacStorageContract } from '../contract/storage-contract';
@@ -15,13 +16,10 @@ interface IntegrationPrismaClient extends PrismaRbacClientLike {
   $disconnect(): Promise<void>;
 }
 
-type PrismaClientConstructor = new (
-  options?: Record<string, unknown>,
-) => IntegrationPrismaClient;
+type PrismaClientConstructor = new (options?: Record<string, unknown>) => IntegrationPrismaClient;
 
 const createPrismaClient = (): IntegrationPrismaClient => {
-  const connectionString =
-    databaseUrl ?? 'postgresql://rbac:rbac@127.0.0.1:5432/rbac_test';
+  const connectionString = databaseUrl ?? 'postgresql://rbac:rbac@127.0.0.1:5432/rbac_test';
 
   const { PrismaClient } = prismaClientModule as unknown as {
     PrismaClient: PrismaClientConstructor;
@@ -92,18 +90,44 @@ describePrisma('PrismaRbacStorage', () => {
 
   it('handles concurrent duplicate role upserts idempotently', async () => {
     const storage = new PrismaRbacStorage(prisma);
-    const roles = await Promise.all(
+    const results = await Promise.all(
       Array.from({ length: 8 }, () =>
-        storage.upsertRole({
+        storage.mutationResults.createRole({
           tenantId: 'tenant_1',
           key: 'concurrent_operator',
           permissions: ['projects.update'],
         }),
       ),
     );
+    const roles = results.flatMap((result) => (result.value ? [result.value] : []));
 
+    expect(results.filter((result) => result.outcome === 'created')).toHaveLength(1);
+    expect(results.filter((result) => result.outcome === 'no-op')).toHaveLength(7);
     expect(new Set(roles.map((role) => role.id)).size).toBe(1);
     await expect(storage.listRoles({ tenantId: 'tenant_1' })).resolves.toHaveLength(1);
+  });
+
+  it('emits one service audit and change event for concurrent duplicate role creates', async () => {
+    const storage = new PrismaRbacStorage(prisma);
+    const log = vi.fn();
+    const publish = vi.fn();
+    const service = new RbacService({
+      storage,
+      auditLogger: { log },
+      changePublisher: { publish },
+    });
+    const input = {
+      tenantId: 'tenant_1',
+      key: 'concurrent_event_operator',
+      permissions: ['projects.update'],
+    };
+
+    await Promise.all(Array.from({ length: 8 }, () => service.createRole(input)));
+
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(expect.objectContaining({ type: 'rbac.role.created' }));
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'role.created' }));
   });
 
   it('handles concurrent duplicate role assignments idempotently', async () => {
@@ -114,9 +138,9 @@ describePrisma('PrismaRbacStorage', () => {
       permissions: ['projects.update'],
     });
     const subject = { type: 'user', id: 'user_concurrent', tenantId: 'tenant_1' };
-    const bindings = await Promise.all(
+    const results = await Promise.all(
       Array.from({ length: 8 }, () =>
-        storage.assignRole({
+        storage.mutationResults.assignRole({
           tenantId: 'tenant_1',
           subject,
           roleId: role.id,
@@ -124,9 +148,37 @@ describePrisma('PrismaRbacStorage', () => {
         }),
       ),
     );
+    const bindings = results.flatMap((result) => (result.value ? [result.value] : []));
 
+    expect(results.filter((result) => result.outcome === 'created')).toHaveLength(1);
+    expect(results.filter((result) => result.outcome === 'no-op')).toHaveLength(7);
     expect(new Set(bindings.map((binding) => binding.id)).size).toBe(1);
     await expect(storage.listBindings({ tenantId: 'tenant_1', subject })).resolves.toHaveLength(1);
+  });
+
+  it('reports one update for concurrent duplicate role revocations', async () => {
+    const storage = new PrismaRbacStorage(prisma);
+    const role = await storage.upsertRole({
+      tenantId: 'tenant_1',
+      key: 'concurrent_revocation_operator',
+      permissions: [],
+    });
+    const binding = await storage.assignRole({
+      tenantId: 'tenant_1',
+      subject: { type: 'user', id: 'user_concurrent_revoke', tenantId: 'tenant_1' },
+      roleId: role.id,
+    });
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        storage.mutationResults.revokeRole({
+          bindingId: binding.id,
+          revokedAt: new Date('2026-01-15T00:00:00.000Z'),
+        }),
+      ),
+    );
+
+    expect(results.filter((result) => result.outcome === 'updated')).toHaveLength(1);
+    expect(results.filter((result) => result.outcome === 'no-op')).toHaveLength(7);
   });
 
   it('round-trips metadata objects that look like adapter markers', async () => {
