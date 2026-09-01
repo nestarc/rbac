@@ -40,6 +40,12 @@ import {
   normalizePermission,
   normalizePermissions,
 } from './utils';
+import {
+  assertCanInput,
+  assertFiniteDate,
+  isRbacResourceRef,
+  isRbacSubject,
+} from './utils/runtime-validation';
 
 interface ResolvedTenant {
   tenantId: string | null;
@@ -63,10 +69,6 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
 }
 
-function hasSubject(subject: RbacSubject | undefined): subject is RbacSubject {
-  return subject !== undefined && isNonEmptyString(subject.type) && isNonEmptyString(subject.id);
-}
-
 function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
@@ -81,7 +83,7 @@ export class RbacService {
 
   async can(input: RbacCanInput): Promise<RbacDecision> {
     this.validateCanInput(input);
-    const subject = hasSubject(input.subject) ? input.subject : undefined;
+    const subject = isRbacSubject(input.subject) ? input.subject : undefined;
     const tenant = this.resolveTenant(input, subject);
 
     if (!subject) {
@@ -243,6 +245,9 @@ export class RbacService {
 
   async revokeRole(input: RevokeRoleInput): Promise<void> {
     assertNonEmptyString(input.bindingId, 'bindingId');
+    if (input.revokedAt !== undefined) {
+      assertFiniteDate(input.revokedAt, 'revokeRole', 'revokedAt');
+    }
     await this.options.storage.revokeRole(input);
     await this.logAudit({
       type: 'rbac.role.revoked',
@@ -281,8 +286,9 @@ export class RbacService {
       });
     }
 
+    const now = this.resolveNow(input);
     try {
-      const roles = await this.listEffectiveRolesForTenant(input, subject, tenantId);
+      const roles = await this.listEffectiveRolesForTenant(input, subject, tenantId, now);
       const matchedRoleKeys = unique(
         roles.filter((role) => role.roleKey === roleKey).map((role) => role.roleKey),
       );
@@ -323,11 +329,13 @@ export class RbacService {
       });
     }
 
+    const now = this.resolveNow(input);
     try {
       const effectivePermissions = await this.listEffectivePermissionsForTenant(
         input,
         subject,
         tenantId,
+        now,
       );
       const matches = this.matchPermissions(effectivePermissions, requirement.permissions);
       const allowed =
@@ -468,16 +476,7 @@ export class RbacService {
   }
 
   private validateCanInput(input: RbacCanInput): void {
-    const hasRoleKey = 'roleKey' in input && typeof input.roleKey === 'string';
-    const hasPermission =
-      ('permission' in input && input.permission !== undefined) ||
-      ('permissions' in input && input.permissions !== undefined);
-
-    if (hasRoleKey && hasPermission) {
-      throw new RbacConfigError({
-        reason: 'can() accepts exactly one requirement family per call',
-      });
-    }
+    assertCanInput(input);
   }
 
   private sanitizeDecision(decision: RbacDecision): RbacDecision {
@@ -529,9 +528,15 @@ export class RbacService {
     if (hasRoleKey) {
       assertNonEmptyString(input.roleKey, 'roleKey');
     }
-    if (input.resource !== undefined) {
-      assertNonEmptyString(input.resource.type, 'resource.type');
-      assertNonEmptyString(input.resource.id, 'resource.id');
+    if (input.resource !== undefined && !isRbacResourceRef(input.resource)) {
+      throw new RbacConfigError({
+        operation: 'assignRole',
+        field: 'resource',
+        reason: 'invalid_runtime_shape',
+      });
+    }
+    if (input.expiresAt !== undefined && input.expiresAt !== null) {
+      assertFiniteDate(input.expiresAt, 'assignRole', 'expiresAt');
     }
   }
 
@@ -644,9 +649,13 @@ export class RbacService {
   }
 
   private validateSubjectForWrite(subject: RbacSubject): void {
-    assertNonEmptyString(subject?.type, 'subject.type');
-    assertNonEmptyString(subject?.id, 'subject.id');
-    this.validateOptionalTenantId(subject?.tenantId, 'subject.tenantId');
+    if (!isRbacSubject(subject)) {
+      throw new RbacConfigError({
+        operation: 'assignRole',
+        field: 'subject',
+        reason: 'invalid_runtime_shape',
+      });
+    }
   }
 
   private validateOptionalTenantId(tenantId: string | null | undefined, name = 'tenantId'): void {
@@ -660,7 +669,10 @@ export class RbacService {
   }
 
   private resolveNow(input: RbacCanInput): Date {
-    return input.now ?? this.options.now?.() ?? new Date();
+    const now = input.now ?? this.options.now?.() ?? new Date();
+    assertFiniteDate(now, 'can', 'now');
+
+    return now;
   }
 
   private handleStorageError(
@@ -810,8 +822,8 @@ export class RbacService {
     input: RbacCanInput,
     subject: RbacSubject,
     tenantId: string | null,
+    now: Date,
   ): Promise<RbacEffectiveRole[]> {
-    const now = this.resolveNow(input);
     const tenantRoles = await this.options.storage.listEffectiveRoles({
       subject,
       tenantId,
@@ -846,8 +858,8 @@ export class RbacService {
     input: RbacCanInput,
     subject: RbacSubject,
     tenantId: string | null,
+    now: Date,
   ): Promise<RbacEffectivePermission[]> {
-    const now = this.resolveNow(input);
     const tenantPermissions = await this.options.storage.listEffectivePermissions({
       subject,
       tenantId,

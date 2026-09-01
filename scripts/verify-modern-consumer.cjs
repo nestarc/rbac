@@ -112,6 +112,46 @@ try {
   runCommand(process.execPath, ['smoke.cjs'], consumerDirectory, 'CommonJS runtime smoke');
 
   fs.writeFileSync(
+    path.join(consumerDirectory, 'runtime-validation-smoke.cjs'),
+    [
+      "const { RbacConfigError, RbacService } = require('@nestarc/rbac');",
+      'const storage = {',
+      "  listEffectiveRoles: () => { throw new Error('invalid input reached storage'); },",
+      "  listEffectivePermissions: () => { throw new Error('invalid input reached storage'); },",
+      '};',
+      'const service = new RbacService({ storage });',
+      'const subject = { type: \'user\', id: \'user_1\', tenantId: \'tenant_1\' };',
+      'const inputs = [',
+      "  { subject, tenantId: 'tenant_1', permission: 'reports.read', mode: 'sometimes' },",
+      "  { subject, tenantId: 'tenant_1', permission: 'reports.read', tenantMode: 'sometimes' },",
+      "  { subject, tenantId: 'tenant_1', permission: 'reports.read', now: new Date('invalid') },",
+      "  { subject: null, tenantId: 'tenant_1', permission: 'reports.read' },",
+      "  { subject, tenantId: 'tenant_1', permission: 'reports.read', resource: { type: '', id: '1' } },",
+      '];',
+      '(async () => {',
+      '  for (const input of inputs) {',
+      '    try {',
+      '      await service.can(input);',
+      "      throw new Error('invalid CommonJS runtime input was accepted');",
+      '    } catch (error) {',
+      '      if (!(error instanceof RbacConfigError)) throw error;',
+      '    }',
+      '  }',
+      '})().catch((error) => {',
+      '  console.error(error);',
+      '  process.exitCode = 1;',
+      '});',
+      '',
+    ].join('\n'),
+  );
+  runCommand(
+    process.execPath,
+    ['runtime-validation-smoke.cjs'],
+    consumerDirectory,
+    'CommonJS runtime validation smoke',
+  );
+
+  fs.writeFileSync(
     path.join(consumerDirectory, 'api-keys-smoke.cjs'),
     [
       "require('reflect-metadata');",
@@ -174,6 +214,41 @@ try {
     ].join('\n'),
   );
   runCommand(process.execPath, ['smoke.mjs'], consumerDirectory, 'ESM runtime smoke');
+
+  fs.writeFileSync(
+    path.join(consumerDirectory, 'runtime-validation-smoke.mjs'),
+    [
+      "import { RbacConfigError, RbacService } from '@nestarc/rbac';",
+      'const storage = {',
+      "  listEffectiveRoles: () => { throw new Error('invalid input reached storage'); },",
+      "  listEffectivePermissions: () => { throw new Error('invalid input reached storage'); },",
+      '};',
+      'const service = new RbacService({ storage });',
+      'const subject = { type: \'user\', id: \'user_1\', tenantId: \'tenant_1\' };',
+      'const inputs = [',
+      "  { subject, tenantId: 'tenant_1', permissions: ['reports.read'], mode: 'sometimes' },",
+      "  { subject, tenantId: 'tenant_1', permission: 'reports.read', tenantMode: 'sometimes' },",
+      "  { subject, tenantId: 'tenant_1', permission: 'reports.read', now: '2026-01-15' },",
+      "  { subject: [], tenantId: 'tenant_1', permission: 'reports.read' },",
+      "  { subject, tenantId: 'tenant_1', roleKey: 'owner', resource: { type: 'project', id: 42 } },",
+      '];',
+      'for (const input of inputs) {',
+      '  try {',
+      '    await service.can(input);',
+      "    throw new Error('invalid ESM runtime input was accepted');",
+      '  } catch (error) {',
+      '    if (!(error instanceof RbacConfigError)) throw error;',
+      '  }',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  runCommand(
+    process.execPath,
+    ['runtime-validation-smoke.mjs'],
+    consumerDirectory,
+    'ESM runtime validation smoke',
+  );
 
   fs.writeFileSync(
     path.join(consumerDirectory, 'smoke.ts'),

@@ -8,6 +8,7 @@ import {
   Can,
   InMemoryRbacStorage,
   RBAC_OPTIONS,
+  RBAC_REQUIREMENTS_METADATA,
   RBAC_STORAGE,
   RBAC_SUBJECT_REQUEST_KEY,
   RequireRole,
@@ -105,6 +106,109 @@ describe('RbacGuard', () => {
       },
     });
   };
+
+  const expectConfigError = async (promise: Promise<unknown>) => {
+    await expect(promise).rejects.toMatchObject({
+      response: {
+        message: 'RBAC configuration error',
+        code: 'RBAC_CONFIG_ERROR',
+      },
+    });
+  };
+
+  it.each([
+    [
+      'invalid permission mode',
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'sometimes',
+        options: {},
+      },
+    ],
+    [
+      'invalid tenant mode',
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'any',
+        options: { tenant: 'sometimes' },
+      },
+    ],
+    ['unknown requirement kind', { kind: 'unknown', options: {} }],
+    [
+      'empty role key',
+      {
+        kind: 'role',
+        roleKey: ' ',
+        options: {},
+      },
+    ],
+    [
+      'malformed resource declaration',
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'any',
+        options: { resource: { type: 'project', idParam: '' } },
+      },
+    ],
+    [
+      'empty permission requirement',
+      {
+        kind: 'permission',
+        permissions: [],
+        mode: 'all',
+        options: {},
+      },
+    ],
+    [
+      'inconsistent permission modes',
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'any',
+        options: { mode: 'all' },
+      },
+    ],
+    [
+      'invalid requirement options',
+      {
+        kind: 'permission',
+        permissions: ['reports.read'],
+        mode: 'any',
+        options: null,
+      },
+    ],
+  ])('rejects %s metadata before invoking the service', async (_label, requirement) => {
+    const can = vi.fn();
+    class ReportsController {
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    Reflect.defineMetadata(RBAC_REQUIREMENTS_METADATA, [requirement], handler);
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expectConfigError(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    );
+    expect(can).not.toHaveBeenCalled();
+  });
 
   it('allows routes without RBAC metadata by default', async () => {
     class ReportsController {
@@ -1254,7 +1358,7 @@ describe('RbacGuard', () => {
     });
   });
 
-  it('ignores unsupported resource metadata shapes defensively', async () => {
+  it('rejects unsupported resource metadata shapes defensively', async () => {
     const can = vi.fn((input: RbacCanInput) => {
       void input;
       return Promise.resolve({
@@ -1285,17 +1389,10 @@ describe('RbacGuard', () => {
       ],
     }).compile();
 
-    await expect(
+    await expectConfigError(
       moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
-    ).resolves.toBe(true);
-
-    expect(can.mock.calls[0]?.[0]).toEqual({
-      subject,
-      tenantId: 'tenant_1',
-      tenantMode: 'optional',
-      permissions: ['reports.read'],
-      mode: 'any',
-    });
+    );
+    expect(can).not.toHaveBeenCalled();
   });
 
   it('maps missing tenant decisions to coded forbidden responses', async () => {

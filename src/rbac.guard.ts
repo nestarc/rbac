@@ -10,6 +10,7 @@ import {
   mapRbacErrorToHttpException,
   RbacError,
   RbacPermissionDeniedError,
+  RbacConfigError,
   RbacResourceMissingError,
   RbacStorageError,
   RbacSubjectMissingError,
@@ -21,6 +22,7 @@ import {
   type RbacHttpTenantSource,
 } from './resolvers/default-http-tenant.resolver';
 import { RbacService } from './rbac.service';
+import { assertRbacRequirements, isRbacSubject } from './utils/runtime-validation';
 import type {
   RbacBuiltInResourceDeclaration,
   RbacAuditEvent,
@@ -51,9 +53,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim() !== '';
-
-const hasSubject = (subject: RbacSubject | undefined): subject is RbacSubject =>
-  subject !== undefined && isNonEmptyString(subject.type) && isNonEmptyString(subject.id);
 
 const auditResource = (resource: RbacResourceRef | undefined): RbacResourceRef | undefined =>
   resource ? { type: resource.type, id: resource.id } : undefined;
@@ -100,7 +99,7 @@ export class RbacGuard implements CanActivate {
     }
 
     const requirements =
-      this.reflector.getAllAndMerge<RbacRequirement[]>(RBAC_REQUIREMENTS_METADATA, targets) ?? [];
+      this.reflector.getAllAndMerge<unknown[]>(RBAC_REQUIREMENTS_METADATA, targets) ?? [];
     if (requirements.length === 0) {
       if (this.options.requireMetadata) {
         await this.logAudit({
@@ -111,6 +110,14 @@ export class RbacGuard implements CanActivate {
       }
 
       return true;
+    }
+    try {
+      assertRbacRequirements(requirements);
+    } catch (error) {
+      if (error instanceof RbacConfigError) {
+        throw mapRbacErrorToHttpException(error);
+      }
+      throw error;
     }
 
     const subject = await this.resolveSubject(context);
@@ -152,7 +159,7 @@ export class RbacGuard implements CanActivate {
     const resolver = this.options.subjectResolver ?? defaultHttpSubjectResolver();
     const subject = await resolver(context);
 
-    if (!hasSubject(subject)) {
+    if (!isRbacSubject(subject)) {
       await this.logAudit({
         type: 'rbac.permission.denied',
         metadata: { reason: 'denied_subject_missing' },

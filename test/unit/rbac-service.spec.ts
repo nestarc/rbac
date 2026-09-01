@@ -591,6 +591,155 @@ describe('RbacService', () => {
     });
   });
 
+  it('rejects an invalid runtime permission mode instead of relaxing it to any', async () => {
+    await createAssignedRole('runtime_reader', ['reports.read']);
+    const decision = service.can({
+      subject: user('user_1', tenantId),
+      tenantId,
+      permissions: ['reports.read', 'reports.write'],
+      mode: 'some',
+      resource: project,
+      now,
+    } as unknown as RbacCanInput);
+
+    await expect(decision).rejects.toBeInstanceOf(RbacConfigError);
+    await expect(decision).rejects.toMatchObject({
+      details: { operation: 'can', field: 'mode' },
+    });
+  });
+
+  it('rejects an invalid runtime tenant mode instead of relaxing it to optional', async () => {
+    const globalRole = await service.createRole({
+      tenantId: null,
+      key: 'runtime_global_reader',
+      permissions: ['system.read'],
+    });
+    await service.assignRole({
+      tenantId: null,
+      subject: user('runtime_global_user'),
+      roleId: globalRole.id,
+    });
+    const decision = service.can({
+      subject: user('runtime_global_user'),
+      permission: 'system.read',
+      tenantMode: 'sometimes',
+      now,
+    } as unknown as RbacCanInput);
+
+    await expect(decision).rejects.toBeInstanceOf(RbacConfigError);
+    await expect(decision).rejects.toMatchObject({
+      details: { operation: 'can', field: 'tenantMode' },
+    });
+  });
+
+  it.each([
+    ['non-object input', null, 'input'],
+    ['missing requirement family', { subject: user('user_1', tenantId) }, 'requirement'],
+    [
+      'non-string tenant id',
+      { subject: user('user_1', tenantId), tenantId: 42, permission: 'reports.read' },
+      'tenantId',
+    ],
+    [
+      'non-string permission',
+      { subject: user('user_1', tenantId), tenantId, permission: 42 },
+      'permission',
+    ],
+    [
+      'malformed permission array',
+      { subject: user('user_1', tenantId), tenantId, permissions: ['reports.read', null] },
+      'permissions',
+    ],
+    [
+      'mode on a role requirement',
+      { subject: user('user_1', tenantId), tenantId, roleKey: 'owner', mode: 'any' },
+      'mode',
+    ],
+  ])('rejects a %s runtime requirement shape', async (_label, input, field) => {
+    await expect(service.can(input as unknown as RbacCanInput)).rejects.toMatchObject({
+      code: 'RBAC_CONFIG_ERROR',
+      details: { operation: 'can', field },
+    });
+  });
+
+  it.each([
+    ['invalid Date', new Date('invalid')],
+    ['non-Date value', '2026-01-15T00:00:00.000Z'],
+  ])('rejects an invalid runtime now %s before reading storage', async (_label, invalidNow) => {
+    const listEffectivePermissions = vi.spyOn(storage, 'listEffectivePermissions');
+
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        now: invalidNow,
+      } as unknown as RbacCanInput),
+    ).rejects.toMatchObject({
+      code: 'RBAC_CONFIG_ERROR',
+      details: { operation: 'can', field: 'now' },
+    });
+    expect(listEffectivePermissions).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid configured clock result before reading storage', async () => {
+    const listEffectivePermissions = vi.spyOn(storage, 'listEffectivePermissions');
+    const clockService = new RbacService({
+      storage,
+      now: () => new Date('invalid'),
+    });
+
+    await expect(
+      clockService.can({
+        subject: user('user_1'),
+        permission: 'reports.read',
+      }),
+    ).rejects.toMatchObject({
+      code: 'RBAC_CONFIG_ERROR',
+      details: { operation: 'can', field: 'now' },
+    });
+    expect(listEffectivePermissions).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['empty type', { type: ' ', id: 'user_1' }],
+    ['empty id', { type: 'user', id: '' }],
+    ['invalid tenant id', { type: 'user', id: 'user_1', tenantId: 42 }],
+  ])('rejects an explicitly malformed %s subject', async (_label, invalidSubject) => {
+    await expect(
+      service.can({
+        subject: invalidSubject,
+        tenantId,
+        permission: 'reports.read',
+      } as unknown as RbacCanInput),
+    ).rejects.toMatchObject({
+      code: 'RBAC_CONFIG_ERROR',
+      details: { operation: 'can', field: 'subject' },
+    });
+  });
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['empty type', { type: '', id: 'project_1' }],
+    ['empty id', { type: 'project', id: ' ' }],
+    ['non-string id', { type: 'project', id: 42 }],
+  ])('rejects an explicitly malformed %s resource', async (_label, invalidResource) => {
+    await expect(
+      service.can({
+        subject: user('user_1', tenantId),
+        tenantId,
+        permission: 'reports.read',
+        resource: invalidResource,
+      } as unknown as RbacCanInput),
+    ).rejects.toMatchObject({
+      code: 'RBAC_CONFIG_ERROR',
+      details: { operation: 'can', field: 'resource' },
+    });
+  });
+
   it('denies empty permission arrays instead of allowing vacuously', async () => {
     await createAssignedRole('report_admin', ['reports.read']);
 
@@ -901,7 +1050,15 @@ describe('RbacService', () => {
           roleId: 'role_1',
           resource: { type: ' ', id: 'project_1' },
         }),
+      () =>
+        writeService.assignRole({
+          tenantId: null,
+          subject: user('user_1'),
+          roleId: 'role_1',
+          expiresAt: new Date('invalid'),
+        }),
       () => writeService.revokeRole({ bindingId: ' ' }),
+      () => writeService.revokeRole({ bindingId: 'binding_1', revokedAt: new Date('invalid') }),
     ];
 
     for (const invalidWrite of invalidWrites) {

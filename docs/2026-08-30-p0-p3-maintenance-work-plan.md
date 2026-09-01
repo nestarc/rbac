@@ -157,7 +157,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 1 | `RBAC-M01` | P0 | `DONE` | L | 없음 | trusted tenant source와 request identity conflict fail-closed |
 | 2 | `RBAC-M02` | P0 | `DONE` | M | 없음 | canonical API-key context source와 legacy conflict 처리 |
 | 3 | `RBAC-M03` | P0 | `DONE` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
-| 4 | `RBAC-M04` | P1 | `READY` | M | 없음 | inbound runtime enum/shape fail-closed validation |
+| 4 | `RBAC-M04` | P1 | `DONE` | M | 없음 | inbound runtime enum/shape fail-closed validation |
 | 5 | `RBAC-M05` | P1 | `READY` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
 | 6 | `RBAC-M06` | P1 | `READY` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
 | 7 | `RBAC-M07` | P1 | `BLOCKED` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
@@ -293,16 +293,16 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M04` — runtime enum과 shape fail-closed
 
-- 상태: `P1 / READY`
+- 상태: `P1 / DONE`
 - 소유권: inbound caller/config runtime discriminant validation만 담당한다. storage가 반환한 outbound row 검증은 `RBAC-M03`이다.
 
 완료 조건:
 
-- [ ] invalid `mode`가 `any`로, invalid tenant mode가 optional로 완화되지 않는다.
-- [ ] JS/CJS consumer와 `as any` 입력도 stable config error 또는 deny다.
-- [ ] Date, subject, resource, requirement의 finite/non-empty shape를 경계에서 확인한다.
-- [ ] 유효한 typed caller의 현재 behavior는 유지된다.
-- [ ] 범용 validation framework를 도입하지 않고 작은 assertion layer를 사용한다.
+- [x] invalid `mode`가 `any`로, invalid tenant mode가 optional로 완화되지 않는다.
+- [x] JS/CJS consumer와 `as any` 입력도 stable config error 또는 deny다.
+- [x] Date, subject, resource, requirement의 finite/non-empty shape를 경계에서 확인한다.
+- [x] 유효한 typed caller의 현재 behavior는 유지된다.
+- [x] 범용 validation framework를 도입하지 않고 작은 assertion layer를 사용한다.
 
 검증: unit table, CJS/ESM packed JS consumer, HTTP E2E.
 
@@ -728,6 +728,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M01`: trusted/default tenant conflict HTTP + direct `can` + strict `assignRole` matrix.
 - [x] `RBAC-M02`: canonical/legacy conflict와 API Keys packed Guard→RBAC fixture.
 - [x] `RBAC-M03`: adversarial custom storage tenant/expiry contract.
+- [x] `RBAC-M04`: invalid runtime discriminant/shape unit table, packed CJS/ESM consumer, HTTP config-error E2E.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
@@ -738,10 +739,10 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M03 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`/`RBAC-M02`/`RBAC-M03`를 반복하지 않고 `RBAC-M04`만 선택한다.
-3. invalid `mode`, `tenantMode`, Date, subject/resource/requirement shape 표를 만들고 현재 완화 동작을 RED로 고정한다.
-4. inbound caller/config runtime discriminant를 작은 assertion layer에서 fail closed하고 JS/CJS packed consumer와 HTTP E2E를 검증한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M04 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`/`RBAC-M02`/`RBAC-M03`/`RBAC-M04`를 반복하지 않고 `RBAC-M05`만 선택한다.
+3. 현재 보존 중인 `request.user.type='service_account'` fixture와 user/API-key/RBAC_SUBJECT 동시 source 동작을 표로 만든다.
+4. fixed namespace 대 compatibility/deprecation 선택을 ADR로 먼저 기록한 뒤 선택한 source conflict matrix와 Guard E2E를 RED로 고정한다.
 5. 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
@@ -754,6 +755,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M01` | `DONE` | `main@2dd5a8c` | uncommitted working tree | authoritative resolver/default-source reconciliation, direct `can()` tenant conflict deny, strict `assignRole()` subject/role/binding reconciliation, HTTP/audit/docs 완료; A/B/C1/C2 PASS | `RBAC-M02` 시작 |
 | 2026-09-01 | `RBAC-M02` | `DONE` | `main@224e887` | uncommitted working tree | canonical `request.apiKey`, exact opaque IDs, dual-source conflict deny, API Keys 0.3.2 packed Guard→RBAC CI/release gate, docs/migration 완료; A/B/D PASS | `RBAC-M03` 시작 |
 | 2026-09-01 | `RBAC-M03` | `DONE` | `main@b076ff6` | uncommitted working tree | custom effective row를 query tenant/global provenance, finite Date/expiry, resource pair로 재검증하고 resource alias 우회를 차단; A/B/C2/C3와 build PASS | `RBAC-M04` 시작 |
+| 2026-09-01 | `RBAC-M04` | `DONE` | `main@13dc26a` | uncommitted working tree | invalid mode/tenantMode와 Date/subject/resource/requirement runtime shape를 작은 assertion layer에서 `RBAC_CONFIG_ERROR` 또는 기존 resolver deny로 fail closed; A/B, HTTP E2E, packed CJS/ESM consumer PASS | `RBAC-M05` 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -795,4 +797,18 @@ Commands and exact results: git fetch --prune --tags PASS; GitHub Release v0.2.1
 Unverified paths and reason: HTTP C1과 packed consumer D는 inbound HTTP/package 경로를 바꾸지 않고 RBAC-M03 명시 검증 profile이 A/B/C2/C3이므로 실행하지 않았다. raw RBAC_STORAGE를 직접 소비하는 외부 코드는 RbacService 경계를 우회하므로 이번 방어의 적용 대상이 아니다.
 External PR/release evidence: 없음. origin/main, GitHub Release, npm latest는 계속 v0.2.1/69bf0e1 기준이며 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M04의 invalid mode, tenantMode, Date, subject/resource/requirement runtime shape 표와 RED JS/as-any 테스트를 추가한다.
+```
+
+### 2026-09-01 RBAC-M04 인계
+
+```text
+Task: RBAC-M04
+State: DONE
+Start ref / end ref: main@13dc26a / main@13dc26a + uncommitted RBAC-M04 working tree
+Changed files: changelog.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, scripts/verify-modern-consumer.cjs, src/rbac.guard.ts, src/rbac.service.ts, src/utils/runtime-validation.ts, test/e2e/rbac-guard.e2e-spec.ts, test/unit/rbac-module.spec.ts, test/unit/rbac-service.spec.ts
+Contract decision: direct can()의 명시된 malformed input/subject/resource/requirement, invalid any/all mode, invalid required/optional/none tenantMode, non-Date·invalid Date now는 RbacConfigError(invalid_runtime_shape)다. Guard metadata는 실행 전에 kind/options/mode/tenant/resource/permission·role shape를 검증하고 같은 config error를 HTTP 500 RBAC_CONFIG_ERROR로 매핑한다. subject/resource resolver가 반환한 malformed 값은 기존 RBAC_SUBJECT_MISSING/RBAC_RESOURCE_MISSING deny를 유지한다. input.now와 configured now() 결과, assignRole.expiresAt, revokeRole.revokedAt은 genuine finite Date여야 하며 각 API에서 허용한 null/undefined 의미는 유지한다. whitespace canonicalization과 outbound storage row 검증은 각각 RBAC-M06/RBAC-M03 소유로 남긴다.
+Commands and exact results: git fetch --prune --tags PASS; baseline npm run typecheck PASS, npm test PASS (14 files, 245 tests); initial direct-service RED에서 invalid discriminant/Date/subject/resource 15 failures 확인; npm run lint PASS; npm run typecheck PASS; npm test PASS with HTTP port permission (14 files, 275 tests); fresh npm run test:coverage PASS (13 files, 267 tests; statements 94.93%, branches 88.75%, functions 97.27%, lines 95.79%); npm run test:e2e PASS (1 file, 8 tests); npm run build PASS; npm run test:consumer:modern PASS with exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2 and packed CommonJS/ESM runtime validation smokes; git diff --check PASS.
+Unverified paths and reason: Prisma C2/C3는 storage/adapters/schema를 변경하지 않았고 RBAC-M04 검증 범위가 unit table, packed JS consumer, HTTP E2E이므로 실행하지 않았다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M05의 request.user.type='service_account' fixture와 user/API-key/RBAC_SUBJECT 동시 source authority를 표로 만들고 namespace compatibility ADR을 작성한다.
 ```

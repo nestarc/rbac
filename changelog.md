@@ -19,6 +19,11 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Invalid runtime permission/tenant modes and malformed `can()` or Guard
+  subject, resource, requirement, and non-finite `Date` shapes now fail closed
+  with `RBAC_CONFIG_ERROR` instead of falling back to permissive defaults or
+  leaking incidental JavaScript errors. Invalid values returned by subject and
+  resource resolvers keep their existing authentication/authorization denial.
 - Matching canonical and legacy API key values now select `request.apiKey` instead
   of the formerly documented legacy-first precedence. API key and tenant IDs are
   treated as exact opaque strings without trimming, normalization, case folding,

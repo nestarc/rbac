@@ -61,6 +61,12 @@ class TestRbacController {
     return { ok: true };
   }
 
+  @Can('reports.read', { mode: 'sometimes' } as never)
+  @Get('/invalid-requirement')
+  invalidRequirement() {
+    return { ok: true };
+  }
+
   @Can('project.member.invite', {
     resource: { type: 'project', idParam: 'projectId' },
   })
@@ -180,6 +186,19 @@ describe('RbacGuard HTTP behavior', () => {
 
     expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
     expect(response.body).not.toHaveProperty('details');
+  });
+
+  it('returns a stable configuration error for invalid runtime requirement metadata', async () => {
+    const response = await request(httpServer())
+      .get('/invalid-requirement')
+      .set('x-user-id', 'viewer_1')
+      .set('x-tenant-id', tenantId)
+      .expect(500);
+
+    expect(response.body).toEqual({
+      message: 'RBAC configuration error',
+      code: 'RBAC_CONFIG_ERROR',
+    });
   });
 
   it('fails closed when the trusted tenant conflicts with the request identity', async () => {
