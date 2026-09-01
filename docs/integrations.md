@@ -42,9 +42,10 @@ exists only for migration from the old default-first precedence.
 
 ## API Keys
 
-`createApiKeySubjectResolver()` reads `request.apiKeyContext` first and falls back
-to `request.apiKey`. It maps `keyId` or `id` to the RBAC subject ID, maps `tenantId`
-when present, and keeps the source record on `subject.attributes`.
+`createApiKeySubjectResolver()` uses `request.apiKey` as the canonical Nestarc
+source. It maps `keyId` or `id` to the RBAC subject ID, maps `tenantId` when
+present, and keeps the source record on `subject.attributes`. Identifiers are
+opaque strings: RBAC does not trim, case-fold, normalize, or coerce them.
 
 ```ts
 import { InMemoryRbacStorage, RbacModule } from '@nestarc/rbac';
@@ -60,12 +61,23 @@ RbacModule.forRoot({
 An API key auth guard should validate the presented key before RBAC runs:
 
 ```ts
-request.apiKeyContext = {
+request.apiKey = {
   keyId: 'key_1',
   tenantId: 'tenant_1',
   ownerId: 'user_1',
 };
 ```
+
+The deprecated `request.apiKeyContext` property remains a fallback only when
+`request.apiKey` is absent. When both properties are populated, their resolved
+key and tenant IDs must match exactly; otherwise resolution fails closed. Matching
+dual values select `request.apiKey`. Migrate custom middleware to `request.apiKey`
+before the legacy fallback is removed in the next breaking minor release
+(`0.3.0` at the earliest).
+
+`@nestarc/api-keys@0.3.2` writes only `request.apiKey`. A dual-source request
+therefore indicates that stale or custom in-process middleware also wrote the
+legacy property; the standard API Keys Guard alone does not create that state.
 
 ## Audit Logging
 

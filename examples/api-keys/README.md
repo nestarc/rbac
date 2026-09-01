@@ -5,7 +5,7 @@ request, and uses `createApiKeySubjectResolver()` to authorize the API key subje
 
 Files:
 
-- `src/api-key-auth.guard.ts` validates `x-api-key` and sets `request.apiKeyContext`.
+- `src/api-key-auth.guard.ts` validates `x-api-key` and sets canonical `request.apiKey`.
 - `src/app.module.ts` registers RBAC with `createApiKeySubjectResolver()`.
 - `src/reports.controller.ts` runs API key auth before `RbacGuard`.
 
@@ -24,4 +24,3 @@ await rbac.assignRole({
   roleId: role.id,
 });
 ```
-

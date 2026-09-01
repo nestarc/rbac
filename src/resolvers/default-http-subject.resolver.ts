@@ -1,6 +1,7 @@
 import { RBAC_SUBJECT_REQUEST_KEY } from '../constants';
 import type { RbacSubjectResolver } from '../interfaces/resolvers';
 import type { RbacSubject, RbacSubjectType } from '../interfaces/subject';
+import { resolveApiKeySubject } from './api-key-subject.resolver';
 
 type HttpRequest = Record<string, unknown>;
 type SubjectRecord = Record<string, unknown>;
@@ -111,6 +112,6 @@ export const defaultHttpSubjectResolver = (): RbacSubjectResolver => (context) =
 
   return (
     mapSubject('user', request.user, ['id', 'sub', 'userId']) ??
-    mapSubject('api_key', request.apiKeyContext ?? request.apiKey, ['keyId', 'id'])
+    resolveApiKeySubject(request)
   );
 };

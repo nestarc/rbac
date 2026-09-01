@@ -155,11 +155,11 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 순서 | ID | 우선순위 | 상태 | 크기 | 선행 | 작업 |
 | ---: | --- | --- | --- | --- | --- | --- |
 | 1 | `RBAC-M01` | P0 | `DONE` | L | 없음 | trusted tenant source와 request identity conflict fail-closed |
-| 2 | `RBAC-M02` | P0 | `READY` | M | 없음 | canonical API-key context source와 legacy conflict 처리 |
+| 2 | `RBAC-M02` | P0 | `DONE` | M | 없음 | canonical API-key context source와 legacy conflict 처리 |
 | 3 | `RBAC-M03` | P0 | `READY` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
 | 4 | `RBAC-M04` | P1 | `READY` | M | 없음 | inbound runtime enum/shape fail-closed validation |
-| 5 | `RBAC-M05` | P1 | `BLOCKED` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
-| 6 | `RBAC-M06` | P1 | `BLOCKED` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
+| 5 | `RBAC-M05` | P1 | `READY` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
+| 6 | `RBAC-M06` | P1 | `READY` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
 | 7 | `RBAC-M07` | P1 | `BLOCKED` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
 | 8 | `RBAC-M08` | P1 | `READY` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
 | 9 | `RBAC-M09` | P1 | `DECISION` | M | 없음 | Node/Nest/Prisma 지원·semver 계약 |
@@ -250,19 +250,19 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M02` — canonical API-key request source
 
-- 상태: `P0 / READY`
+- 상태: `P0 / DONE`
 - 문제: API Keys 0.3.2 Guard의 검증된 canonical writer는 `request.apiKey`다(`api-keys/src/context.ts:3`, `api-keys/src/api-keys.guard.ts:80`). RBAC default/integration resolver는 `request.apiKeyContext ?? request.apiKey`를 선택한다(`src/resolvers/default-http-subject.resolver.ts:112-115`, `src/integrations/api-keys.ts:24-44`). 표준 Guard만으로 외부 요청자가 legacy property를 쓰지는 못하므로 공격 전제는 stale middleware/application code 등 두 in-process writer가 공존하는 배포다. 그 전제에서 상충 값을 신뢰하는 authorization sink가 되므로 trust-boundary hardening을 P0로 처리하며, 실제 dual-writer source가 없다고 확인되면 공개 severity는 낮춰 기록한다.
 
 완료 조건:
 
-- [ ] Nestarc canonical source를 `request.apiKey`로 문서화한다.
-- [ ] 두 property가 모두 있고 identity/tenant가 다르면 fail closed한다.
-- [ ] 동일한 두 값은 정상 처리한다.
-- [ ] `apiKeyContext`만 있는 legacy consumer는 명시 fallback으로 유지하고 제거/deprecation target을 기록한다.
-- [ ] default subject resolver와 `createApiKeySubjectResolver()`가 같은 helper/contract를 사용한다.
-- [ ] canonical `ApiKeyContext`의 `keyId`, `tenantId`, 기타 identity ID는 opaque exact string이다. legacy fallback의 `id`도 number coercion, case fold, Unicode normalization, `trim()`으로 재해석하지 않는다.
-- [ ] API Keys 0.3.2 tarball을 strict install한 fixture가 Guard verify/write → conflicting legacy property → RBAC resolution 순서를 재현하고, 이 fixture를 CI/release의 지속 gate로 둔다.
-- [ ] legacy 우선은 현재 문서화된 동작이므로 precedence 변경/deprecation과 migration note를 CHANGELOG에 남긴다.
+- [x] Nestarc canonical source를 `request.apiKey`로 문서화한다.
+- [x] 두 property가 모두 있고 identity/tenant가 다르면 fail closed한다.
+- [x] 동일한 두 값은 정상 처리한다.
+- [x] `apiKeyContext`만 있는 legacy consumer는 명시 fallback으로 유지하고 제거/deprecation target을 기록한다.
+- [x] default subject resolver와 `createApiKeySubjectResolver()`가 같은 helper/contract를 사용한다.
+- [x] canonical `ApiKeyContext`의 `keyId`, `tenantId`, 기타 identity ID는 opaque exact string이다. legacy fallback의 `id`도 number coercion, case fold, Unicode normalization, `trim()`으로 재해석하지 않는다.
+- [x] API Keys 0.3.2 tarball을 strict install한 fixture가 Guard verify/write → conflicting legacy property → RBAC resolution 순서를 재현하고, 이 fixture를 CI/release의 지속 gate로 둔다.
+- [x] legacy 우선은 현재 문서화된 동작이므로 precedence 변경/deprecation과 migration note를 CHANGELOG에 남긴다.
 
 검증: 프로필 A/B/D, dual-source conflict tests, packed API Keys consumer. `TEN-ECO-NEXT`는 publish 뒤 외부 확인이며 이 task의 pre-publish 완료 조건이 아니다.
 
@@ -308,7 +308,7 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M05` — subject namespace/source 신뢰 정책
 
-- 상태: `P1 / BLOCKED (RBAC-M02)`
+- 상태: `P1 / READY (RBAC-M02 완료)`
 - 문제: default resolver가 `request.user.type`을 그대로 받아 fallback namespace를 바꾸거나 user/API-key 동시 source의 우선순위가 의도와 다를 수 있다.
 
 완료 조건:
@@ -325,7 +325,7 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M06` — 식별자 canonicalization 단일화
 
-- 상태: `P1 / BLOCKED (RBAC-M01, RBAC-M02)`
+- 상태: `P1 / READY (RBAC-M01, RBAC-M02 완료)`
 - 문제: assertion이 trim한 값을 반환해도 일부 호출자가 버려 write와 can/storage/event의 identity가 다를 수 있다.
 
 완료 조건:
@@ -726,7 +726,7 @@ Tenancy ecosystem: published exact tuple E2E
 ### 9.3 완료 뒤 활성화할 future gate
 
 - [x] `RBAC-M01`: trusted/default tenant conflict HTTP + direct `can` + strict `assignRole` matrix.
-- [ ] `RBAC-M02`: canonical/legacy conflict와 API Keys packed Guard→RBAC fixture.
+- [x] `RBAC-M02`: canonical/legacy conflict와 API Keys packed Guard→RBAC fixture.
 - [ ] `RBAC-M03`: adversarial custom storage tenant/expiry contract.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
@@ -738,12 +738,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M01 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`을 반복하지 않고 `RBAC-M02`만 선택한다.
-3. API Keys 0.3.2 canonical `request.apiKey` writer와 legacy `request.apiKeyContext` conflict fixture를 failing test로 만든다.
-4. canonical/legacy identity conflict를 권한 평가 전에 fail closed하고 packed Guard→RBAC contract를 검증한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M02 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`/`RBAC-M02`를 반복하지 않고 `RBAC-M03`만 선택한다.
+3. wrong-tenant, expired(`< now`), invalid-Date effective role/permission을 반환하는 adversarial adapter RED test와 equality(`=== now`) 회귀를 추가한다.
+4. role/permission check에 같은 outbound storage defense-in-depth 계약을 적용하고 built-in/custom/real-DB contract를 검증한다.
 5. 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
-6. 다음 세션에서 `RBAC-M03`을 수행한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -753,6 +752,7 @@ Tenancy ecosystem: published exact tuple E2E
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-08-30 | 조사 기준선 | `DONE` | `v0.2.1 / 69bf0e1` | 기준선 확정 | 14 files/205 tests, lint/typecheck, fresh coverage, audits, release/CI/source 검토 | `RBAC-M01` 시작 |
 | 2026-09-01 | `RBAC-M01` | `DONE` | `main@2dd5a8c` | uncommitted working tree | authoritative resolver/default-source reconciliation, direct `can()` tenant conflict deny, strict `assignRole()` subject/role/binding reconciliation, HTTP/audit/docs 완료; A/B/C1/C2 PASS | `RBAC-M02` 시작 |
+| 2026-09-01 | `RBAC-M02` | `DONE` | `main@224e887` | uncommitted working tree | canonical `request.apiKey`, exact opaque IDs, dual-source conflict deny, API Keys 0.3.2 packed Guard→RBAC CI/release gate, docs/migration 완료; A/B/D PASS | `RBAC-M03` 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -766,4 +766,18 @@ Commands and exact results: npm run lint PASS; npm run typecheck PASS; npm test 
 Unverified paths and reason: Prisma 6/C3는 RBAC-M01 필수 profile이 아니며 adapter 동작을 변경하지 않아 실행하지 않았다.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M02의 request.apiKey canonical writer와 apiKeyContext legacy conflict RED fixture를 추가한다.
+```
+
+### 2026-09-01 RBAC-M02 인계
+
+```text
+Task: RBAC-M02
+State: DONE
+Start ref / end ref: main@224e887 / main@224e887 + uncommitted RBAC-M02 working tree
+Changed files: .github/workflows/ci.yml, .github/workflows/release.yml, README.md, changelog.md, docs/integrations.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, examples/api-keys/README.md, examples/api-keys/src/api-key-auth.guard.ts, scripts/verify-modern-consumer.cjs, src/integrations/api-keys.ts, src/resolvers/api-key-subject.resolver.ts, src/resolvers/default-http-subject.resolver.ts, test/unit/default-resolvers.spec.ts, test/unit/integrations.spec.ts
+Contract decision: Nestarc API-key canonical source는 request.apiKey다. request.apiKey와 deprecated request.apiKeyContext가 모두 populated면 key/tenant identity를 exact string equality로 조정하고 conflict/invalid shape는 subject resolution에서 fail closed한다. 동일하면 canonical record를 attributes로 선택하며 legacy-only fallback은 다음 breaking minor(0.3.0 earliest)까지 유지한다. keyId/id/tenantId는 trim, number coercion, case fold, Unicode normalization 없이 opaque string으로 처리한다. API Keys 0.3.2 표준 Guard만으로 dual source가 생기지 않으며 stale/custom in-process writer가 legacy property를 추가한 배포가 hardening 전제다.
+Commands and exact results: git fetch --prune --tags PASS; initial RED targeted tests 2 files/9 failures 확인; npm run lint PASS; npm run typecheck PASS; npm test PASS (14 files, 227 tests); fresh npm run test:coverage PASS (13 files, 220 tests; statements 94.93%, branches 87.8%, functions 97.07%, lines 95.75%); npm run test:e2e PASS (1 file, 7 tests); npm run build PASS; npm run test:consumer:modern PASS with strict @nestarc/api-keys 0.3.2/Nest 11.2.1/Prisma 7.10.0 install and Guard writer→conflict deny→matching canonical selection; npm pack --dry-run --json PASS (76 entries, 186543 bytes); npm audit --omit=dev --json PASS (production vulnerabilities 0); git diff --check PASS.
+Unverified paths and reason: Prisma 6/C3와 Prisma 7 real-DB는 storage/Prisma 코드를 변경하지 않았고 RBAC-M02 필수 profile(A/B/D)이 아니어서 실행하지 않았다.
+External PR/release evidence: 없음. API Keys 0.3.2 public tarball을 fixture에서 exact strict install했으나 현재 RBAC 결과는 commit/PR/release 전 working tree다. TEN-ECO-NEXT는 RBAC patch publish 뒤 별도 external task로 남는다.
+Next exact action: RBAC-M03의 wrong-tenant, expired, invalid-Date custom storage effective result RED test와 expiresAt === now 회귀를 추가한다.
 ```

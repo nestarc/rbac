@@ -44,35 +44,78 @@ describe('integration helpers', () => {
   });
 
   describe('createApiKeySubjectResolver', () => {
-    it('maps Nestarc API key context into an RBAC subject', () => {
-      const apiKeyContext = {
+    it('maps the canonical Nestarc API key context into an RBAC subject', () => {
+      const apiKey = {
         keyId: 'key_1',
         tenantId: 'tenant_1',
         ownerId: 'user_1',
       };
       const resolver = createApiKeySubjectResolver();
 
-      expect(resolver(httpContext({ apiKeyContext }))).toEqual({
+      expect(resolver(httpContext({ apiKey }))).toEqual({
         type: 'api_key',
         id: 'key_1',
         tenantId: 'tenant_1',
+        attributes: apiKey,
+      });
+    });
+
+    it('falls back to the legacy API key context when the canonical source is missing', () => {
+      const apiKeyContext = {
+        id: 'key_2',
+        tenantId: 'tenant_2',
+      };
+      const resolver = createApiKeySubjectResolver();
+
+      expect(resolver(httpContext({ apiKeyContext }))).toEqual({
+        type: 'api_key',
+        id: 'key_2',
+        tenantId: 'tenant_2',
         attributes: apiKeyContext,
       });
     });
 
-    it('falls back to request API key records when API key context is missing', () => {
-      const apiKey = {
-        id: 'key_2',
-        tenantId: 42,
-      };
+    it('uses the canonical source when canonical and legacy identities agree', () => {
+      const apiKey = { keyId: 'key_1', tenantId: 'tenant_1' };
+      const apiKeyContext = { id: 'key_1', tenantId: 'tenant_1' };
+      const resolver = createApiKeySubjectResolver();
+
+      expect(resolver(httpContext({ apiKey, apiKeyContext }))).toEqual({
+        type: 'api_key',
+        id: 'key_1',
+        tenantId: 'tenant_1',
+        attributes: apiKey,
+      });
+    });
+
+    it.each([
+      {
+        apiKey: { keyId: 'key_1', tenantId: 'tenant_1' },
+        apiKeyContext: { keyId: 'key_2', tenantId: 'tenant_1' },
+      },
+      {
+        apiKey: { keyId: 'key_1', tenantId: 'tenant_1' },
+        apiKeyContext: { keyId: 'key_1', tenantId: 'tenant_2' },
+      },
+    ])('fails closed for conflicting canonical and legacy API key sources', (request) => {
+      const resolver = createApiKeySubjectResolver();
+
+      expect(resolver(httpContext(request))).toBeUndefined();
+    });
+
+    it('preserves opaque string identifiers without trimming or coercion', () => {
+      const apiKey = { keyId: ' Key_\u212B ', tenantId: ' Tenant_01 ' };
       const resolver = createApiKeySubjectResolver();
 
       expect(resolver(httpContext({ apiKey }))).toEqual({
         type: 'api_key',
-        id: 'key_2',
-        tenantId: '42',
+        id: ' Key_\u212B ',
+        tenantId: ' Tenant_01 ',
         attributes: apiKey,
       });
+      expect(
+        resolver(httpContext({ apiKeyContext: { id: 42, tenantId: 'tenant_1' } })),
+      ).toBeUndefined();
     });
 
     it('returns undefined for invalid API key contexts', () => {

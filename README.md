@@ -253,9 +253,9 @@ See [docs/prisma.md](docs/prisma.md).
 
 ## API Key Recipe
 
-API key auth should validate the key first and attach `request.apiKeyContext` or
-`request.apiKey`. The RBAC subject resolver then maps that record to an `api_key`
-subject.
+API key auth should validate the key first and attach the canonical Nestarc
+context to `request.apiKey`. The RBAC subject resolver then maps that record to
+an `api_key` subject.
 
 ```ts
 import { InMemoryRbacStorage, RbacModule } from '@nestarc/rbac';
@@ -268,8 +268,10 @@ RbacModule.forRoot({
 });
 ```
 
-The resolver reads `keyId` or `id`, preserves `tenantId` when present, and stores
-the source record on `subject.attributes`. See
+The resolver reads opaque string `keyId` or `id` values, preserves `tenantId`
+exactly when present, and stores the source record on `subject.attributes`.
+Deprecated `request.apiKeyContext` is used only when `request.apiKey` is absent;
+conflicting dual sources fail closed. See
 [examples/api-keys](examples/api-keys).
 
 ## Testing Utilities

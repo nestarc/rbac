@@ -8,7 +8,7 @@ type ApiKeyContext = {
 
 type ApiKeyRequest = {
   headers?: Record<string, string | string[] | undefined>;
-  apiKeyContext?: ApiKeyContext;
+  apiKey?: ApiKeyContext;
 };
 
 const keys = new Map<string, ApiKeyContext>([
@@ -27,9 +27,8 @@ export class ApiKeyAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    request.apiKeyContext = apiKeyContext;
+    request.apiKey = apiKeyContext;
 
     return true;
   }
 }
-

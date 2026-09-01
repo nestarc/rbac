@@ -86,7 +86,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify Nest 11.2.1 / Prisma 7.10.0 packed consumer
+      - name: Verify Nest 11.2.1 / Prisma 7.10.0 / API Keys 0.3.2 packed consumer
         run: npm run test:consumer:modern
 
       - name: Verify package contents

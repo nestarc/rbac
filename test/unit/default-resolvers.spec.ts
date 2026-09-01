@@ -102,7 +102,7 @@ describe('default HTTP RBAC resolvers', () => {
       });
     });
 
-    it('maps API key context records', () => {
+    it('maps legacy API key context records when the canonical source is absent', () => {
       const apiKeyContext = {
         keyId: 'key_1',
         id: 'ignored',
@@ -132,6 +132,60 @@ describe('default HTTP RBAC resolvers', () => {
         tenantId: 'tenant_key',
         attributes: apiKey,
       });
+    });
+
+    it('uses the canonical API key when canonical and legacy sources agree', () => {
+      const apiKey = {
+        keyId: 'key_1',
+        tenantId: 'tenant_key',
+        scopes: ['reports.read'],
+      };
+      const apiKeyContext = {
+        id: 'key_1',
+        tenantId: 'tenant_key',
+        scopes: ['legacy.scope'],
+      };
+
+      expect(defaultHttpSubjectResolver()(httpContext({ apiKey, apiKeyContext }))).toEqual({
+        type: 'api_key',
+        id: 'key_1',
+        tenantId: 'tenant_key',
+        attributes: apiKey,
+      });
+    });
+
+    it.each([
+      {
+        name: 'identity',
+        apiKey: { keyId: 'canonical', tenantId: 'tenant_key' },
+        apiKeyContext: { keyId: 'legacy', tenantId: 'tenant_key' },
+      },
+      {
+        name: 'tenant',
+        apiKey: { keyId: 'key_1', tenantId: 'tenant_canonical' },
+        apiKeyContext: { keyId: 'key_1', tenantId: 'tenant_legacy' },
+      },
+    ])('fails closed when canonical and legacy API key sources conflict by $name', (request) => {
+      expect(defaultHttpSubjectResolver()(httpContext(request))).toBeUndefined();
+    });
+
+    it('preserves opaque API key and tenant identifiers exactly', () => {
+      const apiKey = {
+        keyId: ' Key_\u212B ',
+        tenantId: ' Tenant_01 ',
+      };
+
+      expect(defaultHttpSubjectResolver()(httpContext({ apiKey }))).toEqual({
+        type: 'api_key',
+        id: ' Key_\u212B ',
+        tenantId: ' Tenant_01 ',
+        attributes: apiKey,
+      });
+      expect(
+        defaultHttpSubjectResolver()(httpContext({
+          apiKeyContext: { id: 42, tenantId: 'tenant_key' },
+        })),
+      ).toBeUndefined();
     });
 
     it('maps API key records from id when keyId is absent', () => {

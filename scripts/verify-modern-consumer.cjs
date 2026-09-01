@@ -13,6 +13,7 @@ const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), temporaryPrefix));
 const packageDirectory = path.join(temporaryRoot, 'package');
 const consumerDirectory = path.join(temporaryRoot, 'consumer');
 const exactDependencies = {
+  '@nestarc/api-keys': '0.3.2',
   '@nestjs/common': '11.2.1',
   '@nestjs/core': '11.2.1',
   '@nestjs/platform-express': '11.2.1',
@@ -111,6 +112,57 @@ try {
   runCommand(process.execPath, ['smoke.cjs'], consumerDirectory, 'CommonJS runtime smoke');
 
   fs.writeFileSync(
+    path.join(consumerDirectory, 'api-keys-smoke.cjs'),
+    [
+      "require('reflect-metadata');",
+      "const { ApiKeysGuard, API_KEY_CONTEXT_PROPERTY } = require('@nestarc/api-keys');",
+      "const { createApiKeySubjectResolver } = require('@nestarc/rbac/integrations/api-keys');",
+      "const { Reflector } = require('@nestjs/core');",
+      '(async () => {',
+      "  const canonical = { keyId: 'canonical_key', tenantId: 'tenant_canonical', environment: 'live', scopes: [], prefix: 'nsk_live_fixture' };",
+      "  const request = { headers: { authorization: 'Bearer verified_key' }, apiKeyContext: { keyId: 'legacy_key', tenantId: 'tenant_legacy' } };",
+      '  const handler = () => undefined;',
+      '  class Controller {}',
+      '  const context = {',
+      '    switchToHttp: () => ({ getRequest: () => request }),',
+      '    getHandler: () => handler,',
+      '    getClass: () => Controller,',
+      '  };',
+      '  const service = {',
+      '    verify: async (rawKey) => {',
+      "      if (rawKey !== 'verified_key') throw new Error('ApiKeysGuard received an unexpected key');",
+      '      return canonical;',
+      '    },',
+      '  };',
+      '  const guard = new ApiKeysGuard(service, new Reflector());',
+      '  if (!(await guard.canActivate(context))) throw new Error(\'ApiKeysGuard did not allow the verified key\');',
+      '  if (API_KEY_CONTEXT_PROPERTY !== \'apiKey\' || request.apiKey !== canonical) {',
+      "    throw new Error('ApiKeysGuard did not write the canonical request.apiKey context');",
+      '  }',
+      '  const resolver = createApiKeySubjectResolver();',
+      '  if (resolver(context) !== undefined) {',
+      "    throw new Error('RBAC accepted conflicting canonical and legacy API key identities');",
+      '  }',
+      "  request.apiKeyContext = { keyId: 'canonical_key', tenantId: 'tenant_canonical' };",
+      '  const subject = resolver(context);',
+      "  if (subject?.id !== 'canonical_key' || subject.tenantId !== 'tenant_canonical' || subject.attributes !== canonical) {",
+      "    throw new Error('RBAC did not select the matching canonical API key context exactly');",
+      '  }',
+      '})().catch((error) => {',
+      '  console.error(error);',
+      '  process.exitCode = 1;',
+      '});',
+      '',
+    ].join('\n'),
+  );
+  runCommand(
+    process.execPath,
+    ['api-keys-smoke.cjs'],
+    consumerDirectory,
+    'API Keys 0.3.2 Guard to RBAC source-conflict smoke',
+  );
+
+  fs.writeFileSync(
     path.join(consumerDirectory, 'smoke.mjs'),
     [
       "import 'reflect-metadata';",
@@ -159,6 +211,7 @@ try {
       integrity: pack.integrity,
       nest: exactDependencies['@nestjs/core'],
       prisma: exactDependencies['@prisma/client'],
+      apiKeys: exactDependencies['@nestarc/api-keys'],
       node: process.version,
       result: 'passed',
     }),

@@ -6,6 +6,9 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Security
 
+- `request.apiKey` is now the canonical Nestarc API key identity source. RBAC
+  fails closed when a populated legacy `request.apiKeyContext` resolves to a
+  different key or tenant ID.
 - Configured tenant resolvers are now authoritative by default. RBAC denies before
   authorization when the resolver conflicts with the selected subject,
   `request.tenantId`, `request.tenant.id`, or `x-tenant-id`.
@@ -16,6 +19,13 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Matching canonical and legacy API key values now select `request.apiKey` instead
+  of the formerly documented legacy-first precedence. API key and tenant IDs are
+  treated as exact opaque strings without trimming, normalization, case folding,
+  or number coercion.
+- `request.apiKeyContext` is deprecated and remains a fallback only when
+  `request.apiKey` is absent. Custom middleware should migrate its writer to
+  `request.apiKey` before the next breaking minor release (`0.3.0` at the earliest).
 - Added the deprecated `tenant.resolverMode: 'legacy-fallback'` opt-in for consumers
   that temporarily need the pre-hardening default-first resolver precedence.
 - Tenant source conflicts emit only the `tenant_source_conflict` audit category;
