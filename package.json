@@ -138,6 +138,14 @@
       "optional": true
     }
   },
+  "overrides": {
+    "tsup": {
+      "esbuild": "0.28.2"
+    },
+    "@prisma/config@7.10.0": {
+      "deepmerge-ts": "8.0.2"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@nestjs/common": "11.2.1",

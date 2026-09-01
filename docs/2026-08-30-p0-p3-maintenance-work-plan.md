@@ -145,7 +145,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | `TEN-M21` | `DONE` | 역사적 published-only full-flow를 tenancy 0.15.0/API Keys 0.3.2/RBAC 0.2.1/Nest 11.2.1/Prisma 7.10.0 tuple에서 완료했고 재개하지 않는다. 이후 tenancy `v0.16.0`/현재 main(`91b9fb7`)도 published tuple을 다시 검증했다. 최종 기록에는 API Keys `a24fe1d`, RBAC `69bf0e1`, Outbox `873f95b`, Webhook `60b2725`, Jobs `405e799`, modern/legacy E2E 각 3/3, targeted 38, unit 56 files/908 tests가 남아 있다. |
 | `TEN-ECO-NEXT` | `EXTERNAL` | 향후 RBAC/API Keys patch가 npm에 게시된 뒤 tenancy가 새 exact published tuple을 pin해 post-publish E2E를 수행한다. 어떤 pre-publish RBAC task도 이를 선행 조건으로 삼지 않는다. |
 | `EXT-SECURITY-CHANNEL` | `EXTERNAL` | 저장소 관리자가 실제 비공개 신고 채널과 지원 release line을 확정한다. |
-| `EXT-PRISMA7-AUDIT-FIX` | `EXTERNAL` | Prisma 7 dependency tree가 fixed `deepmerge-ts`를 제공하거나 제한 override가 공식/로컬 검증으로 안전해진다. |
+| `EXT-PRISMA7-AUDIT-FIX` | `DONE` | Prisma 7.10.0 자체는 아직 `deepmerge-ts@7.1.5`를 고정하지만, `@prisma/config@7.10.0`에만 적용한 `deepmerge-ts@8.0.2` override가 config load/generate, 순환 객체 회귀, PostgreSQL 16 migration과 34/34 storage contract를 통과해 로컬 안전 근거를 충족했다. upstream [issue #30052](https://github.com/prisma/orm/issues/30052)가 해결된 Prisma release로 이동할 때 override를 제거한다. |
 | `EXT-PRISMA8-STABLE` | `EXTERNAL` | Prisma 8 stable과 공식 migration contract가 게시된다. 현재 latest 조회값은 `8.0.0-rc.12`이므로 충족되지 않았다. |
 
 이 문서의 matrix 작업은 위 완료 항목을 보존하면서 광고 범위의 하한 증거와 release parity를 닫는 일이다.
@@ -165,9 +165,9 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 9 | `RBAC-M09` | P1 | `DONE` | M | 없음 | Node/Nest/Prisma 지원·semver 계약 |
 | 10 | `RBAC-M10` | P1 | `DONE` | M | `RBAC-M09` | 선택한 Nest/Prisma 하한 compatibility gate |
 | 11 | `RBAC-M11` | P1 | `DONE` | M | `RBAC-M10` | CI/release compatibility parity와 tag ancestry |
-| 12A | `RBAC-M12A` | P2 | `READY` | S | 없음 | lock-safe dev advisory 갱신 |
-| 12B | `RBAC-M12B` | P2 | `DECISION` | S | `RBAC-M12A` | esbuild parent-tool upgrade/제한 override |
-| 12C | `RBAC-M12C` | P2 | `BLOCKED` | S | `EXT-PRISMA7-AUDIT-FIX` | Prisma→deepmerge-ts upstream 추적 |
+| 12A | `RBAC-M12A` | P2 | `DONE` | S | 없음 | lock-safe dev advisory 갱신 |
+| 12B | `RBAC-M12B` | P2 | `DONE` | S | `RBAC-M12A` | esbuild parent-tool upgrade/제한 override |
+| 12C | `RBAC-M12C` | P2 | `DONE` | S | `EXT-PRISMA7-AUDIT-FIX` | Prisma→deepmerge-ts upstream 추적 |
 | 13A | `RBAC-M13A` | P2 | `READY` | S | 없음 | 역사 문서 배너와 canonical queue link |
 | 13B | `RBAC-M13B` | P2 | `READY` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
 | 14 | `RBAC-M14` | P2 | `READY` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
@@ -175,7 +175,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 16 | `RBAC-M16` | P2 | `DECISION` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `READY` | S | 없음 | examples/Prisma docs executable smoke |
 | 18 | `RBAC-M18` | P2 | `BLOCKED` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
-| 19A | `RBAC-M19A` | P2 | `BLOCKED` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
+| 19A | `RBAC-M19A` | P2 | `READY` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
 | 19B | `RBAC-M19B` | P2 | `READY` | S | 없음 | Actions pinning과 dependency bot |
 | 20A | `RBAC-M20A` | P3 | `BLOCKED` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
 | 20B | `RBAC-M20B` | P3 | `BLOCKED` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
@@ -451,37 +451,40 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M12A` — lock-safe 개발 dependency advisory 정리
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 - baseline: production 0, full dev tree high 7/low 2.
+- 결과: body-parser `2.3.0`, form-data `4.0.6`, brace-expansion `5.0.9`, postcss `8.5.26`, nanoid `3.3.18`로 lockfile만 갱신해 lock-safe finding 5개를 제거했다. 이 단계 직후 잔여는 esbuild low 1과 Prisma/deepmerge-ts high 3뿐이었고 production audit은 계속 0이었다.
 
 완료 조건:
 
-- [ ] body-parser, form-data, brace-expansion, postcss/nanoid 등 lock-safe 경로만 minimal update로 정리한다.
-- [ ] full audit 잔여 finding별 owner, dependency path, production exposure, 재검토 날짜가 있는 exception을 남긴다.
-- [ ] production audit 0을 유지한다.
+- [x] body-parser, form-data, brace-expansion, postcss/nanoid 등 lock-safe 경로만 minimal update로 정리한다.
+- [x] M12A 직후 잔여 finding은 M12B의 `tsup@8.5.1 → esbuild@0.27.7`과 M12C의 `prisma@7.10.0 → @prisma/config@7.10.0 → deepmerge-ts@7.1.5`로 분류했다. 두 owner task가 같은 사용자 요청 세션에서 제한 override와 검증을 완료해 최종 잔여 exception은 없다.
+- [x] production audit 0을 유지한다.
 
 검증: 프로필 A/D와 두 audit 명령.
 
 ### `RBAC-M12B` — esbuild parent-tool 결정
 
-- 상태: `P2 / DECISION (RBAC-M12A)`
+- 상태: `P2 / DONE (RBAC-M12A)`
 - baseline: 설치된 esbuild는 `0.27.7`, fixed 범위는 `>=0.28.1`이고 parent tool의 현재 semver 범위만으로는 lock patch가 아니다.
 
 완료 조건:
 
-- [ ] parent build tool upgrade로 fixed esbuild를 받거나, package/API/build output을 검증한 narrow override 중 하나를 선택한다.
-- [ ] 선택 후 프로필 A/B/D와 packed artifact diff를 통과한다.
-- [ ] broad override나 audit 숫자만 줄이기 위한 기능 downgrade를 하지 않는다.
+- [x] latest `tsup@8.5.1`이 계속 `esbuild:^0.27.0`을 선언하므로 `overrides.tsup.esbuild=0.28.2`를 선택했다. root/global esbuild override가 아니라 tsup parent에만 한정한다.
+- [x] 선택 후 프로필 A/B/D를 통과했고, M12 전 HEAD의 esbuild 0.27.7 build와 현재 esbuild 0.28.2 build의 `dist` 전체가 `diff -qr` 기준 동일했다. baseline/current 실제 tarball 77개 파일 비교에서도 의도한 `package.json` override 항목 외 차이가 없었고 packed consumer CJS/ESM/DI/types도 통과했다.
+- [x] broad override나 기능 downgrade를 사용하지 않았다. exact override와 lock version을 package smoke에서 고정했다.
+
+결정: tsup parent가 안전한 esbuild 범위를 게시하면 해당 parent upgrade로 override를 제거한다. 그 전에는 `tsup` exact installed version, package smoke, build artifact equality와 profile D를 변경 검토 gate로 사용한다.
 
 ### `RBAC-M12C` — Prisma transitive advisory 추적
 
-- 상태: `P2 / BLOCKED (EXT-PRISMA7-AUDIT-FIX)`
+- 상태: `P2 / DONE (EXT-PRISMA7-AUDIT-FIX)`
 
 완료 조건:
 
-- [ ] fixed Prisma 7 release 또는 안전한 제한 override 근거가 생겼을 때만 `deepmerge-ts` 경로를 변경한다.
-- [ ] 그 전에는 dependency path, dev-only exposure, owner, 다음 재검토 날짜를 만료형 exception으로 유지한다.
-- [ ] Prisma 7을 6.x로 downgrade하거나 `npm audit fix --force`를 사용하지 않는다.
+- [x] Prisma upstream [issue #30052](https://github.com/prisma/orm/issues/30052)는 열려 있고 Prisma 7.10.0은 여전히 `deepmerge-ts@7.1.5`를 exact pin한다. `overrides['@prisma/config@7.10.0']['deepmerge-ts']=8.0.2`로 affected parent/version 하나에만 제한했다.
+- [x] override 전 경로는 dev-only Prisma CLI config load 경로이고 production audit은 0이었다. local override 근거가 충족되기 전 owner는 RBAC maintainer, 재검토일은 2026-10-01로 분류했으며, override 후 full audit 0으로 잔여 exception은 없다. Prisma 7 upgrade 시 upstream dependency를 재조회하고 fixed release면 override를 제거한다.
+- [x] Prisma 7을 유지했고 `npm audit fix --force`를 사용하지 않았다. Prisma config load/generate, deepmerge 순환 객체 회귀, PostgreSQL 16 migration과 modern storage contract 34/34(skip 0)를 통과했다.
 
 금지: `npm audit fix --force`, Prisma downgrade, 근거 없는 broad override.
 
@@ -566,13 +569,13 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M19A` — audit automation과 예외 정책
 
-- 상태: `P2 / BLOCKED (RBAC-M12A, RBAC-M12B)`
+- 상태: `P2 / READY (RBAC-M12A, RBAC-M12B DONE)`
 
 완료 조건:
 
 - [ ] PR에서 production audit 0을 요구한다.
 - [ ] full dev audit는 만료형 allowlist/risk register로 관리한다.
-- [ ] `RBAC-M12C`의 upstream-blocked finding도 owner/review date가 만료되면 실패한다.
+- [ ] `RBAC-M12C` override 제거 추적과 향후 upstream-blocked finding도 owner/review date가 만료되면 실패한다.
 
 ### `RBAC-M19B` — workflow dependency hygiene
 
@@ -786,6 +789,9 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M09`: Node 22/24 packed modern consumer와 support/semver contract.
 - [x] `RBAC-M10`: exact Nest 10.4.22 packed consumer와 Prisma 5.22.0 real-DB 하한 lanes.
 - [x] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
+- [x] `RBAC-M12A`: lock-safe dev dependency patch와 production/full audit snapshot.
+- [x] `RBAC-M12B`: tsup-scoped esbuild 0.28.2 override, profile A/B/D와 pre/post artifact equality.
+- [x] `RBAC-M12C`: Prisma-config-scoped deepmerge-ts 8.0.2 override, config/generate와 Prisma 7 real-DB contract.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -794,11 +800,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M11 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M11`을 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M12A`만 선택한다.
-3. production/full audit snapshot에서 lock-safe finding과 parent/upstream-blocked finding을 먼저 분류한다.
-4. production audit 0을 유지하면서 lock-safe 경로만 minimal lock update로 정리하고 exact audit 결과를 기록한다.
-5. esbuild parent-tool 결정은 `RBAC-M12B`, Prisma upstream-blocked 경로는 `RBAC-M12C` 소유로 남기며 M12A에 섞지 않는다. `RBAC-M22`는 M11 완료로 기술적으로 `READY`지만 실행 큐 순서는 유지한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M12 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M12C`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M13A`만 선택한다.
+3. README와 역사 문서의 unchecked 항목을 목록화하고 canonical queue link 및 historical/superseded 배너를 먼저 작성한다.
+4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
+5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. audit 0 snapshot을 자동 정책으로 옮기는 일은 M19A 소유다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -818,6 +824,9 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M09` | `DONE` | `main@ea34994` | uncommitted working tree | Node 22/24 runtime·maintainer·release 계약, exact peer evidence/semver 표, Node 22 types와 dual packed lane 정렬; A/B/C1/C2/C3/D PASS | `RBAC-M10` exact Nest 10.4.22/Prisma 5.22.0 하한 lane 시작 |
 | 2026-09-01 | `RBAC-M10` | `DONE` | `main@183cb77` | uncommitted working tree | exact Nest 10.4.22 strict packed CJS/ESM/DI/types와 Prisma 5.22.0 PostgreSQL 16 34/34 skip 0; A/B/C4/D PASS | `RBAC-M11` CI/release parity와 tag ancestry 시작 |
 | 2026-09-01 | `RBAC-M11` | `DONE` | `main@3ea9f61` | uncommitted working tree | release Node 22/24, Nest 10/11, Prisma 5/6/7 parity와 tag→target→main ancestry를 publish 선행 gate로 고정; A/B/C2/C3/D와 release graph PASS | `RBAC-M12A` lock-safe dev advisory 갱신 시작 |
+| 2026-09-01 | `RBAC-M12A` | `DONE` | `main@1c4842b` | uncommitted working tree | lock-safe 5경로만 patch해 full audit 9→4, production 0 유지; A/D audit PASS | `RBAC-M12B` tsup/esbuild 결정 |
+| 2026-09-01 | `RBAC-M12B` | `DONE` | `main@1c4842b` | uncommitted working tree | tsup-scoped esbuild 0.28.2 override, A/B/D와 packed consumers PASS, 0.27.7 대비 dist byte-identical | `RBAC-M12C` Prisma/deepmerge-ts 결정 |
+| 2026-09-01 | `RBAC-M12C` | `DONE` | `main@1c4842b` | uncommitted working tree | @prisma/config 7.10.0-scoped deepmerge-ts 8.0.2 override, full/production audit 0, config/generate/cycle/PG16 34/34 PASS | `RBAC-M13A` 역사 문서 배너와 canonical queue link 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -971,4 +980,46 @@ Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HE
 Unverified paths and reason: 실제 GitHub release event와 Node 22 runner는 새 release를 만들지 않아 실행하지 않았다. workflow graph/contract test로 publish 선행 관계와 Node 22 lane parity를 검증했다. Prisma 5.22.0 real-DB는 직전 RBAC-M10에서 34/34 skip 0으로 검증했고 M11은 동일 recipe를 release graph에 복제했으므로 재실행하지 않았다.
 External PR/release evidence: 현재 공개 기준은 GitHub/npm v0.2.1이고 tag targetCommitish는 main, publishedAt은 2026-08-30T04:52:45Z다. RBAC-M11 결과는 commit/PR/release 전 working tree다. 검증용 PostgreSQL 16 container와 격리 복사본은 완료 뒤 제거했다.
 Next exact action: RBAC-M12A에서 production/full audit snapshot을 다시 만들고 lock-safe finding만 minimal lock update로 정리한다.
+```
+
+### 2026-09-01 RBAC-M12A 인계
+
+```text
+Task: RBAC-M12A
+State: DONE
+Start ref / end ref: main@1c4842b / main@1c4842b + uncommitted RBAC-M12A/B/C working tree
+Changed files: package-lock.json, docs/2026-08-30-p0-p3-maintenance-work-plan.md
+Contract decision: production dependency 경로는 변경하지 않고 body-parser 2.3.0, form-data 4.0.6, brace-expansion 5.0.9, postcss 8.5.26, nanoid 3.3.18만 현재 parent range 안에서 lock patch했다. M12A 직후 full audit은 9건(high 7/low 2)에서 4건(high 3/low 1)으로 줄었고, 잔여 owner는 M12B esbuild와 M12C Prisma/deepmerge-ts로 분리했다.
+Commands and exact results: npm update ... --package-lock-only PASS; M12A 직후 npm audit --json exit 1 with 4 dev-only findings; npm audit --omit=dev --json PASS (0); 최종 npm ci PASS (461 packages installed, audit 0); final profile A PASS 결과는 아래 M12B/C combined validation에 기록한다.
+Unverified paths and reason: M12A 단독 시점의 A/B/D 전체는 뒤 task가 같은 사용자 요청 세션에서 연속 수행되어 최종 dependency tree에서 실행했다.
+External PR/release evidence: 없음. dependency metadata는 npm registry와 audit advisory를 조회했으며 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M12B에서 tsup parent에만 제한한 fixed esbuild를 검증한다.
+```
+
+### 2026-09-01 RBAC-M12B 인계
+
+```text
+Task: RBAC-M12B
+State: DONE
+Start ref / end ref: main@1c4842b / main@1c4842b + uncommitted RBAC-M12A/B/C working tree
+Changed files: package.json, package-lock.json, test/unit/package-smoke.spec.ts, docs/2026-08-30-p0-p3-maintenance-work-plan.md
+Contract decision: latest tsup 8.5.1은 esbuild ^0.27.0을 유지하므로 root/global override가 아닌 overrides.tsup.esbuild=0.28.2를 사용한다. exact override와 resolved lock version을 package smoke로 고정하고 tsup이 안전 범위를 게시하면 parent upgrade와 함께 제거한다. 기능 downgrade와 npm audit fix --force는 사용하지 않았다.
+Commands and exact results: npm ls/npm explain에서 tsup 8.5.1 → esbuild 0.28.2 overridden, bundle-require >=0.18 peer와 Vite ^0.27 || ^0.28 peer 만족 확인; profile A PASS (lint, typecheck, 14 files/313 tests, diff-check); fresh profile B PASS (13 files/303 tests; statements 93.78%, branches 86.98%, functions 96.67%, lines 94.9%); build PASS; modern packed consumer PASS (Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2); Nest 10.4.22 packed consumer PASS; npm pack --dry-run --json PASS (77 files, 245249 bytes); isolated M12 전 esbuild 0.27.7 build와 esbuild 0.28.2 build의 dist diff -qr PASS with no differences; baseline/current actual tarball diff는 package.json의 의도한 override 항목만 표시; both audits 0.
+Unverified paths and reason: 실제 Node 22 runner는 새 workflow run을 만들지 않아 실행하지 않았다. local profile D와 두 exact packed consumer는 Node 24.11.1에서 통과했다.
+External PR/release evidence: esbuild 0.28.2 release와 tsup 8.5.1 current manifest를 조회했으며 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M12C에서 Prisma config parent에만 제한한 deepmerge-ts 8 override를 검증한다.
+```
+
+### 2026-09-01 RBAC-M12C 인계
+
+```text
+Task: RBAC-M12C
+State: DONE
+Start ref / end ref: main@1c4842b / main@1c4842b + uncommitted RBAC-M12A/B/C working tree
+Changed files: package.json, package-lock.json, test/unit/package-smoke.spec.ts, docs/2026-08-30-p0-p3-maintenance-work-plan.md
+Contract decision: Prisma 7.10.0과 @prisma/config 7.10.0은 유지하고 overrides['@prisma/config@7.10.0']['deepmerge-ts']=8.0.2를 적용한다. 이 exact parent/version 범위를 벗어난 Prisma upgrade에는 override를 자동 확장하지 않으며 upstream issue #30052의 fixed Prisma release가 나오면 override를 제거한다. dev-only CLI config path이고 package consumer production audit은 계속 0이다.
+Commands and exact results: npm ls/npm explain에서 prisma 7.10.0 → @prisma/config 7.10.0 → deepmerge-ts 8.0.2 overridden 확인; deepmerge cyclic object regression PASS; Prisma config load와 npm run prisma:generate PASS; PostgreSQL 16에서 prisma:migrate:test PASS; RBAC_PRISMA_CLIENT=modern npm run test:prisma PASS (1 file, 34 tests, skip 0); final npm audit --json PASS (0), npm audit --omit=dev --json PASS (0); package override focused smoke PASS (1 file, 8 tests); temporary PostgreSQL container removed.
+Unverified paths and reason: Prisma 5/6은 override가 exact @prisma/config 7.10.0에만 적용되므로 재실행하지 않았다. upstream Prisma 자체의 deepmerge-ts bump는 아직 게시되지 않았다.
+External PR/release evidence: Prisma upstream issue #30052는 2026-09-01 조회 시 open이고 Prisma 7.10.0 package는 deepmerge-ts 7.1.5를 exact pin한다. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M13A에서 역사 문서 배너와 canonical maintenance queue link를 추가한다.
 ```

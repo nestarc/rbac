@@ -89,6 +89,24 @@ describe('package exports', () => {
     expect(ciWorkflow).toContain('prisma-version: 7.10.0');
   });
 
+  it('pins advisory overrides to the affected parent tool versions', () => {
+    const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
+    const packageLockPath = fileURLToPath(new URL('../../package-lock.json', import.meta.url));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+      overrides: Record<string, Record<string, string>>;
+    };
+    const packageLock = JSON.parse(readFileSync(packageLockPath, 'utf8')) as {
+      packages: Record<string, { version?: string }>;
+    };
+
+    expect(packageJson.overrides).toEqual({
+      tsup: { esbuild: '0.28.2' },
+      '@prisma/config@7.10.0': { 'deepmerge-ts': '8.0.2' },
+    });
+    expect(packageLock.packages['node_modules/esbuild']?.version).toBe('0.28.2');
+    expect(packageLock.packages['node_modules/deepmerge-ts']?.version).toBe('8.0.2');
+  });
+
   it('blocks release publish on compatibility parity and main/tag ancestry', () => {
     const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
     const releaseWorkflowPath = fileURLToPath(
