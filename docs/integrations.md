@@ -84,6 +84,11 @@ legacy property; the standard API Keys Guard alone does not create that state.
 RBAC accepts any structural logger with a `log(event)` method. Deny decisions from
 `RbacGuard` emit `rbac.permission.denied`, and write operations such as role
 creation, permission grants, assignments, and revocations emit RBAC audit events.
+For stacked class and handler requirements, the Guard records only the final
+request outcome: a denial identifies the failing zero-based `requirementIndex`
+without retaining earlier allowed events. When `logAllowedDecisions` is enabled,
+a request that passes multiple requirements emits one `rbac.permission.allowed`
+event with safe per-requirement index/reason entries.
 
 ```ts
 import { InMemoryRbacStorage, NoopRbacAuditLogger, RbacModule } from '@nestarc/rbac';

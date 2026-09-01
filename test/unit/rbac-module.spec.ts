@@ -386,6 +386,145 @@ describe('RbacGuard', () => {
     ]);
   });
 
+  it('logs only the final denied request outcome when a later stacked requirement fails', async () => {
+    const log = vi.fn<(event: RbacAuditEvent) => void>();
+
+    @RequireRole('owner')
+    class ReportsController {
+      @Can('reports.read')
+      read() {
+        return undefined;
+      }
+    }
+    const handler = getHandler(ReportsController.prototype, 'read');
+    const decisions = [
+      {
+        allowed: true,
+        reason: 'allowed_by_role_permission' as const,
+        subject,
+        tenantId: 'tenant_1',
+        permission: 'reports.read',
+        permissions: ['reports.read'],
+      },
+      {
+        allowed: false,
+        reason: 'denied_no_matching_role' as const,
+        subject,
+        tenantId: 'tenant_1',
+        roleKey: 'owner',
+      },
+    ];
+    const can = vi.fn(() => Promise.resolve(decisions.shift()));
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        Reflector,
+        RbacGuard,
+        { provide: RbacService, useValue: { can } },
+        {
+          provide: RBAC_OPTIONS,
+          useValue: {
+            storage: new InMemoryRbacStorage(),
+            subjectResolver: () => subject,
+            auditLogger: { log },
+            logAllowedDecisions: true,
+          } satisfies RbacModuleOptions,
+        },
+      ],
+    }).compile();
+
+    await expect(
+      moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+    ).rejects.toMatchObject({
+      response: {
+        message: 'Permission denied',
+        code: 'RBAC_PERMISSION_DENIED',
+      },
+    });
+
+    expect(can).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith({
+      type: 'rbac.permission.denied',
+      tenantId: 'tenant_1',
+      subjectType: 'user',
+      subjectId: 'user_1',
+      metadata: {
+        reason: 'denied_no_matching_role',
+        requirementIndex: 1,
+        roleKey: 'owner',
+      },
+    });
+  });
+
+  it.each([
+    ['same tenant', ['tenant_1', 'tenant_1'] as const, 'tenant_1'],
+    ['mixed tenant scopes', ['tenant_1', null] as const, undefined],
+  ])(
+    'logs one final allowed request outcome after all stacked requirements pass with %s',
+    async (_label, [permissionTenantId, roleTenantId], auditTenantId) => {
+      const log = vi.fn<(event: RbacAuditEvent) => void>();
+
+      @RequireRole('owner')
+      class ReportsController {
+        @Can('reports.read')
+        read() {
+          return undefined;
+        }
+      }
+      const handler = getHandler(ReportsController.prototype, 'read');
+      const decisions = [
+        {
+          allowed: true,
+          reason: 'allowed_by_role_permission' as const,
+          subject,
+          tenantId: permissionTenantId,
+        },
+        {
+          allowed: true,
+          reason: 'allowed_by_role' as const,
+          subject,
+          tenantId: roleTenantId,
+        },
+      ];
+      const can = vi.fn(() => Promise.resolve(decisions.shift()));
+      const moduleRef = await Test.createTestingModule({
+        providers: [
+          Reflector,
+          RbacGuard,
+          { provide: RbacService, useValue: { can } },
+          {
+            provide: RBAC_OPTIONS,
+            useValue: {
+              storage: new InMemoryRbacStorage(),
+              subjectResolver: () => subject,
+              auditLogger: { log },
+              logAllowedDecisions: true,
+            } satisfies RbacModuleOptions,
+          },
+        ],
+      }).compile();
+
+      await expect(
+        moduleRef.get(RbacGuard).canActivate(contextFor(ReportsController, handler)),
+      ).resolves.toBe(true);
+
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith({
+        type: 'rbac.permission.allowed',
+        tenantId: auditTenantId,
+        subjectType: 'user',
+        subjectId: 'user_1',
+        metadata: {
+          reason: 'allowed_all_requirements',
+          requirements: [
+            { requirementIndex: 0, reason: 'allowed_by_role_permission' },
+            { requirementIndex: 1, reason: 'allowed_by_role' },
+          ],
+        },
+      });
+    },
+  );
+
   it('uses the configured tenant resolver as the authoritative source by default', async () => {
     class ReportsController {
       @Can('reports.read', { tenant: 'required' })

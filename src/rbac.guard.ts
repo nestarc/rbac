@@ -124,16 +124,19 @@ export class RbacGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<HttpRequest>();
     request[RBAC_SUBJECT_REQUEST_KEY] = subject;
 
-    for (const requirement of requirements) {
+    const allowedDecisions: RbacDecision[] = [];
+    for (const [requirementIndex, requirement] of requirements.entries()) {
       const decision = await this.checkRequirement(context, requirement, subject);
       if (!decision.allowed) {
-        await this.logDeniedDecision(decision);
+        await this.logDeniedDecision(decision, requirementIndex);
         throw this.deniedDecisionToHttpException(decision.reason);
       }
 
-      if (this.options.logAllowedDecisions) {
-        await this.logAllowedDecision(decision);
-      }
+      allowedDecisions.push(decision);
+    }
+
+    if (this.options.logAllowedDecisions) {
+      await this.logAllowedRequest(allowedDecisions);
     }
 
     return true;
@@ -357,7 +360,10 @@ export class RbacGuard implements CanActivate {
     }
   }
 
-  private async logDeniedDecision(decision: RbacDecision): Promise<void> {
+  private async logDeniedDecision(
+    decision: RbacDecision,
+    requirementIndex: number,
+  ): Promise<void> {
     await this.logAudit({
       type: 'rbac.permission.denied',
       tenantId: decision.tenantId,
@@ -365,11 +371,39 @@ export class RbacGuard implements CanActivate {
       subjectId: decision.subject?.id,
       metadata: {
         reason: decision.reason,
+        requirementIndex,
         permission: decision.permission,
         permissions: decision.permissions,
         roleKey: decision.roleKey,
         resource: auditResource(decision.resource),
         details: decision.details,
+      },
+    });
+  }
+
+  private async logAllowedRequest(decisions: RbacDecision[]): Promise<void> {
+    const firstDecision = decisions[0]!;
+
+    if (decisions.length === 1) {
+      await this.logAllowedDecision(firstDecision);
+      return;
+    }
+
+    const tenantId = decisions.every((decision) => decision.tenantId === firstDecision.tenantId)
+      ? firstDecision.tenantId
+      : undefined;
+
+    await this.logAudit({
+      type: 'rbac.permission.allowed',
+      tenantId,
+      subjectType: firstDecision.subject?.type,
+      subjectId: firstDecision.subject?.id,
+      metadata: {
+        reason: 'allowed_all_requirements',
+        requirements: decisions.map((decision, requirementIndex) => ({
+          requirementIndex,
+          reason: decision.reason,
+        })),
       },
     });
   }

@@ -30,6 +30,11 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Guard authorization audit is now request-final for stacked class and handler
+  requirements. A later denial no longer leaves an earlier allowed event; denied
+  events identify the failing requirement index, and fully allowed stacked
+  requests emit one aggregate allowed event when allowed-decision logging is
+  enabled.
 - Built-in storage writes now emit success audit and policy-change events only for
   committed changes. Duplicate create/assignment/grant operations and missing or
   already-applied delete/revoke operations are no-ops without success events.

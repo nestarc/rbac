@@ -161,7 +161,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 5 | `RBAC-M05` | P1 | `DONE` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
 | 6 | `RBAC-M06` | P1 | `DONE` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
 | 7 | `RBAC-M07` | P1 | `DONE` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
-| 8 | `RBAC-M08` | P1 | `READY` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
+| 8 | `RBAC-M08` | P1 | `DONE` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
 | 9 | `RBAC-M09` | P1 | `DECISION` | M | 없음 | Node/Nest/Prisma 지원·semver 계약 |
 | 10 | `RBAC-M10` | P1 | `BLOCKED` | M | `RBAC-M09` | 선택한 Nest/Prisma 하한 compatibility gate |
 | 11 | `RBAC-M11` | P1 | `BLOCKED` | M | `RBAC-M10` | CI/release compatibility parity와 tag ancestry |
@@ -362,15 +362,15 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M08` — 복수 requirement audit 정합성
 
-- 상태: `P1 / READY`
+- 상태: `P1 / DONE`
 - 문제: 앞 requirement를 allow로 즉시 기록한 뒤 뒤 requirement가 deny되면 한 요청에 allowed와 denied가 함께 남는다.
 
 완료 조건:
 
-- [ ] request-level 최종 audit를 선택해 모든 requirement 통과 뒤 한 번만 allow를 기록한다.
-- [ ] requirement 세부 정보가 필요하면 최종 request outcome 아래 안전한 index/reason으로 포함하고 별도의 `allowed` event로 내지 않는다.
-- [ ] deny는 실패 requirement와 안전한 reason만 기록한다.
-- [ ] HTTP response와 audit outcome이 일치한다.
+- [x] request-level 최종 audit를 선택해 모든 requirement 통과 뒤 한 번만 allow를 기록한다.
+- [x] requirement 세부 정보가 필요하면 최종 request outcome 아래 안전한 index/reason으로 포함하고 별도의 `allowed` event로 내지 않는다.
+- [x] deny는 실패 requirement와 안전한 reason만 기록한다.
+- [x] HTTP response와 audit outcome이 일치한다.
 
 검증: stacked class/handler requirements, audit-log adapter, HTTP E2E.
 
@@ -732,6 +732,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M05`: default HTTP subject source conflict matrix, namespace isolation, Guard HTTP E2E.
 - [x] `RBAC-M06`: service/InMemory/Prisma identifier round-trip, API-key exact identity, event payload와 non-canonical effective-row fail-closed contract.
 - [x] `RBAC-M07`: outcome-aware built-in mutation, missing/no-op/race matrix, audit/change event suppression과 Prisma 6/7 real-DB contract.
+- [x] `RBAC-M08`: stacked class/handler request-level final audit, failing requirement index/reason, HTTP/audit-log outcome parity.
 - [ ] `RBAC-M09`/`RBAC-M10`: 선택한 Node/Nest/Prisma 하한 lanes.
 - [ ] `RBAC-M11`: release legacy compatibility parity와 main/tag ancestry.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
@@ -742,11 +743,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M07 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M07`을 반복하지 않고 `RBAC-M08`만 선택한다.
-3. 첫 requirement allow, 다음 requirement deny인 stacked class/handler 요청의 audit 결과를 RED로 만든다.
-4. request-level 최종 결과 아래에서만 audit를 한 번 기록하고, 실패 requirement index/reason이 HTTP deny와 일치하는지 확인한다.
-5. 프로필 A/B/C1과 audit-log integration을 검증하고 이 문서 상태와 작업 기록을 갱신해 별도 patch PR로 종료한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M08 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M08`을 반복하지 않고 `RBAC-M09`만 선택한다.
+3. consumer runtime Node 하한과 maintainer Node 22/24 toolchain을 분리하고 Nest/Prisma/sibling peer 선언·증거·semver 표를 ADR로 먼저 작성한다.
+4. 현재 packed consumer/CI/real-DB evidence가 증명하지 못하는 하한을 광고하지 않으며, peer 축소나 engine 상향이 필요한 경우 0.3 migration 결정으로 분리한다.
+5. 결정된 계약과 검증 범위를 이 문서에 갱신하고 `RBAC-M10`의 exact compatibility lane을 활성화한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -762,6 +763,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M05` | `DONE` | `main@c3297c8` | uncommitted working tree | custom user type 호환성을 유지하고 valid RBAC subject/user/API-key identity를 exact tuple로 조정해 conflict를 subject missing으로 fail closed; namespace isolation, A/B, Guard E2E와 build PASS | `RBAC-M06` 시작 |
 | 2026-09-01 | `RBAC-M06` | `DONE` | `main@7e4f9cf` | uncommitted working tree | service/InMemory/Prisma가 공통 outer-whitespace canonicalization을 사용하고 API-key subject identity는 exact 보존; create→assign→can, update/delete/list, audit/change event, non-canonical storage deny와 A/B/C1/C2/C3 PASS | `RBAC-M07` 시작 |
 | 2026-09-01 | `RBAC-M07` | `DONE` | `main@5fc74b0` | uncommitted working tree | optional mutation-result capability로 built-in create/update/delete/grant/revoke/assign의 committed/no-op/conflict를 구분하고 missing update 생성과 no-op 성공 event를 차단; legacy fallback/deprecation 문서화, A/B/C2/C3와 audit-log, build PASS | `RBAC-M08` 시작 |
+| 2026-09-01 | `RBAC-M08` | `DONE` | `main@b2f3a59` | uncommitted working tree | stacked requirement audit를 request-final로 변경해 later deny의 선행 allow event를 제거하고 실패 index/reason과 HTTP 결과를 일치시킴; A/B/C1과 audit-log adapter PASS | `RBAC-M09` 결정 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -859,4 +861,18 @@ Commands and exact results: git fetch --prune --tags PASS; baseline npm run type
 Unverified paths and reason: packed consumer/package dry-run/audit 프로필 D는 package export 경로와 metadata를 바꾸지 않고 RBAC-M07 명시 검증 profile이 A/B/C2/C3와 audit-log integration이므로 실행하지 않았다.
 External PR/release evidence: 없음. origin/main은 69bf0e1이고 현재 결과는 commit/PR/release 전 working tree다. C2/C3 검증용 임시 PostgreSQL 16 container와 Prisma 6 worktree는 검증 뒤 제거했다.
 Next exact action: RBAC-M08의 첫 requirement allow/다음 requirement deny stacked request에서 request-level 최종 audit 하나만 남는 RED Guard/audit fixture를 추가한다.
+```
+
+### 2026-09-01 RBAC-M08 인계
+
+```text
+Task: RBAC-M08
+State: DONE
+Start ref / end ref: main@b2f3a59 / main@b2f3a59 + uncommitted RBAC-M08 working tree
+Changed files: changelog.md, docs/integrations.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/rbac.guard.ts, test/e2e/rbac-guard.e2e-spec.ts, test/unit/rbac-module.spec.ts
+Contract decision: Guard authorization audit은 stacked class/handler requirement 각각의 중간 결과가 아니라 request-level 최종 결과다. allow decision은 모든 requirement가 통과할 때까지 보류하며, 단일 requirement의 기존 allowed metadata는 유지하고 복수 allow는 allowed_all_requirements 아래 zero-based requirementIndex와 safe reason만 모은 이벤트 하나로 기록한다. 복수 requirement의 tenant scope가 다르면 aggregate event의 top-level tenantId는 undefined다. deny는 실패한 requirement의 zero-based requirementIndex와 기존 safe requirement/reason/details만 기록하며 선행 allow event를 남기지 않는다. audit logger 실패가 HTTP 결과를 바꾸지 않는 기존 best-effort 계약은 유지한다.
+Commands and exact results: git fetch --prune --tags PASS; initial RED focused Guard test는 1 test failure로 allow 뒤 deny에서 audit 2건 기록을 재현; npm run lint PASS; npm run typecheck PASS; npm test PASS (14 files, 309 tests); fresh npm run test:coverage PASS (13 files, 299 tests; statements 94.32%, branches 87.26%, functions 96.95%, lines 95.5%; src/rbac.guard.ts branches 95.45%); npm run test:e2e PASS (1 file, 10 tests); audit-log integration targeted PASS (1 file, 3 tests); git diff --check PASS.
+Unverified paths and reason: Prisma C2/C3와 packed consumer D는 storage/adapter/package export를 변경하지 않았고 RBAC-M08 명시 검증 범위가 A/B/C1과 audit-log adapter이므로 실행하지 않았다.
+External PR/release evidence: 없음. origin/main은 69bf0e1이고 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M09에서 consumer runtime Node 하한과 maintainer toolchain, Nest/Prisma/sibling peer 선언·증거·semver를 분리한 ADR 표를 작성한다.
 ```

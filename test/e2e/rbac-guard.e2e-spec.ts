@@ -19,11 +19,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   Can,
   InMemoryRbacStorage,
+  RequireRole,
   RbacGuard,
   RbacModule,
   SkipRbac,
   type RbacSubject,
 } from '../../src';
+import { createAuditLogRbacLogger } from '../../src/integrations/audit-log';
 
 type HeaderValue = string | string[] | undefined;
 
@@ -91,6 +93,16 @@ class TestRbacController {
   }
 }
 
+@RequireRole('owner')
+@Controller()
+class StackedRbacController {
+  @Can('reports.read')
+  @Get('/stacked-requirements')
+  readReportsAsOwner() {
+    return { ok: true };
+  }
+}
+
 @Injectable()
 class ConflictingSubjectMiddleware implements NestMiddleware {
   use(request: Record<string, unknown>, _response: unknown, next: () => void): void {
@@ -133,12 +145,14 @@ describe('RbacGuard HTTP behavior', () => {
   let app: Awaited<ReturnType<TestingModule['createNestApplication']>>;
   let storage: InMemoryRbacStorage;
   let trustedTenantId: string | undefined;
+  let auditEvents: Record<string, unknown>[];
 
   const httpServer = (): App => app.getHttpServer() as App;
 
   beforeEach(async () => {
     storage = new InMemoryRbacStorage();
     trustedTenantId = undefined;
+    auditEvents = [];
 
     @Module({
       imports: [
@@ -148,9 +162,18 @@ describe('RbacGuard HTTP behavior', () => {
           subjectResolver,
           tenantResolver: () => trustedTenantId,
           requireMetadata: true,
+          logAllowedDecisions: true,
+          auditLogger: createAuditLogRbacLogger({
+            auditLog: {
+              log: (event) => {
+                auditEvents.push(event);
+              },
+            },
+            source: 'rbac-e2e',
+          }),
         }),
       ],
-      controllers: [TestRbacController],
+      controllers: [TestRbacController, StackedRbacController],
       providers: [{ provide: APP_GUARD, useClass: RbacGuard }],
     })
     class TestRbacModule {}
@@ -234,6 +257,31 @@ describe('RbacGuard HTTP behavior', () => {
 
     expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
     expect(response.body).not.toHaveProperty('details');
+  });
+
+  it('keeps the HTTP denial and audit-log result aligned for stacked requirements', async () => {
+    const response = await request(httpServer())
+      .get('/stacked-requirements')
+      .set('x-user-id', 'viewer_1')
+      .set('x-tenant-id', tenantId)
+      .expect(403);
+
+    expect(response.body).toMatchObject({ code: 'RBAC_PERMISSION_DENIED' });
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toMatchObject({
+      action: 'rbac.permission.denied',
+      source: 'rbac-e2e',
+      result: 'failure',
+      actorType: 'user',
+      actorId: 'viewer_1',
+      tenantId,
+      metadata: {
+        reason: 'denied_no_matching_role',
+        requirementIndex: 1,
+        roleKey: 'owner',
+      },
+    });
+    expect(JSON.stringify(auditEvents)).not.toContain('rbac.permission.allowed');
   });
 
   it('returns a stable configuration error for invalid runtime requirement metadata', async () => {
