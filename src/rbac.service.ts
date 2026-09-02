@@ -17,9 +17,6 @@ import type {
   ListRolesInput,
   RbacAuditEvent,
   RbacCanInput,
-  RbacDecision,
-  RbacDecisionDetails,
-  RbacDecisionReason,
   RbacEffectivePermission,
   RbacEffectiveRole,
   RbacModuleOptions,
@@ -29,6 +26,9 @@ import type {
   RbacResourceRef,
   RbacRole,
   RbacRoleBinding,
+  RbacServiceDecision,
+  RbacServiceDecisionDetails,
+  RbacServiceDecisionReason,
   RbacSubject,
   RevokePermissionInput,
   RevokeRoleInput,
@@ -68,7 +68,7 @@ interface PermissionRequirement {
   invalid: boolean;
 }
 
-type DecisionOverrides = Partial<RbacDecision> & {
+type DecisionOverrides = Partial<RbacServiceDecision> & {
   allowed: boolean;
   missingPermissions?: string[] | undefined;
 };
@@ -89,7 +89,7 @@ function auditResource(resource: RbacResourceRef | undefined): RbacResourceRef |
 export class RbacService {
   constructor(@Inject(RBAC_OPTIONS) private readonly options: RbacModuleOptions) {}
 
-  async can(input: RbacCanInput): Promise<RbacDecision> {
+  async can(input: RbacCanInput): Promise<RbacServiceDecision> {
     this.validateCanInput(input);
     const canonicalInput = this.canonicalizeCanInput(input);
     const subject = isRbacSubject(canonicalInput.subject) ? canonicalInput.subject : undefined;
@@ -390,7 +390,7 @@ export class RbacService {
     input: RbacCanInput & { roleKey: string },
     subject: RbacSubject,
     tenantId: string | null,
-  ): Promise<RbacDecision> {
+  ): Promise<RbacServiceDecision> {
     const roleKey = input.roleKey.trim();
     if (roleKey === '') {
       return this.decision(input, 'denied_no_matching_role', {
@@ -428,7 +428,7 @@ export class RbacService {
     input: RbacCanInput,
     subject: RbacSubject,
     tenantId: string | null,
-  ): Promise<RbacDecision> {
+  ): Promise<RbacServiceDecision> {
     const requirement = this.resolvePermissionRequirement(input);
 
     if (requirement.invalid || requirement.permissions.length === 0) {
@@ -642,7 +642,7 @@ export class RbacService {
     };
   }
 
-  private sanitizeDecision(decision: RbacDecision): RbacDecision {
+  private sanitizeDecision(decision: RbacServiceDecision): RbacServiceDecision {
     return {
       ...decision,
       subject: decision.subject ? this.sanitizeSubject(decision.subject) : undefined,
@@ -843,7 +843,7 @@ export class RbacService {
     error: unknown,
     subject: RbacSubject,
     tenantId: string | null,
-  ): Promise<RbacDecision> | RbacDecision {
+  ): Promise<RbacServiceDecision> | RbacServiceDecision {
     if (this.options.storageErrors === 'throw') {
       throw new RbacStorageError({ operation: 'can' }, { cause: error });
     }
@@ -857,10 +857,10 @@ export class RbacService {
 
   private decision(
     input: RbacCanInput,
-    reason: RbacDecisionReason,
+    reason: RbacServiceDecisionReason,
     overrides: DecisionOverrides,
-  ): RbacDecision {
-    const decision: RbacDecision = {
+  ): RbacServiceDecision {
+    const decision = {
       allowed: overrides.allowed,
       reason,
       subject: overrides.subject ?? input.subject,
@@ -873,15 +873,17 @@ export class RbacService {
       matchedPermissions: overrides.matchedPermissions,
       resource: input.resource,
     };
-    decision.details = overrides.details ?? this.buildDecisionDetails(decision, overrides);
 
-    return decision;
+    return {
+      ...decision,
+      details: overrides.details ?? this.buildDecisionDetails(decision, overrides),
+    };
   }
 
   private buildDecisionDetails(
-    decision: RbacDecision,
+    decision: Omit<RbacServiceDecision, 'details'>,
     overrides: DecisionOverrides,
-  ): RbacDecisionDetails {
+  ): RbacServiceDecisionDetails {
     const requirement = this.buildRequirementDetails(decision);
     const matched = this.buildMatchedDetails(decision);
     const missing = this.buildMissingDetails(decision, overrides);
@@ -896,8 +898,8 @@ export class RbacService {
   }
 
   private buildRequirementDetails(
-    decision: RbacDecision,
-  ): NonNullable<RbacDecisionDetails['requirement']> | undefined {
+    decision: Omit<RbacServiceDecision, 'details'>,
+  ): NonNullable<RbacServiceDecisionDetails['requirement']> | undefined {
     if (decision.roleKey !== undefined) {
       return { type: 'role', roleKeys: [decision.roleKey] };
     }
@@ -914,14 +916,14 @@ export class RbacService {
   }
 
   private buildMatchedDetails(
-    decision: RbacDecision,
-  ): NonNullable<RbacDecisionDetails['matched']> | undefined {
+    decision: Omit<RbacServiceDecision, 'details'>,
+  ): NonNullable<RbacServiceDecisionDetails['matched']> | undefined {
     if (decision.matchedRoleKeys === undefined && decision.matchedPermissions === undefined) {
       return undefined;
     }
 
     return {
-      ...(decision.matchedRoleKeys !== undefined ? { roleKeys: decision.matchedRoleKeys } : {}),
+      roleKeys: decision.matchedRoleKeys ?? [],
       ...(decision.matchedPermissions !== undefined
         ? { permissions: decision.matchedPermissions }
         : {}),
@@ -929,9 +931,9 @@ export class RbacService {
   }
 
   private buildMissingDetails(
-    decision: RbacDecision,
+    decision: Omit<RbacServiceDecision, 'details'>,
     overrides: DecisionOverrides,
-  ): NonNullable<RbacDecisionDetails['missing']> | undefined {
+  ): NonNullable<RbacServiceDecisionDetails['missing']> | undefined {
     switch (decision.reason) {
       case 'denied_subject_missing':
         return { subject: true };
@@ -939,9 +941,6 @@ export class RbacService {
         return { tenant: true };
       case 'denied_tenant_conflict':
         return undefined;
-      case 'denied_resource_missing':
-      case 'denied_resource_mismatch':
-        return { resource: true };
       case 'denied_no_matching_role':
         return decision.roleKey !== undefined ? { roleKeys: [decision.roleKey] } : undefined;
       case 'denied_no_matching_permission':
@@ -954,8 +953,8 @@ export class RbacService {
   }
 
   private evaluationStep(
-    reason: RbacDecisionReason,
-  ): NonNullable<RbacDecisionDetails['evaluationPath']>[number] {
+    reason: RbacServiceDecisionReason,
+  ): RbacServiceDecisionDetails['evaluationPath'][number] {
     switch (reason) {
       case 'allowed_by_role':
         return { code: 'role_matched', outcome: 'allow' };
@@ -967,12 +966,7 @@ export class RbacService {
         return { code: 'tenant_missing', outcome: 'deny' };
       case 'denied_tenant_conflict':
         return { code: 'tenant_conflict', outcome: 'deny' };
-      case 'denied_resource_missing':
-        return { code: 'resource_missing', outcome: 'deny' };
-      case 'denied_resource_mismatch':
-        return { code: 'resource_mismatch', outcome: 'deny' };
       case 'denied_no_matching_role':
-      case 'denied_role_expired':
         return { code: 'role_missing', outcome: 'deny' };
       case 'denied_no_matching_permission':
         return { code: 'permission_missing', outcome: 'deny' };

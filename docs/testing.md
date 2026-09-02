@@ -103,6 +103,12 @@ const sameService = rbacServiceAccount('worker_1');
 Use service-level `rbac.can()` or controller tests with `RbacGuard` depending on
 whether the test is checking RBAC decisions or full HTTP wiring.
 
+`rbac.can()`, `expectAllowed()`, `expectDenied()`, and `expectRbacMatrix()` return
+`RbacServiceDecision`. This producer-accurate type excludes legacy reason values
+that the service never returns and requires the safe `details` object that every
+service decision contains. Use the wider `RbacDecision` only for compatibility
+fixtures that intentionally model an older or application-authored decision.
+
 ## Scenario And Matrix Helpers
 
 `createRbacScenario()` seeds an in-memory storage with roles and bindings, then

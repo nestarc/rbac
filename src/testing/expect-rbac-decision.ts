@@ -1,10 +1,10 @@
-import type { RbacCanInput, RbacDecision } from '../interfaces';
+import type { RbacCanInput, RbacServiceDecision } from '../interfaces';
 import type { RbacService } from '../rbac.service';
 
 export async function expectAllowed(
   rbac: RbacService,
   input: RbacCanInput,
-): Promise<RbacDecision> {
+): Promise<RbacServiceDecision> {
   const decision = await rbac.can(input);
   if (!decision.allowed) {
     throw new Error(`Expected RBAC decision to allow, received ${decision.reason}`);
@@ -16,8 +16,8 @@ export async function expectAllowed(
 export async function expectDenied(
   rbac: RbacService,
   input: RbacCanInput,
-  reason?: RbacDecision['reason'],
-): Promise<RbacDecision> {
+  reason?: RbacServiceDecision['reason'],
+): Promise<RbacServiceDecision> {
   const decision = await rbac.can(input);
   if (decision.allowed) {
     throw new Error('Expected RBAC decision to deny, received allowed decision');
@@ -32,7 +32,7 @@ export async function expectDenied(
 export async function expectDeniedReason(
   rbac: RbacService,
   input: RbacCanInput,
-  reason: RbacDecision['reason'],
-): Promise<RbacDecision> {
+  reason: RbacServiceDecision['reason'],
+): Promise<RbacServiceDecision> {
   return expectDenied(rbac, input, reason);
 }

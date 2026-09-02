@@ -77,6 +77,10 @@ export class RbacRoleNotFoundError extends RbacError {
   }
 }
 
+/**
+ * @deprecated No package operation throws this error. It remains constructible
+ * and HTTP-mappable until a separate breaking release.
+ */
 export class RbacPermissionNotFoundError extends RbacError {
   constructor(details?: Record<string, unknown>, options: RbacErrorCauseOptions = {}) {
     super('Permission not found', 'RBAC_PERMISSION_NOT_FOUND', 403, {
@@ -86,6 +90,10 @@ export class RbacPermissionNotFoundError extends RbacError {
   }
 }
 
+/**
+ * @deprecated No package operation throws this error. It remains constructible
+ * and HTTP-mappable until a separate breaking release.
+ */
 export class RbacBindingNotFoundError extends RbacError {
   constructor(details?: Record<string, unknown>, options: RbacErrorCauseOptions = {}) {
     super('Binding not found', 'RBAC_BINDING_NOT_FOUND', 403, { details, cause: options.cause });

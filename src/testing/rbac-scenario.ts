@@ -3,9 +3,9 @@ import type {
   AssignRoleInput,
   CreateRoleInput,
   RbacCanInput,
-  RbacDecision,
-  RbacDecisionReason,
   RbacModuleOptions,
+  RbacServiceDecision,
+  RbacServiceDecisionReason,
 } from '../interfaces';
 import { RbacService } from '../rbac.service';
 
@@ -22,7 +22,7 @@ export interface RbacScenario {
 
 export type RbacMatrixCase = RbacCanInput & {
   allowed: boolean;
-  reason?: RbacDecisionReason | undefined;
+  reason?: RbacServiceDecisionReason | undefined;
   label?: string | undefined;
 };
 
@@ -64,8 +64,8 @@ export async function createRbacScenario(input: RbacScenarioInput = {}): Promise
 export async function expectRbacMatrix(
   rbac: RbacService,
   cases: RbacMatrixCase[],
-): Promise<RbacDecision[]> {
-  const decisions: RbacDecision[] = [];
+): Promise<RbacServiceDecision[]> {
+  const decisions: RbacServiceDecision[] = [];
 
   for (const [index, matrixCase] of cases.entries()) {
     const { allowed, reason, label, ...input } = matrixCase;

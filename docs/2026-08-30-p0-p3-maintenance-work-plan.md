@@ -170,7 +170,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 12C | `RBAC-M12C` | P2 | `DONE` | S | `EXT-PRISMA7-AUDIT-FIX` | Prisma→deepmerge-ts upstream 추적 |
 | 13A | `RBAC-M13A` | P2 | `DONE` | S | 없음 | 역사 문서 배너와 canonical queue link |
 | 13B | `RBAC-M13B` | P2 | `DONE` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
-| 14 | `RBAC-M14` | P2 | `READY` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
+| 14 | `RBAC-M14` | P2 | `DONE` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
 | 15 | `RBAC-M15` | P2 | `READY` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
 | 16 | `RBAC-M16` | P2 | `DECISION` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `READY` | S | 없음 | examples/Prisma docs executable smoke |
@@ -512,14 +512,14 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M14` — public decision/error 계약 ADR
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 
 완료 조건:
 
-- [ ] exported requirement reason, decision reason/detail, not-found error의 실제 생성/소비 상태를 표로 만든다.
-- [ ] 각 항목을 implement, keep, deprecate, remove 중 하나로 결정한다.
-- [ ] unreachable state를 타입에서 허용해 consumer가 잘못 의존하지 않게 한다.
-- [ ] 실제 제거는 major/deprecation task로 분리한다.
+- [x] exported requirement reason, decision reason/detail, not-found error의 실제 생성/소비 상태를 표로 만들었다.
+- [x] 각 항목을 implement, keep, deprecate, remove 중 하나로 결정했다.
+- [x] service/testing-helper producer 타입을 실제 8개 reason과 생성되는 detail/step shape로 좁혀 consumer가 unreachable state에 의존하지 않게 했다.
+- [x] 기존 broad compatibility envelope와 HTTP mapping은 유지하고 실제 제거는 별도 breaking/deprecation task 후보로 분리했다.
 
 ### `RBAC-M15` — indexed role lookup
 
@@ -638,6 +638,7 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 | `RBAC-B04` | role tenant 이동 정책 | 실제 migration use case와 cross-tenant risk review |
 | `RBAC-B05` | metadata encoder parity | InMemory/Prisma divergence가 재현될 때 |
 | `RBAC-B06` | `.DS_Store` ignore | 기존 사용자 파일 소유권 확인 후 |
+| `RBAC-B07` | deprecated decision/error compatibility envelope 제거 | breaking release, published consumer 사용 조사, migration note가 함께 준비될 때 |
 
 후보는 합의 전 `READY`가 아니다.
 
@@ -794,6 +795,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M12C`: Prisma-config-scoped deepmerge-ts 8.0.2 override, config/generate와 Prisma 7 real-DB contract.
 - [x] `RBAC-M13A`: 역사 문서 6개의 권위 배너, 176개 미체크 기록 보존, absolute canonical queue link.
 - [x] `RBAC-M13B`: README/docs support·actual gate 및 tenant/API-key/storage trust/default-strict 계약.
+- [x] `RBAC-M14`: producer-accurate decision/reason/detail 타입, dormant API deprecation, packed public type fixture와 ADR.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -802,11 +804,11 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M13 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M13B`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M14`만 선택한다.
-3. exported requirement reason, decision reason/detail, not-found error의 실제 생성/소비 여부를 `rg`와 public type fixture로 먼저 분류한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M14 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M14`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M15`만 선택한다.
+3. strict `assignRole()`이 `listRoles({})` 전체를 읽는 call-count/perf RED test를 먼저 추가한다.
 4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
-5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. audit 0 snapshot을 자동 정책으로 옮기는 일은 M19A 소유다.
+5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. 2026-09-02 M14 검증에서 production audit은 0이었고 full audit에는 Prisma dev-tool의 `mysql2<3.22.0` 새 high advisory 2건이 나타났다. 자동 정책과 만료형 예외는 M19A에서 재분류한다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -831,6 +833,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M12C` | `DONE` | `main@1c4842b` | uncommitted working tree | @prisma/config 7.10.0-scoped deepmerge-ts 8.0.2 override, full/production audit 0, config/generate/cycle/PG16 34/34 PASS | `RBAC-M13A` 역사 문서 배너와 canonical queue link 시작 |
 | 2026-09-02 | `RBAC-M13A` | `DONE` | `main@a51d33f` | uncommitted working tree | 역사 문서 6개 배너, 계획 checkbox 176개 보존, absolute canonical queue link와 package exclusion 확인 | `RBAC-M13B` support/trust 동기화 |
 | 2026-09-02 | `RBAC-M13B` | `DONE` | `main@a51d33f` | uncommitted working tree | actual CI/release matrix, plain/strict 및 tenant/API-key/storage trust 계약 동기화; A/D docs 검증 PASS | `RBAC-M14` public decision/error 계약 ADR 시작 |
+| 2026-09-02 | `RBAC-M14` | `DONE` | `main@44daec7` | uncommitted working tree | producer-accurate service/testing decision 타입, broad compatibility envelope와 dormant API deprecation ADR; A/B/D와 packed type fixture PASS | `RBAC-M15` indexed role lookup 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1054,4 +1057,18 @@ Commands and exact results: documentation support/workflow parity contract PASS;
 Unverified paths and reason: 문서 전용 변경이므로 PostgreSQL/packed consumer를 다시 실행하지 않았다. 공개한 exact matrix는 이미 자동화된 CI/release workflow와 기존 M09-M11 완료 증거를 대조했다. 실제 GitHub Actions release event와 npm publish는 새 release를 만들지 않아 실행하지 않았다.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M14에서 exported requirement reason, decision reason/detail, not-found error의 실제 생성/소비 상태를 표로 만들고 public decision/error 계약 ADR을 작성한다.
+```
+
+### 2026-09-02 RBAC-M14 인계
+
+```text
+Task: RBAC-M14
+State: DONE
+Start ref / end ref: main@44daec7 / main@44daec7 + uncommitted RBAC-M14 working tree
+Changed files: README.md, changelog.md, docs/adr/0002-public-decision-error-contract.md, docs/testing.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, package.json, scripts/verify-modern-consumer.cjs, src/errors/rbac.error.ts, src/interfaces/decision.ts, src/interfaces/requirements.ts, src/rbac.guard.ts, src/rbac.service.ts, src/testing/expect-rbac-decision.ts, src/testing/rbac-scenario.ts, test/unit/public-decision-error-contract.spec.ts
+Contract decision: RbacService.can()과 public testing helper가 실제 생성하는 8개 reason, required details/safeMessage/evaluationPath 및 생성되는 nested shape는 새 RbacServiceDecision 계열 타입으로 고정한다. 기존 RbacDecision/RbacDecisionReason/detail/step은 application-authored·older fixture용 broad compatibility envelope로 유지한다. 생성 경로가 없는 denied_resource_missing/denied_role_expired/denied_resource_mismatch는 RbacLegacyDecisionReason으로 격리하고, decorator reason과 unpopulated roleIds/bindingIds/missing.resource, package producer가 없는 RbacPermissionNotFoundError/RbacBindingNotFoundError는 deprecate한다. RbacRoleNotFoundError와 기존 legacy HTTP mapping은 유지한다. M14에서는 어떤 export나 runtime mapping도 제거하지 않으며 실제 제거는 breaking release 후보 RBAC-B07로 분리한다.
+Commands and exact results: git fetch --prune --tags PASS; baseline npm run typecheck PASS, npm test PASS (14 files, 313 tests); final npm run lint PASS; npm run typecheck PASS; npm test PASS (15 files, 315 tests); fresh npm run test:coverage PASS (14 files, 305 tests; statements 93.97%, branches 87.24%, functions 96.67%, lines 95.1%); focused public/service/guard/helper/error tests PASS (5 files, 180 tests); npm run build PASS; npm run test:consumer:modern PASS with packed root/testing declaration fixture and exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2; npm run test:consumer:nest10 PASS with exact Nest 10.4.22; npm pack --dry-run --json PASS (78 files, 252227 bytes, ADR included); npm audit --omit=dev --json PASS (0); git diff --check PASS. Full npm audit snapshot reported 2 high dev-tool findings on Prisma -> mysql2<3.22.0; no production finding. The first sandbox modern-consumer attempt failed on ~/.npm cache EPERM, and the authorized rerun reached the new type fixture; its first revision exposed a CommonJS top-level-await fixture error, which was corrected to a type-only ReturnType contract before the final PASS.
+Unverified paths and reason: storage/adapter/schema and HTTP runtime behavior did not change, so PostgreSQL integration and HTTP E2E were not rerun. The new mysql2 advisory is dependency/audit policy work outside M14 and is handed to M19A or a dedicated dependency task rather than mixed into this contract change. GitHub Release metadata lookup was unavailable from the sandbox; git fetch confirmed origin/main remains 69bf0e1 and no release/publish action was requested.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M15에서 strict assignRole()의 listRoles({}) 전체 scan call-count/perf RED test를 추가하고 optional findRoleById capability 계약을 시작한다.
 ```

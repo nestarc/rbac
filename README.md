@@ -403,6 +403,12 @@ await expectAllowed(rbac, {
 
 See [docs/testing.md](docs/testing.md).
 
+`RbacService.can()` returns the producer-accurate `RbacServiceDecision` type. Its
+`details` are always present for server-side diagnostics and auditing, but HTTP
+error responses expose only a stable message and error code. See the
+[public decision and error contract](docs/adr/0002-public-decision-error-contract.md)
+for the produced reason set, compatibility types, and deprecated dormant APIs.
+
 ## Change Events
 
 Apps that cache effective permissions can subscribe to mutation events without

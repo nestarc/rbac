@@ -27,7 +27,6 @@ import type {
   RbacBuiltInResourceDeclaration,
   RbacAuditEvent,
   RbacCanInput,
-  RbacDecision,
   RbacDecisionReason,
   RbacModuleOptions,
   RbacRequirement,
@@ -37,6 +36,7 @@ import type {
   RbacResourceResolverFn,
   RbacResourceResolverToken,
   RbacResourceResolverTokenRef,
+  RbacServiceDecision,
   RbacSubject,
   RbacTenantMode,
 } from './interfaces';
@@ -124,7 +124,7 @@ export class RbacGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<HttpRequest>();
     request[RBAC_SUBJECT_REQUEST_KEY] = subject;
 
-    const allowedDecisions: RbacDecision[] = [];
+    const allowedDecisions: RbacServiceDecision[] = [];
     for (const [requirementIndex, requirement] of requirements.entries()) {
       const decision = await this.checkRequirement(context, requirement, subject);
       if (!decision.allowed) {
@@ -361,7 +361,7 @@ export class RbacGuard implements CanActivate {
   }
 
   private async logDeniedDecision(
-    decision: RbacDecision,
+    decision: RbacServiceDecision,
     requirementIndex: number,
   ): Promise<void> {
     await this.logAudit({
@@ -381,7 +381,7 @@ export class RbacGuard implements CanActivate {
     });
   }
 
-  private async logAllowedRequest(decisions: RbacDecision[]): Promise<void> {
+  private async logAllowedRequest(decisions: RbacServiceDecision[]): Promise<void> {
     const firstDecision = decisions[0]!;
 
     if (decisions.length === 1) {
@@ -408,7 +408,7 @@ export class RbacGuard implements CanActivate {
     });
   }
 
-  private async logAllowedDecision(decision: RbacDecision): Promise<void> {
+  private async logAllowedDecision(decision: RbacServiceDecision): Promise<void> {
     const metadata: Record<string, unknown> = { reason: decision.reason };
     if (decision.permission !== undefined) {
       metadata.permission = decision.permission;

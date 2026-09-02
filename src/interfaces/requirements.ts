@@ -37,6 +37,11 @@ export interface RbacRequirementOptions {
     | RbacResourceResolverToken
     | RbacResourceResolverTokenRef
     | undefined;
+  /**
+   * @deprecated Stored in decorator metadata for compatibility but never read,
+   * returned in a decision, or written to RBAC audit events. Use application-owned
+   * metadata for human-readable policy labels.
+   */
   reason?: string | undefined;
 }
 

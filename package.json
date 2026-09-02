@@ -17,6 +17,7 @@
   "files": [
     "dist",
     "docs/guards.md",
+    "docs/adr/0002-public-decision-error-contract.md",
     "docs/compatibility.md",
     "docs/installation.md",
     "docs/integrations.md",

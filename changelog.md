@@ -23,6 +23,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Added
 
+- Added producer-accurate `RbacServiceDecision`,
+  `RbacServiceDecisionReason`, `RbacServiceDecisionDetails`, and
+  `RbacServiceEvaluationStep` types for `RbacService.can()` and the public testing
+  helpers. The existing wider decision types remain compatibility envelopes.
 - Added the optional `RbacStorageMutationCapability` and
   `RbacStorage.mutationResults` protocol. It reports committed, idempotent, and
   conflicting outcomes without changing the required 0.2.x custom storage method
@@ -35,6 +39,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Deprecated the unused decorator `reason` option, the three decision reasons with
+  no service producer, unpopulated decision-detail fields, and the dormant
+  `RbacPermissionNotFoundError` / `RbacBindingNotFoundError` classes. No exported
+  symbol or runtime HTTP mapping is removed in this release.
 - Aligned the maintainer TypeScript environment with Node 22 by replacing the
   accidental Node 25 type baseline with exact `@types/node` 22.20.1. Release
   publishing remains on Node 24.

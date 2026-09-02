@@ -37,6 +37,11 @@ export type RbacRoleCanInput = RbacCanBaseInput & {
 
 export type RbacCanInput = RbacPermissionCanInput | RbacRoleCanInput;
 
+/**
+ * Compatibility envelope for decisions created by applications, tests, or older
+ * package versions. `RbacService.can()` returns the narrower
+ * `RbacServiceDecision` contract.
+ */
 export interface RbacDecision {
   allowed: boolean;
   reason: RbacDecisionReason;
@@ -52,6 +57,12 @@ export interface RbacDecision {
   details?: RbacDecisionDetails | undefined;
 }
 
+/** A decision produced by `RbacService.can()`. */
+export type RbacServiceDecision = Omit<RbacDecision, 'reason' | 'details'> & {
+  reason: RbacServiceDecisionReason;
+  details: RbacServiceDecisionDetails;
+};
+
 export interface RbacDecisionDetails {
   requirement?: RbacDecisionRequirementDetails | undefined;
   matched?: RbacDecisionMatchDetails | undefined;
@@ -59,6 +70,40 @@ export interface RbacDecisionDetails {
   evaluationPath?: RbacEvaluationStep[] | undefined;
   safeMessage?: string | undefined;
 }
+
+/** Details that are always attached to decisions produced by `RbacService.can()`. */
+export interface RbacServiceDecisionDetails extends Omit<
+  RbacDecisionDetails,
+  'requirement' | 'matched' | 'missing' | 'evaluationPath' | 'safeMessage'
+> {
+  requirement?: RbacServiceDecisionRequirementDetails | undefined;
+  matched?: RbacServiceDecisionMatchDetails | undefined;
+  missing?: RbacServiceDecisionMissingDetails | undefined;
+  evaluationPath: RbacServiceEvaluationStep[];
+  safeMessage: RbacServiceDecisionReason;
+}
+
+export type RbacServiceDecisionRequirementDetails =
+  | {
+      type: 'permission';
+      permissions: string[];
+      mode: RbacRequirementMode;
+    }
+  | {
+      type: 'role';
+      roleKeys: string[];
+    };
+
+export interface RbacServiceDecisionMatchDetails {
+  roleKeys: string[];
+  permissions?: string[] | undefined;
+}
+
+export type RbacServiceDecisionMissingDetails =
+  | { subject: true }
+  | { tenant: true }
+  | { permissions: string[] }
+  | { roleKeys: string[] };
 
 export interface RbacDecisionRequirementDetails {
   type: 'permission' | 'role';
@@ -68,15 +113,18 @@ export interface RbacDecisionRequirementDetails {
 }
 
 export interface RbacDecisionMatchDetails {
+  /** @deprecated `RbacService` has never populated this compatibility field. */
   roleIds?: string[] | undefined;
   roleKeys?: string[] | undefined;
   permissions?: string[] | undefined;
+  /** @deprecated `RbacService` has never populated this compatibility field. */
   bindingIds?: string[] | undefined;
 }
 
 export interface RbacDecisionMissingDetails {
   subject?: boolean | undefined;
   tenant?: boolean | undefined;
+  /** @deprecated `RbacService` reports resource failures before creating a decision. */
   resource?: boolean | undefined;
   permissions?: string[] | undefined;
   roleKeys?: string[] | undefined;
@@ -99,15 +147,46 @@ export interface RbacEvaluationStep {
   outcome: 'allow' | 'deny' | 'skip' | 'info';
 }
 
-export type RbacDecisionReason =
+/** Evaluation steps that `RbacService.can()` can currently produce. */
+export type RbacServiceEvaluationStep =
+  | {
+      code: 'role_matched' | 'permission_matched';
+      outcome: 'allow';
+    }
+  | {
+      code:
+        | 'subject_missing'
+        | 'tenant_missing'
+        | 'tenant_conflict'
+        | 'permission_missing'
+        | 'role_missing'
+        | 'storage_error';
+      outcome: 'deny';
+    };
+
+/** Decision reasons that `RbacService.can()` can currently produce. */
+export type RbacServiceDecisionReason =
   | 'allowed_by_role'
   | 'allowed_by_role_permission'
   | 'denied_subject_missing'
   | 'denied_tenant_missing'
   | 'denied_tenant_conflict'
-  | 'denied_resource_missing'
   | 'denied_no_matching_role'
   | 'denied_no_matching_permission'
-  | 'denied_role_expired'
-  | 'denied_resource_mismatch'
   | 'denied_storage_error';
+
+/**
+ * @deprecated These values were exported by 0.2.x but have no
+ * `RbacService.can()` producer. They remain in the compatibility
+ * `RbacDecisionReason` envelope until a separate breaking release.
+ */
+export type RbacLegacyDecisionReason =
+  | 'denied_resource_missing'
+  | 'denied_role_expired'
+  | 'denied_resource_mismatch';
+
+/**
+ * Compatibility reason union. Prefer `RbacServiceDecisionReason` when consuming
+ * results returned by `RbacService.can()`.
+ */
+export type RbacDecisionReason = RbacServiceDecisionReason | RbacLegacyDecisionReason;

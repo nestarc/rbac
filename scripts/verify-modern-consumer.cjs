@@ -253,10 +253,21 @@ try {
   fs.writeFileSync(
     path.join(consumerDirectory, 'smoke.ts'),
     [
-      "import { RbacModule } from '@nestarc/rbac';",
+      "import { RbacModule, type RbacLegacyDecisionReason, type RbacService, type RbacServiceDecision, type RbacServiceDecisionReason } from '@nestarc/rbac';",
       "import { PrismaRbacStorage, type PrismaRbacClientLike } from '@nestarc/rbac/prisma';",
+      "import { expectDenied } from '@nestarc/rbac/testing';",
       'declare const prisma: PrismaRbacClientLike;',
       'RbacModule.forRoot({ storage: new PrismaRbacStorage(prisma) });',
+      "type ServiceDecisionFromCan = Awaited<ReturnType<RbacService['can']>>;",
+      'const serviceDecision = {} as ServiceDecisionFromCan satisfies RbacServiceDecision;',
+      'const serviceReason: RbacServiceDecisionReason = serviceDecision.reason;',
+      'const helperDecision = {} as Awaited<ReturnType<typeof expectDenied>> satisfies RbacServiceDecision;',
+      "const legacyReason: RbacLegacyDecisionReason = 'denied_role_expired';",
+      '// @ts-expect-error Legacy reasons are not service-produced reasons.',
+      'const unavailableServiceReason: RbacServiceDecisionReason = legacyReason;',
+      'void serviceReason;',
+      'void helperDecision.details.safeMessage;',
+      'void unavailableServiceReason;',
       '',
     ].join('\n'),
   );
