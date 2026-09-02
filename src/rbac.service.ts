@@ -759,6 +759,10 @@ export class RbacService {
   }
 
   private async findRoleById(roleId: string): Promise<RbacRole | undefined> {
+    if (this.options.storage.findRoleById !== undefined) {
+      return (await this.options.storage.findRoleById({ roleId })) ?? undefined;
+    }
+
     const roles = await this.options.storage.listRoles({});
 
     return roles.find((role) => role.id === roleId);

@@ -141,6 +141,19 @@ events and `failure` for denied events, and removes secret-shaped fields such as
 tokens, API key secrets, request headers, request bodies, and raw attributes from
 metadata.
 
+## Custom Storage Role Lookup
+
+Strict role-ID assignment validation uses the additive optional
+`RbacStorage.findRoleById({ roleId })` capability. Implement
+`RbacStorageRoleLookupCapability` with an indexed role-ID lookup that returns one
+`RbacRole` or `null`; include that role's permissions, but do not fetch unrelated
+roles or their permission edges.
+
+Custom adapters that omit this method remain compatible in 0.2.x. RBAC falls
+back to `listRoles({})` only for those legacy adapters. The scan fallback is
+deprecated and is eligible for removal no earlier than 0.3, after custom adapter
+migration. Both built-in adapters already implement the capability.
+
 ## Change Events
 
 Audit events describe what happened for security and compliance review. Change

@@ -12,6 +12,7 @@ import type {
 import type { RbacResourceRef } from './resource';
 import type {
   DeleteRoleInput,
+  FindRoleByIdInput,
   FindRoleInput,
   ListRolesInput,
   CreateRoleInput,
@@ -71,12 +72,25 @@ export interface RbacStorageMutationCapability {
   revokeRole(input: RevokeRoleStorageInput): Promise<RbacMutationResult>;
 }
 
+/**
+ * Additive 0.2.x capability for indexed role-id lookups. Implement this on
+ * custom adapters before the legacy full-list fallback is removed in 0.3 or later.
+ */
+export interface RbacStorageRoleLookupCapability {
+  findRoleById(input: FindRoleByIdInput): Promise<RbacRole | null>;
+}
+
 export interface RbacStorage {
   /**
    * Additive 0.2.x capability for outcome-aware writes. Custom adapters that
    * omit it use the deprecated result-less best-effort event fallback.
    */
   readonly mutationResults?: RbacStorageMutationCapability | undefined;
+  /**
+   * Optional indexed lookup used by strict assignment validation. Adapters that
+   * omit it retain the deprecated 0.2.x `listRoles({})` compatibility fallback.
+   */
+  readonly findRoleById?: RbacStorageRoleLookupCapability['findRoleById'] | undefined;
   findRole(input: FindRoleInput): Promise<RbacRole | null>;
   listRoles(input: ListRolesInput): Promise<RbacRole[]>;
   upsertRole(input: UpsertRoleInput): Promise<RbacRole>;

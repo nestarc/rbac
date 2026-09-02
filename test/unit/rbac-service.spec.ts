@@ -345,6 +345,89 @@ describe('RbacService', () => {
     });
   });
 
+  it('does not scan every role when strict assignment resolves a role id', async () => {
+    const strictService = new RbacService({
+      storage,
+      writeValidation: { rejectTenantMismatch: true },
+    });
+    const role = await strictService.createRole({
+      tenantId,
+      key: 'indexed_tenant_viewer',
+      permissions: ['reports.read'],
+    });
+    const listRoles = vi.spyOn(storage, 'listRoles');
+
+    await expect(
+      strictService.assignRole({
+        tenantId,
+        subject: user('indexed_user', tenantId),
+        roleId: role.id,
+      }),
+    ).resolves.toMatchObject({ roleId: role.id });
+
+    expect(listRoles).not.toHaveBeenCalled();
+  });
+
+  it("uses a custom adapter's optional indexed role lookup for strict assignment", async () => {
+    const customStorage = new InMemoryRbacStorage();
+    const role = await customStorage.upsertRole({
+      tenantId,
+      key: 'custom_indexed_tenant_viewer',
+      permissions: ['reports.read'],
+    });
+    const findRoleById = vi.fn(customStorage.findRoleById.bind(customStorage));
+    const listRoles = vi.spyOn(customStorage, 'listRoles');
+    const adapter = Object.create(customStorage) as RbacStorage;
+    Object.defineProperty(adapter, 'findRoleById', {
+      value: findRoleById,
+    });
+    const strictService = new RbacService({
+      storage: adapter,
+      writeValidation: { rejectTenantMismatch: true },
+    });
+
+    await expect(
+      strictService.assignRole({
+        tenantId,
+        subject: user('custom_indexed_user', tenantId),
+        roleId: role.id,
+      }),
+    ).resolves.toMatchObject({ roleId: role.id });
+
+    expect(findRoleById).toHaveBeenCalledOnce();
+    expect(findRoleById).toHaveBeenCalledWith({ roleId: role.id });
+    expect(listRoles).not.toHaveBeenCalled();
+  });
+
+  it('keeps the deprecated full-list fallback for legacy custom adapters', async () => {
+    const legacyStorage = new InMemoryRbacStorage();
+    const role = await legacyStorage.upsertRole({
+      tenantId,
+      key: 'legacy_scan_tenant_viewer',
+      permissions: ['reports.read'],
+    });
+    const listRoles = vi.spyOn(legacyStorage, 'listRoles');
+    const adapter = Object.create(legacyStorage) as RbacStorage;
+    Object.defineProperty(adapter, 'findRoleById', {
+      value: undefined,
+    });
+    const strictService = new RbacService({
+      storage: adapter,
+      writeValidation: { rejectTenantMismatch: true },
+    });
+
+    await expect(
+      strictService.assignRole({
+        tenantId,
+        subject: user('legacy_scan_user', tenantId),
+        roleId: role.id,
+      }),
+    ).resolves.toMatchObject({ roleId: role.id });
+
+    expect(listRoles).toHaveBeenCalledOnce();
+    expect(listRoles).toHaveBeenCalledWith({});
+  });
+
   it('rejects subject and binding tenant mismatches in strict role assignments', async () => {
     const strictService = new RbacService({
       storage,

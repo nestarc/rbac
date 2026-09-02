@@ -91,6 +91,16 @@ RBAC cannot independently verify subject provenance or revocation. Custom adapte
 must preserve those filters and should run the shared storage contract. Invalid or
 out-of-scope rows fail closed rather than being silently repaired.
 
+## Indexed Role-ID Lookup
+
+`PrismaRbacStorage.findRoleById({ roleId })` implements the optional strict-write
+lookup capability with an ID-constrained `rbacRole.findFirst` query. It loads the
+permission edges for that single role so tenant validation receives the same
+`RbacRole` shape as other adapter lookups. It does not call `findMany`,
+`listRoles({})`, or load the complete role/permission graph. The migration SQL
+defines `rbac_roles.id` as the primary key, so PostgreSQL can serve this predicate
+through its primary-key index.
+
 ## Mutation Outcomes And Concurrency
 
 `PrismaRbacStorage` implements the optional outcome-aware mutation capability

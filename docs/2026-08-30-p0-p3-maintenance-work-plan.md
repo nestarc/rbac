@@ -171,7 +171,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 13A | `RBAC-M13A` | P2 | `DONE` | S | 없음 | 역사 문서 배너와 canonical queue link |
 | 13B | `RBAC-M13B` | P2 | `DONE` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
 | 14 | `RBAC-M14` | P2 | `DONE` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
-| 15 | `RBAC-M15` | P2 | `READY` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
+| 15 | `RBAC-M15` | P2 | `DONE` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
 | 16 | `RBAC-M16` | P2 | `DECISION` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `READY` | S | 없음 | examples/Prisma docs executable smoke |
 | 18 | `RBAC-M18` | P2 | `BLOCKED` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
@@ -523,16 +523,16 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M15` — indexed role lookup
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 - 문제: strict assign validation이 role ID를 찾기 위해 `listRoles({})` 전체 scan을 사용한다.
 
 완료 조건:
 
-- [ ] 0.2 patch는 optional `findRoleById` capability와 `listRoles` fallback/deprecation을 우선 사용해 기존 custom adapter를 깨지 않는다.
-- [ ] required method는 adapter migration과 0.3 semver가 준비된 뒤에만 고려한다.
-- [ ] both built-in adapters와 optional custom capability contract가 동일 결과를 제공한다.
-- [ ] built-in/capability adapter의 assign validation은 전체 role/permission graph를 읽지 않는다. legacy custom adapter fallback은 migration 기간에만 scan을 허용한다.
-- [ ] public adapter migration과 performance evidence를 남긴다.
+- [x] 0.2 patch는 optional `findRoleById` capability와 `listRoles` fallback/deprecation을 우선 사용해 기존 custom adapter를 깨지 않는다.
+- [x] required method는 adapter migration과 0.3 semver가 준비된 뒤에만 고려한다.
+- [x] both built-in adapters와 optional custom capability contract가 동일 결과를 제공한다.
+- [x] built-in/capability adapter의 assign validation은 전체 role/permission graph를 읽지 않는다. legacy custom adapter fallback은 migration 기간에만 scan을 허용한다.
+- [x] public adapter migration과 performance evidence를 남긴다.
 
 ### `RBAC-M16` — transport 계약
 
@@ -796,6 +796,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M13A`: 역사 문서 6개의 권위 배너, 176개 미체크 기록 보존, absolute canonical queue link.
 - [x] `RBAC-M13B`: README/docs support·actual gate 및 tenant/API-key/storage trust/default-strict 계약.
 - [x] `RBAC-M14`: producer-accurate decision/reason/detail 타입, dormant API deprecation, packed public type fixture와 ADR.
+- [x] `RBAC-M15`: optional indexed role-ID lookup, built-in/custom capability contract, legacy scan fallback과 packed public type fixture.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -804,9 +805,9 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M14 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M14`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M15`만 선택한다.
-3. strict `assignRole()`이 `listRoles({})` 전체를 읽는 call-count/perf RED test를 먼저 추가한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M15 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M15`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M16` 결정만 선택한다.
+3. HTTP-only support 문서화와 transport-neutral carrier abstraction의 호환성/semver/구현 범위를 ADR 표로 먼저 비교한다.
 4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
 5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. 2026-09-02 M14 검증에서 production audit은 0이었고 full audit에는 Prisma dev-tool의 `mysql2<3.22.0` 새 high advisory 2건이 나타났다. 자동 정책과 만료형 예외는 M19A에서 재분류한다.
 
@@ -834,6 +835,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M13A` | `DONE` | `main@a51d33f` | uncommitted working tree | 역사 문서 6개 배너, 계획 checkbox 176개 보존, absolute canonical queue link와 package exclusion 확인 | `RBAC-M13B` support/trust 동기화 |
 | 2026-09-02 | `RBAC-M13B` | `DONE` | `main@a51d33f` | uncommitted working tree | actual CI/release matrix, plain/strict 및 tenant/API-key/storage trust 계약 동기화; A/D docs 검증 PASS | `RBAC-M14` public decision/error 계약 ADR 시작 |
 | 2026-09-02 | `RBAC-M14` | `DONE` | `main@44daec7` | uncommitted working tree | producer-accurate service/testing decision 타입, broad compatibility envelope와 dormant API deprecation ADR; A/B/D와 packed type fixture PASS | `RBAC-M15` indexed role lookup 시작 |
+| 2026-09-02 | `RBAC-M15` | `DONE` | `main@05838fc` | uncommitted working tree | optional `findRoleById`, InMemory Map/Prisma PK query, custom capability와 deprecated legacy scan fallback; A/B/C2/D PASS | `RBAC-M16` transport 계약 결정 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1071,4 +1073,18 @@ Commands and exact results: git fetch --prune --tags PASS; baseline npm run type
 Unverified paths and reason: storage/adapter/schema and HTTP runtime behavior did not change, so PostgreSQL integration and HTTP E2E were not rerun. The new mysql2 advisory is dependency/audit policy work outside M14 and is handed to M19A or a dedicated dependency task rather than mixed into this contract change. GitHub Release metadata lookup was unavailable from the sandbox; git fetch confirmed origin/main remains 69bf0e1 and no release/publish action was requested.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M15에서 strict assignRole()의 listRoles({}) 전체 scan call-count/perf RED test를 추가하고 optional findRoleById capability 계약을 시작한다.
+```
+
+### 2026-09-02 RBAC-M15 인계
+
+```text
+Task: RBAC-M15
+State: DONE
+Start ref / end ref: main@05838fc / main@05838fc + uncommitted RBAC-M15 working tree
+Changed files: README.md, changelog.md, docs/integrations.md, docs/prisma.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, scripts/verify-modern-consumer.cjs, src/interfaces/role.ts, src/interfaces/storage.ts, src/rbac.service.ts, src/adapters/in-memory-rbac.storage.ts, src/adapters/prisma-rbac.storage.ts, test/contract/storage-contract.ts, test/unit/rbac-service.spec.ts, test/integration/prisma-role-lookup.integration-spec.ts
+Contract decision: 0.2.x RbacStorage required surface는 유지하고 optional RbacStorage.findRoleById와 RbacStorageRoleLookupCapability를 추가한다. strict assignRole({ roleId })는 capability가 있으면 해당 단건 조회를 사용하며 built-in InMemory adapter는 role-ID Map, Prisma adapter는 primary-key predicate의 단건 role+해당 permission 조회를 사용한다. capability 없는 custom adapter는 source compatibility를 위해 listRoles({}) scan을 유지하지만 deprecated이며 adapter migration 뒤 0.3 이상에서만 required 전환/제거를 고려한다. role-ID boundary canonicalization과 missing role error는 기존 계약을 유지한다.
+Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HEAD permission retry; initial focused RED PASS as expected with 1 failed assertion showing listRoles({}) called once; final npm run lint PASS; npm run typecheck PASS; npm test PASS (15 files, 319 tests); fresh npm run test:coverage PASS (14 files, 309 tests; statements 94.04%, branches 87.23%, functions 96.71%, lines 95.16%); focused service/InMemory contract PASS (3 files, 121 tests before moving the Prisma query fixture to integration scope); Prisma query-shape integration PASS (1 file, 1 test; findFirst where id once, findMany zero); Prisma 7.10.0 generate/migration PASS; PostgreSQL 16 real-DB RBAC_PRISMA_CLIENT=modern npm run test:prisma PASS (1 file, 35 tests, skip 0); npm run build PASS; npm run test:consumer:modern PASS with packed root declaration fixture and exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2; targeted formatting checks PASS; git diff --check PASS. The first coverage layout imported the whole Prisma adapter from a unit-only query-shape test and failed global thresholds despite all 310 tests passing; moving that integration-specific evidence to the integration suite restored the intended fresh coverage scope. The first sandbox packed consumer failed on ~/.npm cache EPERM and the authorized rerun passed. The first sandbox migration failed on localhost restriction and the authorized rerun passed. The temporary PostgreSQL 16 container was removed without a persistent volume.
+Unverified paths and reason: Prisma 5/6 real-DB lanes and Node 22 runner were not rerun. The capability is additive, uses the existing Prisma delegate surface, and was verified with Prisma 7 real DB plus packed public declarations; no Nest runtime, Guard, HTTP, schema, or migration behavior changed. Actual Node 22 and legacy Prisma lanes remain CI/release gates.
+External PR/release evidence: 없음. git fetch 뒤 origin/main은 69bf0e1이며 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M16에서 HTTP-only support 문서화와 transport-neutral carrier abstraction의 compatibility/semver/구현 범위를 ADR 표로 비교하고 하나를 결정한다.
 ```

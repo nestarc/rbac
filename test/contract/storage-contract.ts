@@ -6,6 +6,7 @@ import type {
   RbacRole,
   RbacStorage,
   RbacStorageMutationCapability,
+  RbacStorageRoleLookupCapability,
 } from '../../src';
 
 interface RbacStorageContractOptions {
@@ -38,6 +39,12 @@ function mutationResults(storage: RbacStorage): RbacStorageMutationCapability {
   expect(storage.mutationResults).toBeDefined();
 
   return storage.mutationResults as RbacStorageMutationCapability;
+}
+
+function roleLookup(storage: RbacStorage): RbacStorageRoleLookupCapability {
+  expect(storage.findRoleById).toBeDefined();
+
+  return storage as RbacStorage & RbacStorageRoleLookupCapability;
 }
 
 export function runRbacStorageContract({ createStorage }: RbacStorageContractOptions): void {
@@ -91,6 +98,20 @@ export function runRbacStorageContract({ createStorage }: RbacStorageContractOpt
           }),
         ]),
       );
+    });
+
+    it('finds one role by canonical id through the indexed lookup capability', async () => {
+      const role = await createRole('indexed_report_admin', ['reports.read', 'reports.write']);
+      await createRole('indexed_other_role', ['other.read'], null);
+      const lookup = roleLookup(storage);
+
+      await expect(lookup.findRoleById({ roleId: ` ${role.id} ` })).resolves.toEqual(role);
+      await expect(lookup.findRoleById({ roleId: 'missing_indexed_role' })).resolves.toBeNull();
+
+      const firstResult = await lookup.findRoleById({ roleId: role.id });
+      firstResult?.permissions.push('mutated.outside.storage');
+
+      await expect(lookup.findRoleById({ roleId: role.id })).resolves.toEqual(role);
     });
 
     it('reports committed and idempotent mutation outcomes without upserting missing updates', async () => {

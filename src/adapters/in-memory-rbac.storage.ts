@@ -11,6 +11,7 @@ import type {
   AssignRoleStorageInput,
   CreateRoleInput,
   DeleteRoleInput,
+  FindRoleByIdInput,
   FindRoleInput,
   GrantPermissionInput,
   ListBindingsStorageInput,
@@ -25,6 +26,7 @@ import type {
   RbacRoleBinding,
   RbacStorage,
   RbacStorageMutationCapability,
+  RbacStorageRoleLookupCapability,
   RevokePermissionInput,
   RevokeRoleStorageInput,
   UpdateRoleInput,
@@ -167,7 +169,7 @@ function roleInputChanges(role: RbacRole, input: UpsertRoleInput): boolean {
   return input.permissions !== undefined && !samePermissions(role.permissions, input.permissions);
 }
 
-export class InMemoryRbacStorage implements RbacStorage {
+export class InMemoryRbacStorage implements RbacStorage, RbacStorageRoleLookupCapability {
   private roleSequence = 0;
   private bindingSequence = 0;
   private readonly roles = new Map<string, RbacRole>();
@@ -265,6 +267,13 @@ export class InMemoryRbacStorage implements RbacStorage {
     const role = [...this.roles.values()].find(
       (candidate) => normalizeTenantId(candidate.tenantId) === tenantId && candidate.key === key,
     );
+
+    return Promise.resolve(role ? cloneRole(role) : null);
+  }
+
+  findRoleById(input: FindRoleByIdInput): Promise<RbacRole | null> {
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+    const role = this.roles.get(roleId);
 
     return Promise.resolve(role ? cloneRole(role) : null);
   }

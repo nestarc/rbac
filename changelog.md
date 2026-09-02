@@ -31,6 +31,9 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
   `RbacStorage.mutationResults` protocol. It reports committed, idempotent, and
   conflicting outcomes without changing the required 0.2.x custom storage method
   signatures.
+- Added the optional `RbacStorageRoleLookupCapability` and
+  `RbacStorage.findRoleById({ roleId })` method for indexed strict assignment
+  validation without changing the required 0.2.x custom storage contract.
 - Added a compatibility contract that distinguishes installable peer ranges from
   exact Node, NestJS, Prisma, and Nestarc sibling combinations with verification
   evidence. The strict modern packed consumer now runs on Node 22 and 24.
@@ -63,6 +66,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
   deprecated for removal no earlier than 0.3. It cannot distinguish adapter
   no-ops, and audit/change delivery remains non-transactional best effort after
   storage commit.
+- Strict `assignRole({ roleId })` validation now uses the built-in adapters'
+  indexed role-ID lookup instead of scanning every role and permission edge.
+  Custom adapters without the optional capability retain the deprecated 0.2.x
+  `listRoles({})` fallback, which is a 0.3-or-later removal candidate.
 - `RbacService`, `InMemoryRbacStorage`, and `PrismaRbacStorage` now use one
   canonical identifier policy. Leading and trailing whitespace is removed from
   tenant, non-API-key subject, role, binding, resource, and permission identifiers;

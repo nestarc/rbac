@@ -12,6 +12,7 @@ import type {
   AssignRoleStorageInput,
   CreateRoleInput,
   DeleteRoleInput,
+  FindRoleByIdInput,
   FindRoleInput,
   GrantPermissionInput,
   ListBindingsStorageInput,
@@ -26,6 +27,7 @@ import type {
   RbacStorage,
   RbacMutationResult,
   RbacStorageMutationCapability,
+  RbacStorageRoleLookupCapability,
   RevokePermissionInput,
   RevokeRoleStorageInput,
   UpdateRoleInput,
@@ -305,7 +307,7 @@ const roleInputChangesRecord = (record: PrismaRoleRecord, input: UpsertRoleInput
   return input.permissions !== undefined && !samePermissions(record, input.permissions);
 };
 
-export class PrismaRbacStorage implements RbacStorage {
+export class PrismaRbacStorage implements RbacStorage, RbacStorageRoleLookupCapability {
   constructor(private readonly prisma: PrismaRbacClientLike) {}
 
   readonly mutationResults: RbacStorageMutationCapability = {
@@ -325,6 +327,16 @@ export class PrismaRbacStorage implements RbacStorage {
     const key = canonicalizeIdentifier(input.key, 'role key');
     const role = (await this.prisma.rbacRole.findFirst({
       where: roleWhere(normalizeTenantId(input.tenantId), key),
+      include: { permissions: { include: { permission: true } } },
+    })) as PrismaRoleRecord | null;
+
+    return role ? toRole(role) : null;
+  }
+
+  async findRoleById(input: FindRoleByIdInput): Promise<RbacRole | null> {
+    const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
+    const role = (await this.prisma.rbacRole.findFirst({
+      where: { id: roleId },
       include: { permissions: { include: { permission: true } } },
     })) as PrismaRoleRecord | null;
 

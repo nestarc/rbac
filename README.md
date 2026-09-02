@@ -241,6 +241,31 @@ binding, resource, tenant, and permission columns; resolve any collisions that
 trimming would create; then migrate them to canonical values. Non-canonical
 effective rows fail closed during authorization rather than being silently aliased.
 
+## Indexed Role Lookup For Strict Writes
+
+Strict `assignRole({ roleId })` validation must resolve the referenced role before
+checking its tenant boundary. Both built-in adapters expose the optional
+`RbacStorage.findRoleById({ roleId })` capability: the in-memory adapter uses its
+role-ID map, while the Prisma adapter issues an ID-constrained query and loads
+permissions only for that role. This path never calls `listRoles({})` or reads the
+complete role/permission graph.
+
+Existing custom adapters remain source-compatible in 0.2.x. When the capability
+is absent, RBAC uses the previous `listRoles({})` scan, but that compatibility
+fallback is deprecated and is a 0.3-or-later removal candidate. Custom adapters
+should implement `RbacStorageRoleLookupCapability` and return the exact role or
+`null`:
+
+```ts
+async findRoleById({ roleId }: FindRoleByIdInput): Promise<RbacRole | null> {
+  return rolesById.get(roleId) ?? null;
+}
+```
+
+The role ID is canonicalized at the public adapter boundary. Database-backed
+implementations should use an indexed unique/primary-key lookup and avoid loading
+unrelated roles or permissions.
+
 ## Mutation Outcomes And Events
 
 Both built-in storage adapters expose the optional `RbacStorage.mutationResults`

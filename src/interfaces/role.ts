@@ -40,4 +40,8 @@ export interface FindRoleInput {
   key: string;
 }
 
+export interface FindRoleByIdInput {
+  roleId: string;
+}
+
 export type UpsertRoleInput = CreateRoleInput | UpdateRoleInput;
