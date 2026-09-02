@@ -44,11 +44,11 @@ documented in [docs/compatibility.md](docs/compatibility.md). Peer ranges descri
 install compatibility; the exact combinations listed there are the combinations
 continuously or explicitly verified by this repository.
 
-| Maintained axis   | Exact automated evidence                                             |
-| ----------------- | -------------------------------------------------------------------- |
-| Node.js           | Source and strict packed-consumer gates on Node 22 and 24            |
-| NestJS            | Nest 10.4.22 packed on Node 24; Nest 11.2.1 packed on Node 22 and 24 |
-| Prisma/PostgreSQL | Prisma 5.22.0, 6.19.3, and 7.10.0 adapter contracts on PostgreSQL 16 |
+| Maintained axis   | Exact automated evidence                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| Node.js           | Source and strict packed-consumer gates on Node 22 and 24                                  |
+| NestJS            | Nest 10.4.22 packed on Node 24; Nest 11.2.1 and 12.0.1 packed on Node 22 and 24            |
+| Prisma/PostgreSQL | Prisma 5.22.0, 6.19.3, and 7.10.0 adapter contracts on PostgreSQL 16; Prisma 8 unsupported |
 
 These are representative lanes, not a promise that every Cartesian combination
 has a separate test. Release publishing repeats the compatibility lanes and first

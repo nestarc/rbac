@@ -23,6 +23,9 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Added
 
+- Added exact NestJS 12.0.1 strict packed-consumer gates on Node 22 and 24,
+  covering CommonJS, ESM, Nest dependency injection, declarations, and artifact
+  provenance.
 - Added a CI and release dependency-audit policy that requires zero production
   vulnerabilities and exact, owner-assigned, expiring exceptions for development
   findings and package overrides.
@@ -49,6 +52,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Expanded the NestJS peer range from `>=10 <12` to `>=10 <13` after the exact
+  NestJS 12 gate passed. Prisma peers remain `<8`: Prisma 8 preview uses a new
+  contract/query API and is not compatible with the existing generated-client
+  `PrismaRbacStorage` shape.
 - Pinned every GitHub Action to a full reviewed commit SHA and restricted npm OIDC
   permission to the release publish job; all other workflow jobs remain read-only.
 - Split the Prisma documentation into explicit Prisma 5/6 legacy-client and

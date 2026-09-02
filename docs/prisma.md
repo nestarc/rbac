@@ -32,6 +32,9 @@ trim-induced uniqueness collisions, and migrate those values explicitly.
 
 Choose one client setup below. Prisma 5/6 and Prisma 7 use different generator,
 datasource, import, and constructor contracts; do not combine the snippets.
+Prisma 8's contract/query-builder API is not structurally compatible with this
+adapter and is not supported. See
+[ADR 0004](adr/0004-nest-12-prisma-8-compatibility.md).
 
 ## Prisma 5/6 legacy-client setup
 

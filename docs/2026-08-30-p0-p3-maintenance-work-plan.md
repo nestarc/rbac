@@ -18,24 +18,24 @@
 
 ### 0.1 우선순위
 
-| 우선순위 | 의미 | 실행 원칙 |
-| --- | --- | --- |
-| `P0` | 재현된 authorization 위반 또는 충돌 시 deny해야 하는 고영향 trust-boundary 결함 | 기능·refactor보다 먼저 수정하되 공개 severity는 실제 attacker-controlled source/exposure 증거에 맞춘다. |
-| `P1` | 잘못된 runtime shape, mutation 의미, 지원 범위, audit가 authorization 신뢰성을 떨어뜨리는 문제 | P0 뒤에 작은 계약 단위로 수정한다. |
-| `P2` | 문서·성능·transport·예제·공급망의 운영 안정성 | P0/P1 의미가 고정된 뒤 진행한다. |
-| `P3` | 구조 분해, 장기 호환성, 신규 helper 연구 | 별도 ADR/스파이크로 시작하며 현 release를 막지 않는다. |
+| 우선순위 | 의미                                                                                           | 실행 원칙                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `P0`     | 재현된 authorization 위반 또는 충돌 시 deny해야 하는 고영향 trust-boundary 결함                | 기능·refactor보다 먼저 수정하되 공개 severity는 실제 attacker-controlled source/exposure 증거에 맞춘다. |
+| `P1`     | 잘못된 runtime shape, mutation 의미, 지원 범위, audit가 authorization 신뢰성을 떨어뜨리는 문제 | P0 뒤에 작은 계약 단위로 수정한다.                                                                      |
+| `P2`     | 문서·성능·transport·예제·공급망의 운영 안정성                                                  | P0/P1 의미가 고정된 뒤 진행한다.                                                                        |
+| `P3`     | 구조 분해, 장기 호환성, 신규 helper 연구                                                       | 별도 ADR/스파이크로 시작하며 현 release를 막지 않는다.                                                  |
 
 ### 0.2 상태
 
-| 상태 | 의미 |
-| --- | --- |
-| `READY` | 기술적 선행 조건이 충족됐다. 실제 선택은 실행 큐의 우선순위 순서를 따른다. |
-| `IN_PROGRESS` | 한 세션/한 PR 범위가 시작됐고 아직 완료 증거가 모이지 않았다. |
-| `BLOCKED` | 선행 작업 또는 외부 release가 필요하다. |
-| `DECISION` | 구현 전에 호환성/제품 계약을 선택해야 한다. |
-| `EXTERNAL` | 다른 저장소 또는 관리자 권한에서 수행한다. |
-| `DONE` | 코드, 검증, 문서, 필요한 배포 증거까지 끝났다. |
-| `SUPERSEDED` | 다른 작업에 흡수됐으며 재실행하지 않는다. |
+| 상태          | 의미                                                                       |
+| ------------- | -------------------------------------------------------------------------- |
+| `READY`       | 기술적 선행 조건이 충족됐다. 실제 선택은 실행 큐의 우선순위 순서를 따른다. |
+| `IN_PROGRESS` | 한 세션/한 PR 범위가 시작됐고 아직 완료 증거가 모이지 않았다.              |
+| `BLOCKED`     | 선행 작업 또는 외부 release가 필요하다.                                    |
+| `DECISION`    | 구현 전에 호환성/제품 계약을 선택해야 한다.                                |
+| `EXTERNAL`    | 다른 저장소 또는 관리자 권한에서 수행한다.                                 |
+| `DONE`        | 코드, 검증, 문서, 필요한 배포 증거까지 끝났다.                             |
+| `SUPERSEDED`  | 다른 작업에 흡수됐으며 재실행하지 않는다.                                  |
 
 ### 0.3 새 세션 시작 절차
 
@@ -102,25 +102,25 @@ Next exact action:
 
 조사 환경 Node `24.11.1`에서 실행했다.
 
-| 검증 | 결과 |
-| --- | --- |
-| `npm test` | 14 files, 205 tests PASS |
-| `npm run typecheck` | PASS |
-| `npm run lint` | PASS |
-| fresh unit/contract coverage | statements 94.8%, branches 87.58%, functions 96.96%, lines 95.53% |
-| `npm audit --omit=dev --json` | production 0 |
-| `npm audit --json` | 9 total: high 7, low 2; 모두 dev/test/build tree |
+| 검증                          | 결과                                                              |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `npm test`                    | 14 files, 205 tests PASS                                          |
+| `npm run typecheck`           | PASS                                                              |
+| `npm run lint`                | PASS                                                              |
+| fresh unit/contract coverage  | statements 94.8%, branches 87.58%, functions 96.96%, lines 95.53% |
+| `npm audit --omit=dev --json` | production 0                                                      |
+| `npm audit --json`            | 9 total: high 7, low 2; 모두 dev/test/build tree                  |
 
 coverage는 `test/unit`과 `test/contract` 기준이다. Prisma real DB integration은 별도 gate다.
 
 ### 1.3 지원 선언과 실제 증거
 
-| 축 | 공개 선언 | 현재 자동 증거 | 남은 결정 |
-| --- | --- | --- | --- |
-| Node | `engines` 없음 | Node 22/24 source CI | 명시적 하한과 types 기준 |
-| NestJS | `>=10 <12` | default/consumer는 Nest 11 | 현재 patch의 Nest 10 consumer 증거 |
-| Prisma | client/CLI `>=5 <8` optional | Prisma 6/7 PostgreSQL | Prisma 5를 검증하거나 peer 축소 |
-| PostgreSQL | Prisma adapter | PostgreSQL 16 | 지원 버전 표와 migration semantics |
+| 축               | 공개 선언                                           | 현재 자동 증거                         | 남은 결정                          |
+| ---------------- | --------------------------------------------------- | -------------------------------------- | ---------------------------------- |
+| Node             | `engines` 없음                                      | Node 22/24 source CI                   | 명시적 하한과 types 기준           |
+| NestJS           | `>=10 <12`                                          | default/consumer는 Nest 11             | 현재 patch의 Nest 10 consumer 증거 |
+| Prisma           | client/CLI `>=5 <8` optional                        | Prisma 6/7 PostgreSQL                  | Prisma 5를 검증하거나 peer 축소    |
+| PostgreSQL       | Prisma adapter                                      | PostgreSQL 16                          | 지원 버전 표와 migration semantics |
 | package subpaths | root, prisma, testing, tenancy, api-keys, audit-log | packed modern smoke는 root/prisma 중심 | 모든 public subpath artifact smoke |
 
 공개 npm `0.2.1`에는 이미 SLSA provenance attestation이 있고 release workflow는 `id-token: write`를 사용한다. 이후 작업은 이를 새로 구현하는 것이 아니라 보존하고, 실제 게시 artifact와 연결된 attestation인지 검증한다.
@@ -140,50 +140,50 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 
 ### 1.5 외부 milestone
 
-| milestone | 상태 | 의미/증거 |
-| --- | --- | --- |
-| `TEN-M21` | `DONE` | 역사적 published-only full-flow를 tenancy 0.15.0/API Keys 0.3.2/RBAC 0.2.1/Nest 11.2.1/Prisma 7.10.0 tuple에서 완료했고 재개하지 않는다. 이후 tenancy `v0.16.0`/현재 main(`91b9fb7`)도 published tuple을 다시 검증했다. 최종 기록에는 API Keys `a24fe1d`, RBAC `69bf0e1`, Outbox `873f95b`, Webhook `60b2725`, Jobs `405e799`, modern/legacy E2E 각 3/3, targeted 38, unit 56 files/908 tests가 남아 있다. |
-| `TEN-ECO-NEXT` | `EXTERNAL` | 향후 RBAC/API Keys patch가 npm에 게시된 뒤 tenancy가 새 exact published tuple을 pin해 post-publish E2E를 수행한다. 어떤 pre-publish RBAC task도 이를 선행 조건으로 삼지 않는다. |
-| `EXT-SECURITY-CHANNEL` | `DONE` | GitHub private vulnerability reporting을 `nestarc/rbac`에서 활성화했고 조직의 실제 fallback 주소 `security@nestarc.dev`를 확인했다. pre-1.0 정책은 최신 published minor line만 지원하므로 현재 지원 line은 `0.2.x`다. `main`에는 direct push를 유지하면서 force-push와 deletion을 막는 최소 branch protection을 적용했다. |
-| `EXT-PRISMA7-AUDIT-FIX` | `DONE` | Prisma 7.10.0 자체는 아직 `deepmerge-ts@7.1.5`를 고정하지만, `@prisma/config@7.10.0`에만 적용한 `deepmerge-ts@8.0.2` override가 config load/generate, 순환 객체 회귀, PostgreSQL 16 migration과 34/34 storage contract를 통과해 로컬 안전 근거를 충족했다. upstream [issue #30052](https://github.com/prisma/orm/issues/30052)가 해결된 Prisma release로 이동할 때 override를 제거한다. |
-| `EXT-PRISMA8-STABLE` | `EXTERNAL` | Prisma 8 stable과 공식 migration contract가 게시된다. 현재 latest 조회값은 `8.0.0-rc.12`이므로 충족되지 않았다. |
+| milestone               | 상태       | 의미/증거                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TEN-M21`               | `DONE`     | 역사적 published-only full-flow를 tenancy 0.15.0/API Keys 0.3.2/RBAC 0.2.1/Nest 11.2.1/Prisma 7.10.0 tuple에서 완료했고 재개하지 않는다. 이후 tenancy `v0.16.0`/현재 main(`91b9fb7`)도 published tuple을 다시 검증했다. 최종 기록에는 API Keys `a24fe1d`, RBAC `69bf0e1`, Outbox `873f95b`, Webhook `60b2725`, Jobs `405e799`, modern/legacy E2E 각 3/3, targeted 38, unit 56 files/908 tests가 남아 있다. |
+| `TEN-ECO-NEXT`          | `EXTERNAL` | 향후 RBAC/API Keys patch가 npm에 게시된 뒤 tenancy가 새 exact published tuple을 pin해 post-publish E2E를 수행한다. 어떤 pre-publish RBAC task도 이를 선행 조건으로 삼지 않는다.                                                                                                                                                                                                                            |
+| `EXT-SECURITY-CHANNEL`  | `DONE`     | GitHub private vulnerability reporting을 `nestarc/rbac`에서 활성화했고 조직의 실제 fallback 주소 `security@nestarc.dev`를 확인했다. pre-1.0 정책은 최신 published minor line만 지원하므로 현재 지원 line은 `0.2.x`다. `main`에는 direct push를 유지하면서 force-push와 deletion을 막는 최소 branch protection을 적용했다.                                                                                  |
+| `EXT-PRISMA7-AUDIT-FIX` | `DONE`     | Prisma 7.10.0 자체는 아직 `deepmerge-ts@7.1.5`를 고정하지만, `@prisma/config@7.10.0`에만 적용한 `deepmerge-ts@8.0.2` override가 config load/generate, 순환 객체 회귀, PostgreSQL 16 migration과 34/34 storage contract를 통과해 로컬 안전 근거를 충족했다. upstream [issue #30052](https://github.com/prisma/orm/issues/30052)가 해결된 Prisma release로 이동할 때 override를 제거한다.                    |
+| `EXT-PRISMA8-STABLE`    | `EXTERNAL` | Prisma 8 PostgreSQL migration contract는 공개됐지만 예제가 RC package 기준이고, 2026-09-02 npm `latest`는 여전히 `8.0.0-rc.12`, `@prisma/client` stable은 `7.10.0`이다. stable release 조건은 충족되지 않았다.                                                                                                                                                                                             |
 
 이 문서의 matrix 작업은 위 완료 항목을 보존하면서 광고 범위의 하한 증거와 release parity를 닫는 일이다.
 
 ## 2. 실행 큐
 
-| 순서 | ID | 우선순위 | 상태 | 크기 | 선행 | 작업 |
-| ---: | --- | --- | --- | --- | --- | --- |
-| 1 | `RBAC-M01` | P0 | `DONE` | L | 없음 | trusted tenant source와 request identity conflict fail-closed |
-| 2 | `RBAC-M02` | P0 | `DONE` | M | 없음 | canonical API-key context source와 legacy conflict 처리 |
-| 3 | `RBAC-M03` | P0 | `DONE` | L | 없음 | custom storage effective result tenant/expiry 방어 검증 |
-| 4 | `RBAC-M04` | P1 | `DONE` | M | 없음 | inbound runtime enum/shape fail-closed validation |
-| 5 | `RBAC-M05` | P1 | `DONE` | M | `RBAC-M02` | subject namespace/source 호환성 정책 |
-| 6 | `RBAC-M06` | P1 | `DONE` | M | `RBAC-M01`, `RBAC-M02` | 식별자 canonicalization 단일화 |
-| 7 | `RBAC-M07` | P1 | `DONE` | L | `RBAC-M06` | mutation outcome과 best-effort event 정합성 |
-| 8 | `RBAC-M08` | P1 | `DONE` | S | 없음 | 복수 requirement audit 최종 결과 정합성 |
-| 9 | `RBAC-M09` | P1 | `DONE` | M | 없음 | Node/Nest/Prisma 지원·semver 계약 |
-| 10 | `RBAC-M10` | P1 | `DONE` | M | `RBAC-M09` | 선택한 Nest/Prisma 하한 compatibility gate |
-| 11 | `RBAC-M11` | P1 | `DONE` | M | `RBAC-M10` | CI/release compatibility parity와 tag ancestry |
-| 12A | `RBAC-M12A` | P2 | `DONE` | S | 없음 | lock-safe dev advisory 갱신 |
-| 12B | `RBAC-M12B` | P2 | `DONE` | S | `RBAC-M12A` | esbuild parent-tool upgrade/제한 override |
-| 12C | `RBAC-M12C` | P2 | `DONE` | S | `EXT-PRISMA7-AUDIT-FIX` | Prisma→deepmerge-ts upstream 추적 |
-| 13A | `RBAC-M13A` | P2 | `DONE` | S | 없음 | 역사 문서 배너와 canonical queue link |
-| 13B | `RBAC-M13B` | P2 | `DONE` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
-| 14 | `RBAC-M14` | P2 | `DONE` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
-| 15 | `RBAC-M15` | P2 | `DONE` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
-| 16 | `RBAC-M16` | P2 | `DONE` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
-| 17 | `RBAC-M17` | P2 | `DONE` | S | 없음 | examples/Prisma docs executable smoke |
-| 18 | `RBAC-M18` | P2 | `DONE` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
-| 19A | `RBAC-M19A` | P2 | `DONE` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
-| 19B | `RBAC-M19B` | P2 | `DONE` | S | 없음 | Actions pinning과 dependency bot |
-| 20A | `RBAC-M20A` | P3 | `DONE` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
-| 20B | `RBAC-M20B` | P3 | `DONE` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
-| 20C | `RBAC-M20C` | P3 | `DONE` | M | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` | Prisma adapter behavior-preserving 분해 |
-| 21 | `RBAC-M21` | P3 | `DONE` | S | `RBAC-M11`, `RBAC-M19A`, `RBAC-M19B`, `RBAC-M22` | reusable workflow/timeout/중복 build 정리 |
-| 22 | `RBAC-M22` | P3 | `DONE` | S | `RBAC-M11` | tarball allowlist·size·subpath·provenance contract |
-| 23A | `RBAC-M23A` | P3 | `DECISION` | S | 없음 | Nest 12 stable 호환성 스파이크 |
-| 23B | `RBAC-M23B` | P3 | `BLOCKED` | S | `EXT-PRISMA8-STABLE` | Prisma 8 stable 호환성 스파이크 |
+| 순서 | ID          | 우선순위 | 상태      | 크기 | 선행                                                                    | 작업                                                          |
+| ---: | ----------- | -------- | --------- | ---- | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+|    1 | `RBAC-M01`  | P0       | `DONE`    | L    | 없음                                                                    | trusted tenant source와 request identity conflict fail-closed |
+|    2 | `RBAC-M02`  | P0       | `DONE`    | M    | 없음                                                                    | canonical API-key context source와 legacy conflict 처리       |
+|    3 | `RBAC-M03`  | P0       | `DONE`    | L    | 없음                                                                    | custom storage effective result tenant/expiry 방어 검증       |
+|    4 | `RBAC-M04`  | P1       | `DONE`    | M    | 없음                                                                    | inbound runtime enum/shape fail-closed validation             |
+|    5 | `RBAC-M05`  | P1       | `DONE`    | M    | `RBAC-M02`                                                              | subject namespace/source 호환성 정책                          |
+|    6 | `RBAC-M06`  | P1       | `DONE`    | M    | `RBAC-M01`, `RBAC-M02`                                                  | 식별자 canonicalization 단일화                                |
+|    7 | `RBAC-M07`  | P1       | `DONE`    | L    | `RBAC-M06`                                                              | mutation outcome과 best-effort event 정합성                   |
+|    8 | `RBAC-M08`  | P1       | `DONE`    | S    | 없음                                                                    | 복수 requirement audit 최종 결과 정합성                       |
+|    9 | `RBAC-M09`  | P1       | `DONE`    | M    | 없음                                                                    | Node/Nest/Prisma 지원·semver 계약                             |
+|   10 | `RBAC-M10`  | P1       | `DONE`    | M    | `RBAC-M09`                                                              | 선택한 Nest/Prisma 하한 compatibility gate                    |
+|   11 | `RBAC-M11`  | P1       | `DONE`    | M    | `RBAC-M10`                                                              | CI/release compatibility parity와 tag ancestry                |
+|  12A | `RBAC-M12A` | P2       | `DONE`    | S    | 없음                                                                    | lock-safe dev advisory 갱신                                   |
+|  12B | `RBAC-M12B` | P2       | `DONE`    | S    | `RBAC-M12A`                                                             | esbuild parent-tool upgrade/제한 override                     |
+|  12C | `RBAC-M12C` | P2       | `DONE`    | S    | `EXT-PRISMA7-AUDIT-FIX`                                                 | Prisma→deepmerge-ts upstream 추적                             |
+|  13A | `RBAC-M13A` | P2       | `DONE`    | S    | 없음                                                                    | 역사 문서 배너와 canonical queue link                         |
+|  13B | `RBAC-M13B` | P2       | `DONE`    | S    | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09`                          | support/trust 문서 동기화                                     |
+|   14 | `RBAC-M14`  | P2       | `DONE`    | M    | `RBAC-M03`, `RBAC-M07`                                                  | public decision/error 계약 ADR                                |
+|   15 | `RBAC-M15`  | P2       | `DONE`    | M    | `RBAC-M07`                                                              | indexed role lookup으로 전체 scan 제거                        |
+|   16 | `RBAC-M16`  | P2       | `DONE`    | M    | `RBAC-M01`, `RBAC-M05`                                                  | HTTP-only transport 계약 또는 carrier abstraction             |
+|   17 | `RBAC-M17`  | P2       | `DONE`    | S    | 없음                                                                    | examples/Prisma docs executable smoke                         |
+|   18 | `RBAC-M18`  | P2       | `DONE`    | M    | `EXT-SECURITY-CHANNEL`                                                  | SECURITY와 reporting 경로                                     |
+|  19A | `RBAC-M19A` | P2       | `DONE`    | S    | `RBAC-M12A`, `RBAC-M12B`                                                | audit automation과 만료형 예외 정책                           |
+|  19B | `RBAC-M19B` | P2       | `DONE`    | S    | 없음                                                                    | Actions pinning과 dependency bot                              |
+|  20A | `RBAC-M20A` | P3       | `DONE`    | M    | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16`              | Guard behavior-preserving 분해                                |
+|  20B | `RBAC-M20B` | P3       | `DONE`    | M    | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해                              |
+|  20C | `RBAC-M20C` | P3       | `DONE`    | M    | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15`                         | Prisma adapter behavior-preserving 분해                       |
+|   21 | `RBAC-M21`  | P3       | `DONE`    | S    | `RBAC-M11`, `RBAC-M19A`, `RBAC-M19B`, `RBAC-M22`                        | reusable workflow/timeout/중복 build 정리                     |
+|   22 | `RBAC-M22`  | P3       | `DONE`    | S    | `RBAC-M11`                                                              | tarball allowlist·size·subpath·provenance contract            |
+|  23A | `RBAC-M23A` | P3       | `DONE`    | S    | 없음                                                                    | Nest 12 stable 호환성 스파이크                                |
+|  23B | `RBAC-M23B` | P3       | `BLOCKED` | S    | `EXT-PRISMA8-STABLE`                                                    | Prisma 8 stable 호환성 스파이크                               |
 
 P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치면 `RBAC-M01`과 `RBAC-M02`가 한 published RBAC patch version에 함께 포함되는 것은 허용한다. `RBAC-M01`은 선택된 subject와 trusted tenant reconciliation, `RBAC-M02`는 API-key request property, `RBAC-M03`은 outbound storage row boundary를 소유한다.
 
@@ -191,38 +191,38 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### 2.1 파일과 정확한 첫 행동
 
-| ID | 주 파일 | 새 세션의 정확한 첫 행동 |
-| --- | --- | --- |
-| `RBAC-M01` | guard/resolver, service, options, tests | Guard source conflict와 `can({subject tenant A, tenantId B})`/strict `assignRole()` cross-tenant 허용을 각각 RED test로 추가한다. |
-| `RBAC-M02` | default subject resolver, API Keys integration, packed fixture, docs | 실제 API Keys Guard가 `request.apiKey`를 쓴 뒤 상충하는 legacy property가 있는 packed fixture를 RED로 만들고 source prerequisite를 기록한다. |
-| `RBAC-M03` | service, storage interfaces/contracts | wrong-tenant, expired(`< now`), invalid-Date effective role/permission을 반환하는 adapter deny test와 equality(`=== now`) 회귀를 추가한다. |
-| `RBAC-M04` | service/guard assertions, JS consumer | invalid `mode`, `tenantMode`, Date, resource shape 표를 작성하고 현재 완화 동작을 RED로 만든다. |
-| `RBAC-M05` | default subject resolver | 현재 보존 중인 `request.user.type='service_account'` fixture와 고정 namespace 대 migration 선택을 ADR로 먼저 작성한다. |
-| `RBAC-M06` | assertions, service, adapters | whitespace tenant/subject/role/binding/resource/permission의 create→assign→can→event 표를 만들되 API-key ID exact/no-trim fixture를 함께 고정한다. |
-| `RBAC-M07` | service, storage mutation capability, events | create-existing, update-missing/no-change, duplicate assign, grant-existing, revoke-absent/already-revoked outcome/event matrix를 RED로 만든다. |
-| `RBAC-M08` | guard/audit specs | 첫 requirement allow, 다음 requirement deny인 요청에서 final audit 결과를 RED로 고정한다. |
-| `RBAC-M09` | package metadata, CI/release, README | consumer runtime Node 하한과 maintainer toolchain, Nest/Prisma/sibling peer 선언·증거·semver를 분리한 ADR 표를 만든다. |
-| `RBAC-M10` | consumer runner, Prisma integration | exact Nest 10.4.22 packed consumer와 Prisma 5.22.0 DB lane을 test-first로 추가한다. |
-| `RBAC-M11` | workflows, compatibility runners | CI/release의 Node/Nest/Prisma lane과 main/tag ancestry 차이만 표로 만든다. |
-| `RBAC-M12A` | package/lockfile | production/full audit snapshot에서 lock-safe finding만 분류하고 minimal lock update를 준비한다. |
-| `RBAC-M12B` | package/lockfile, build tooling | esbuild `>=0.28.1`을 제공하는 parent tool upgrade 또는 검증된 narrow override 중 하나를 선택한다. |
-| `RBAC-M12C` | package/lockfile | Prisma→deepmerge-ts 경로와 upstream fixed version을 재조회하고 충족 전에는 예외만 갱신한다. |
-| `RBAC-M13A` | README/docs/spec/plans | 이미 구현된 unchecked 항목을 목록화하고 historical/superseded 배너 초안을 만든다. |
-| `RBAC-M13B` | README/docs | 완료된 P0/support 결정을 public support/trust 표에 옮긴다. |
-| `RBAC-M14` | decision/error types, docs/tests | exported type의 실제 생성/소비 여부를 `rg`와 public type fixture로 분류한다. |
-| `RBAC-M15` | storage interface, service, adapters | strict `assignRole()`이 `listRoles({})` 전체를 읽는 call-count/perf test를 추가한다. |
-| `RBAC-M16` | guard/decorator/resolvers | HTTP 외 ExecutionContext에서 깨지는 지점을 표로 만들고 문서화 vs abstraction ADR을 쓴다. |
-| `RBAC-M17` | examples, docs, CI | shipped examples를 clean packed consumer에서 typecheck해 첫 실패를 기록한다. |
-| `RBAC-M18` | `SECURITY.md`, GitHub settings | `EXT-SECURITY-CHANNEL` 증거를 받은 뒤 실제 주소/지원 line만 문서화한다. |
-| `RBAC-M19A` | workflows, audit policy | production/full audit의 자동 실패/만료형 예외 규칙을 먼저 작성한다. |
-| `RBAC-M19B` | workflows, dependency automation | Actions ref/permissions와 bot grouping 현황을 표로 만든다. |
-| `RBAC-M20A` | guard | exact dependency 완료와 Guard public golden test를 확인한 뒤 source-resolution helper 하나를 move-only로 추출한다. |
-| `RBAC-M20B` | service | exact dependency 완료와 service contract를 확인한 뒤 validation/decision seam 하나를 move-only로 추출한다. |
-| `RBAC-M20C` | Prisma adapter | exact dependency 완료와 real-DB contract를 확인한 뒤 mapper/query seam 하나를 move-only로 추출한다. |
-| `RBAC-M21` | workflows | `RBAC-M11`/`RBAC-M19A`/`RBAC-M19B`/`RBAC-M22` 뒤 중복 step과 missing timeout을 목록화한다. |
-| `RBAC-M22` | pack/consumer/docs links | 한 번 생성한 `.tgz`의 allowlist/size/모든 subpath/CJS/ESM/types/provenance 검증 fixture를 만든다. |
-| `RBAC-M23A` | peer metadata, consumer fixture | Nest 12 stable exact version으로 strict packed consumer를 먼저 실행한다. |
-| `RBAC-M23B` | Prisma adapter/integration | `EXT-PRISMA8-STABLE` 충족 뒤 Prisma 8 exact version으로 disposable real-DB lane을 만든다. |
+| ID          | 주 파일                                                              | 새 세션의 정확한 첫 행동                                                                                                                           |
+| ----------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RBAC-M01`  | guard/resolver, service, options, tests                              | Guard source conflict와 `can({subject tenant A, tenantId B})`/strict `assignRole()` cross-tenant 허용을 각각 RED test로 추가한다.                  |
+| `RBAC-M02`  | default subject resolver, API Keys integration, packed fixture, docs | 실제 API Keys Guard가 `request.apiKey`를 쓴 뒤 상충하는 legacy property가 있는 packed fixture를 RED로 만들고 source prerequisite를 기록한다.       |
+| `RBAC-M03`  | service, storage interfaces/contracts                                | wrong-tenant, expired(`< now`), invalid-Date effective role/permission을 반환하는 adapter deny test와 equality(`=== now`) 회귀를 추가한다.         |
+| `RBAC-M04`  | service/guard assertions, JS consumer                                | invalid `mode`, `tenantMode`, Date, resource shape 표를 작성하고 현재 완화 동작을 RED로 만든다.                                                    |
+| `RBAC-M05`  | default subject resolver                                             | 현재 보존 중인 `request.user.type='service_account'` fixture와 고정 namespace 대 migration 선택을 ADR로 먼저 작성한다.                             |
+| `RBAC-M06`  | assertions, service, adapters                                        | whitespace tenant/subject/role/binding/resource/permission의 create→assign→can→event 표를 만들되 API-key ID exact/no-trim fixture를 함께 고정한다. |
+| `RBAC-M07`  | service, storage mutation capability, events                         | create-existing, update-missing/no-change, duplicate assign, grant-existing, revoke-absent/already-revoked outcome/event matrix를 RED로 만든다.    |
+| `RBAC-M08`  | guard/audit specs                                                    | 첫 requirement allow, 다음 requirement deny인 요청에서 final audit 결과를 RED로 고정한다.                                                          |
+| `RBAC-M09`  | package metadata, CI/release, README                                 | consumer runtime Node 하한과 maintainer toolchain, Nest/Prisma/sibling peer 선언·증거·semver를 분리한 ADR 표를 만든다.                             |
+| `RBAC-M10`  | consumer runner, Prisma integration                                  | exact Nest 10.4.22 packed consumer와 Prisma 5.22.0 DB lane을 test-first로 추가한다.                                                                |
+| `RBAC-M11`  | workflows, compatibility runners                                     | CI/release의 Node/Nest/Prisma lane과 main/tag ancestry 차이만 표로 만든다.                                                                         |
+| `RBAC-M12A` | package/lockfile                                                     | production/full audit snapshot에서 lock-safe finding만 분류하고 minimal lock update를 준비한다.                                                    |
+| `RBAC-M12B` | package/lockfile, build tooling                                      | esbuild `>=0.28.1`을 제공하는 parent tool upgrade 또는 검증된 narrow override 중 하나를 선택한다.                                                  |
+| `RBAC-M12C` | package/lockfile                                                     | Prisma→deepmerge-ts 경로와 upstream fixed version을 재조회하고 충족 전에는 예외만 갱신한다.                                                        |
+| `RBAC-M13A` | README/docs/spec/plans                                               | 이미 구현된 unchecked 항목을 목록화하고 historical/superseded 배너 초안을 만든다.                                                                  |
+| `RBAC-M13B` | README/docs                                                          | 완료된 P0/support 결정을 public support/trust 표에 옮긴다.                                                                                         |
+| `RBAC-M14`  | decision/error types, docs/tests                                     | exported type의 실제 생성/소비 여부를 `rg`와 public type fixture로 분류한다.                                                                       |
+| `RBAC-M15`  | storage interface, service, adapters                                 | strict `assignRole()`이 `listRoles({})` 전체를 읽는 call-count/perf test를 추가한다.                                                               |
+| `RBAC-M16`  | guard/decorator/resolvers                                            | HTTP 외 ExecutionContext에서 깨지는 지점을 표로 만들고 문서화 vs abstraction ADR을 쓴다.                                                           |
+| `RBAC-M17`  | examples, docs, CI                                                   | shipped examples를 clean packed consumer에서 typecheck해 첫 실패를 기록한다.                                                                       |
+| `RBAC-M18`  | `SECURITY.md`, GitHub settings                                       | `EXT-SECURITY-CHANNEL` 증거를 받은 뒤 실제 주소/지원 line만 문서화한다.                                                                            |
+| `RBAC-M19A` | workflows, audit policy                                              | production/full audit의 자동 실패/만료형 예외 규칙을 먼저 작성한다.                                                                                |
+| `RBAC-M19B` | workflows, dependency automation                                     | Actions ref/permissions와 bot grouping 현황을 표로 만든다.                                                                                         |
+| `RBAC-M20A` | guard                                                                | exact dependency 완료와 Guard public golden test를 확인한 뒤 source-resolution helper 하나를 move-only로 추출한다.                                 |
+| `RBAC-M20B` | service                                                              | exact dependency 완료와 service contract를 확인한 뒤 validation/decision seam 하나를 move-only로 추출한다.                                         |
+| `RBAC-M20C` | Prisma adapter                                                       | exact dependency 완료와 real-DB contract를 확인한 뒤 mapper/query seam 하나를 move-only로 추출한다.                                                |
+| `RBAC-M21`  | workflows                                                            | `RBAC-M11`/`RBAC-M19A`/`RBAC-M19B`/`RBAC-M22` 뒤 중복 step과 missing timeout을 목록화한다.                                                         |
+| `RBAC-M22`  | pack/consumer/docs links                                             | 한 번 생성한 `.tgz`의 allowlist/size/모든 subpath/CJS/ESM/types/provenance 검증 fixture를 만든다.                                                  |
+| `RBAC-M23A` | peer metadata, consumer fixture                                      | Nest 12 stable exact version으로 strict packed consumer를 먼저 실행한다.                                                                           |
+| `RBAC-M23B` | Prisma adapter/integration                                           | `EXT-PRISMA8-STABLE` 충족 뒤 Prisma 8 exact version으로 disposable real-DB lane을 만든다.                                                          |
 
 ## 3. P0 작업 명세
 
@@ -427,13 +427,13 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 시작 시 고정한 parity 표:
 
-| gate | CI | 기존 release | 완료된 release |
-| --- | --- | --- | --- |
-| 기본 verify | Node 22/24 | Node 24 | Node 22/24 |
-| modern packed consumer | Node 22/24, Nest 11.2.1, Prisma 7.10.0 | Node 24만 | Node 22/24 |
-| Nest lower bound | Node 24, Nest 10.4.22 | 없음 | Node 24, Nest 10.4.22 |
-| Prisma real DB | 5.22.0/6.19.3 legacy, 7.10.0 modern | 7.10.0 modern만 | 5.22.0/6.19.3 legacy, 7.10.0 modern |
-| release graph | 해당 없음 | tag/package version 비교 | checkout=`tag^{commit}`, tag→release target→`origin/main` ancestry |
+| gate                   | CI                                     | 기존 release             | 완료된 release                                                     |
+| ---------------------- | -------------------------------------- | ------------------------ | ------------------------------------------------------------------ |
+| 기본 verify            | Node 22/24                             | Node 24                  | Node 22/24                                                         |
+| modern packed consumer | Node 22/24, Nest 11.2.1, Prisma 7.10.0 | Node 24만                | Node 22/24                                                         |
+| Nest lower bound       | Node 24, Nest 10.4.22                  | 없음                     | Node 24, Nest 10.4.22                                              |
+| Prisma real DB         | 5.22.0/6.19.3 legacy, 7.10.0 modern    | 7.10.0 modern만          | 5.22.0/6.19.3 legacy, 7.10.0 modern                                |
+| release graph          | 해당 없음                              | tag/package version 비교 | checkout=`tag^{commit}`, tag→release target→`origin/main` ancestry |
 
 완료 조건:
 
@@ -632,26 +632,29 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M23A` — Nest 12 stable compatibility
 
-- 상태: `P3 / DECISION`
-- 2026-08-30 기준 [`@nestjs/core` stable은 `12.0.1`](https://www.npmjs.com/package/%40nestjs/core?activeTab=versions)이다. exact pin한 strict packed consumer로 호환성/변경점을 조사한다.
-- peer를 넓히는 구현은 결과 ADR과 semver 검토 뒤 별도 PR로 한다.
+- 상태: `P3 / DONE`
+- exact `@nestjs/common`, `core`, `platform-express`, `testing` 12.0.1을 packed artifact와 함께 strict install하고 Node 22.20.0/24.11.1에서 CJS, ESM, Nest DI, declaration, lockfile provenance를 검증했다.
+- 기존 Nest 10.4.22/11.2.1 gate를 보존하면서 peer를 `>=10 <13`으로 넓혔다. install 범위 확대와 exact lane 추가는 기존 semver 정책상 patch-safe다.
+- Nest 12의 ESM package는 Node 22 line에서 22.12+가 필요하므로 maintained Node 22/24 최신 line을 CI/release matrix에서 검증한다.
+- 결정과 Prisma 8 경계는 `docs/adr/0004-nest-12-prisma-8-compatibility.md`에 기록했다.
 
 ### `RBAC-M23B` — Prisma 8 stable compatibility
 
 - 상태: `P3 / BLOCKED (EXT-PRISMA8-STABLE)`
-- 현재 [`prisma` next는 `8.0.0-rc.12`](https://www.npmjs.com/package/prisma?activeTab=versions)로 stable milestone을 충족하지 않는다. stable과 공식 migration contract가 나온 뒤 disposable real-DB 스파이크한다.
-- stable 전 peer를 넓히지 않는다.
+- 2026-09-02 npm `latest`는 `prisma@8.0.0-rc.12`, PostgreSQL runtime은 `@prisma/orm-postgres@8.0.0-rc.8`이고 `@prisma/client@8.0.0-rc.12`는 존재하지 않는다. 공식 PostgreSQL upgrade guide도 RC package로 검증되어 stable milestone을 충족하지 않는다.
+- RC 탐색 결과 Prisma 8은 contract artifact와 `db.orm.public.Model`/`db.transaction(...)`을 사용한다. 현재 adapter의 lowercase generated delegates와 `$transaction(...)` 구조를 구현하지 않으므로 `PrismaRbacStorage`에 직접 주입할 수 없다.
+- stable 전 peer를 넓히거나 호환성을 주장하지 않는다. stable이 나오면 별도 adapter/bridge를 정하고 disposable PostgreSQL에서 전체 storage contract를 skip 0으로 실행한다.
 
 ### 결정 대기 후보
 
-| ID | 후보 | 승격 조건 |
-| --- | --- | --- |
-| `RBAC-B01` | OpenAPI metadata helper | 실제 consumer 요구와 HTTP transport ADR 완료 |
-| `RBAC-B02` | permission seed/diff helper | migration ownership과 idempotency 설계 |
-| `RBAC-B03` | audit/change publisher failure callback | 관측 요구와 cardinality contract |
-| `RBAC-B04` | role tenant 이동 정책 | 실제 migration use case와 cross-tenant risk review |
-| `RBAC-B05` | metadata encoder parity | InMemory/Prisma divergence가 재현될 때 |
-| `RBAC-B06` | `.DS_Store` ignore | 기존 사용자 파일 소유권 확인 후 |
+| ID         | 후보                                                  | 승격 조건                                                                       |
+| ---------- | ----------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `RBAC-B01` | OpenAPI metadata helper                               | 실제 consumer 요구와 HTTP transport ADR 완료                                    |
+| `RBAC-B02` | permission seed/diff helper                           | migration ownership과 idempotency 설계                                          |
+| `RBAC-B03` | audit/change publisher failure callback               | 관측 요구와 cardinality contract                                                |
+| `RBAC-B04` | role tenant 이동 정책                                 | 실제 migration use case와 cross-tenant risk review                              |
+| `RBAC-B05` | metadata encoder parity                               | InMemory/Prisma divergence가 재현될 때                                          |
+| `RBAC-B06` | `.DS_Store` ignore                                    | 기존 사용자 파일 소유권 확인 후                                                 |
 | `RBAC-B07` | deprecated decision/error compatibility envelope 제거 | breaking release, published consumer 사용 조사, migration note가 함께 준비될 때 |
 
 후보는 합의 전 `READY`가 아니다.
@@ -822,52 +825,56 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M20C`: Prisma mapping/query/mutation-error 내부 seam과 indexed lookup/real PostgreSQL contract 보존.
 - [x] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
 - [x] `RBAC-M21`: CI/release reusable verification graph, timeout/concurrency, build/generate 중복 제거.
+- [x] `RBAC-M23A`: exact Nest 12.0.1 strict packed consumer, Node 22/24 CJS·ESM·DI·types와 `>=10 <13` additive peer contract.
+- [ ] `RBAC-M23B`: RC package/API 탐색과 ADR은 완료했지만 Prisma 8 stable이 없어 real-DB acceptance는 external blocker로 남아 있다.
 
 향후 gate를 현재 P0 patch의 선행 조건으로 소급 적용하지 않는다.
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M22/M21 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M22`를 반복하지 않는다. 다음 로컬 후보는 `RBAC-M23A` Nest 12 stable compatibility 결정 스파이크다.
-3. M23A는 exact Nest 12 packed consumer 결과와 semver ADR을 먼저 만들며 peer range 변경은 별도 합의 전 수행하지 않는다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M23A`를 반복하지 않는다. 현재 로컬 실행 가능한 큐 task는 없다.
+3. Nest 12.0.1 strict consumer와 `>=10 <13` peer 계약을 유지한다. 새 Nest 12 patch를 채택할 때 exact lane을 함께 갱신한다.
 4. M19 risk register의 review date는 exclusive deadline이다. Dependabot parent-tool/Prisma PR에서는 audit path와 M12 override 제거 가능성을 함께 재검토한다.
-5. `RBAC-M23B`는 Prisma 8 stable과 공식 migration contract가 나올 때까지 계속 blocked다.
+5. `RBAC-M23B`는 Prisma 8 stable이 나올 때까지 blocked다. 충족 시 ADR 0004의 adapter/bridge 결정과 disposable PostgreSQL full storage contract가 정확한 다음 행동이다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
 ## 11. 작업 기록
 
-| 날짜 | 작업 ID | 상태 | 시작 ref | 종료 ref/PR/release | 검증 요약 | 다음 행동 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2026-08-30 | 조사 기준선 | `DONE` | `v0.2.1 / 69bf0e1` | 기준선 확정 | 14 files/205 tests, lint/typecheck, fresh coverage, audits, release/CI/source 검토 | `RBAC-M01` 시작 |
-| 2026-09-01 | `RBAC-M01` | `DONE` | `main@2dd5a8c` | uncommitted working tree | authoritative resolver/default-source reconciliation, direct `can()` tenant conflict deny, strict `assignRole()` subject/role/binding reconciliation, HTTP/audit/docs 완료; A/B/C1/C2 PASS | `RBAC-M02` 시작 |
-| 2026-09-01 | `RBAC-M02` | `DONE` | `main@224e887` | uncommitted working tree | canonical `request.apiKey`, exact opaque IDs, dual-source conflict deny, API Keys 0.3.2 packed Guard→RBAC CI/release gate, docs/migration 완료; A/B/D PASS | `RBAC-M03` 시작 |
-| 2026-09-01 | `RBAC-M03` | `DONE` | `main@b076ff6` | uncommitted working tree | custom effective row를 query tenant/global provenance, finite Date/expiry, resource pair로 재검증하고 resource alias 우회를 차단; A/B/C2/C3와 build PASS | `RBAC-M04` 시작 |
-| 2026-09-01 | `RBAC-M04` | `DONE` | `main@13dc26a` | uncommitted working tree | invalid mode/tenantMode와 Date/subject/resource/requirement runtime shape를 작은 assertion layer에서 `RBAC_CONFIG_ERROR` 또는 기존 resolver deny로 fail closed; A/B, HTTP E2E, packed CJS/ESM consumer PASS | `RBAC-M05` 시작 |
-| 2026-09-01 | `RBAC-M05` | `DONE` | `main@c3297c8` | uncommitted working tree | custom user type 호환성을 유지하고 valid RBAC subject/user/API-key identity를 exact tuple로 조정해 conflict를 subject missing으로 fail closed; namespace isolation, A/B, Guard E2E와 build PASS | `RBAC-M06` 시작 |
-| 2026-09-01 | `RBAC-M06` | `DONE` | `main@7e4f9cf` | uncommitted working tree | service/InMemory/Prisma가 공통 outer-whitespace canonicalization을 사용하고 API-key subject identity는 exact 보존; create→assign→can, update/delete/list, audit/change event, non-canonical storage deny와 A/B/C1/C2/C3 PASS | `RBAC-M07` 시작 |
-| 2026-09-01 | `RBAC-M07` | `DONE` | `main@5fc74b0` | uncommitted working tree | optional mutation-result capability로 built-in create/update/delete/grant/revoke/assign의 committed/no-op/conflict를 구분하고 missing update 생성과 no-op 성공 event를 차단; legacy fallback/deprecation 문서화, A/B/C2/C3와 audit-log, build PASS | `RBAC-M08` 시작 |
-| 2026-09-01 | `RBAC-M08` | `DONE` | `main@b2f3a59` | uncommitted working tree | stacked requirement audit를 request-final로 변경해 later deny의 선행 allow event를 제거하고 실패 index/reason과 HTTP 결과를 일치시킴; A/B/C1과 audit-log adapter PASS | `RBAC-M09` 결정 시작 |
-| 2026-09-01 | `RBAC-M09` | `DONE` | `main@ea34994` | uncommitted working tree | Node 22/24 runtime·maintainer·release 계약, exact peer evidence/semver 표, Node 22 types와 dual packed lane 정렬; A/B/C1/C2/C3/D PASS | `RBAC-M10` exact Nest 10.4.22/Prisma 5.22.0 하한 lane 시작 |
-| 2026-09-01 | `RBAC-M10` | `DONE` | `main@183cb77` | uncommitted working tree | exact Nest 10.4.22 strict packed CJS/ESM/DI/types와 Prisma 5.22.0 PostgreSQL 16 34/34 skip 0; A/B/C4/D PASS | `RBAC-M11` CI/release parity와 tag ancestry 시작 |
-| 2026-09-01 | `RBAC-M11` | `DONE` | `main@3ea9f61` | uncommitted working tree | release Node 22/24, Nest 10/11, Prisma 5/6/7 parity와 tag→target→main ancestry를 publish 선행 gate로 고정; A/B/C2/C3/D와 release graph PASS | `RBAC-M12A` lock-safe dev advisory 갱신 시작 |
-| 2026-09-01 | `RBAC-M12A` | `DONE` | `main@1c4842b` | uncommitted working tree | lock-safe 5경로만 patch해 full audit 9→4, production 0 유지; A/D audit PASS | `RBAC-M12B` tsup/esbuild 결정 |
-| 2026-09-01 | `RBAC-M12B` | `DONE` | `main@1c4842b` | uncommitted working tree | tsup-scoped esbuild 0.28.2 override, A/B/D와 packed consumers PASS, 0.27.7 대비 dist byte-identical | `RBAC-M12C` Prisma/deepmerge-ts 결정 |
-| 2026-09-01 | `RBAC-M12C` | `DONE` | `main@1c4842b` | uncommitted working tree | @prisma/config 7.10.0-scoped deepmerge-ts 8.0.2 override, full/production audit 0, config/generate/cycle/PG16 34/34 PASS | `RBAC-M13A` 역사 문서 배너와 canonical queue link 시작 |
-| 2026-09-02 | `RBAC-M13A` | `DONE` | `main@a51d33f` | uncommitted working tree | 역사 문서 6개 배너, 계획 checkbox 176개 보존, absolute canonical queue link와 package exclusion 확인 | `RBAC-M13B` support/trust 동기화 |
-| 2026-09-02 | `RBAC-M13B` | `DONE` | `main@a51d33f` | uncommitted working tree | actual CI/release matrix, plain/strict 및 tenant/API-key/storage trust 계약 동기화; A/D docs 검증 PASS | `RBAC-M14` public decision/error 계약 ADR 시작 |
-| 2026-09-02 | `RBAC-M14` | `DONE` | `main@44daec7` | uncommitted working tree | producer-accurate service/testing decision 타입, broad compatibility envelope와 dormant API deprecation ADR; A/B/D와 packed type fixture PASS | `RBAC-M15` indexed role lookup 시작 |
-| 2026-09-02 | `RBAC-M15` | `DONE` | `main@05838fc` | uncommitted working tree | optional `findRoleById`, InMemory Map/Prisma PK query, custom capability와 deprecated legacy scan fallback; A/B/C2/D PASS | `RBAC-M16` transport 계약 결정 시작 |
-| 2026-09-02 | `RBAC-M16` | `DONE` | `main@8052a9a` | uncommitted working tree | 0.2.x HTTP-only Guard 계약, transport-neutral service 경계, future carrier acceptance; A/C1/D PASS | `RBAC-M17` executable examples/Prisma setup 시작 |
-| 2026-09-02 | `RBAC-M17` | `DONE` | `main@c532472` | uncommitted working tree | packed example source 7개 typecheck, Prisma 6/7 copyable setup과 PostgreSQL 16 36/36 skip 0; A/B/C2/C3/D PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 (`RBAC-M18`은 external blocker 유지) |
-| 2026-09-02 | `RBAC-M18` | `DONE` | `main@e11468b` | uncommitted working tree + GitHub settings | `SECURITY.md`, private reporting enabled, `main` force-push/deletion protection, supported line/reporting/trust boundary 문서 검증 PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 |
-| 2026-09-02 | `RBAC-M19A` | `DONE` | `main@e9f6a9d` | uncommitted working tree | PR/release production audit 0, exact full-audit risk register, owner/review-date 만료 gate, M12 override 추적; audit policy/unit/A/D PASS | `RBAC-M19B` Actions/dependency automation 시작 |
-| 2026-09-02 | `RBAC-M19B` | `DONE` | `main@e9f6a9d` | uncommitted working tree | checkout/setup-node v6 full SHA pin, least-privilege OIDC, Dependabot Nest/Prisma/lint-test/Actions groups; workflow/YAML/A/B/D PASS | `RBAC-M20A` Guard behavior-preserving 분해 시작 |
-| 2026-09-02 | `RBAC-M20A` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | Guard 453→66줄, source/evaluation/audit 내부 seam; Guard golden 91/91, 전체 326/326 PASS | `RBAC-M20B` service behavior-preserving 분해 |
-| 2026-09-02 | `RBAC-M20B` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | service 1,157→668줄, input/decision/mutation-support 내부 seam; focused 125/125와 전체 326/326 PASS | `RBAC-M20C` Prisma adapter behavior-preserving 분해 |
-| 2026-09-02 | `RBAC-M20C` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | Prisma adapter 787→529줄, mapper/query/mutation-error 내부 seam; PG16 36/36, final 329/329, coverage/build/packed consumer PASS | `RBAC-M22` package contract 시작 (`RBAC-M21`은 계속 blocked) |
-| 2026-09-02 | `RBAC-M22` | `DONE` | `main@04568b3` | uncommitted combined M22/M21 working tree | pack-once 79 files/263,287 bytes, allowlist/size/docs/export contract, 6 public subpath CJS/ESM/types, exact modern/Nest 10 consumers와 provenance registry contract PASS | `RBAC-M21` workflow hygiene 시작 |
-| 2026-09-02 | `RBAC-M21` | `DONE` | `main@04568b3 + RBAC-M22 working tree` | uncommitted combined M22/M21 working tree | CI/release reusable graph, all runner timeouts, concurrency 보존, Node 24 dist 재사용과 per-lane Prisma generate; focused workflow/package contract PASS | `RBAC-M23A` exact Nest 12 compatibility 결정 스파이크 |
+| 날짜       | 작업 ID     | 상태      | 시작 ref                               | 종료 ref/PR/release                        | 검증 요약                                                                                                                                                                                                                                          | 다음 행동                                                                               |
+| ---------- | ----------- | --------- | -------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-08-30 | 조사 기준선 | `DONE`    | `v0.2.1 / 69bf0e1`                     | 기준선 확정                                | 14 files/205 tests, lint/typecheck, fresh coverage, audits, release/CI/source 검토                                                                                                                                                                 | `RBAC-M01` 시작                                                                         |
+| 2026-09-01 | `RBAC-M01`  | `DONE`    | `main@2dd5a8c`                         | uncommitted working tree                   | authoritative resolver/default-source reconciliation, direct `can()` tenant conflict deny, strict `assignRole()` subject/role/binding reconciliation, HTTP/audit/docs 완료; A/B/C1/C2 PASS                                                         | `RBAC-M02` 시작                                                                         |
+| 2026-09-01 | `RBAC-M02`  | `DONE`    | `main@224e887`                         | uncommitted working tree                   | canonical `request.apiKey`, exact opaque IDs, dual-source conflict deny, API Keys 0.3.2 packed Guard→RBAC CI/release gate, docs/migration 완료; A/B/D PASS                                                                                         | `RBAC-M03` 시작                                                                         |
+| 2026-09-01 | `RBAC-M03`  | `DONE`    | `main@b076ff6`                         | uncommitted working tree                   | custom effective row를 query tenant/global provenance, finite Date/expiry, resource pair로 재검증하고 resource alias 우회를 차단; A/B/C2/C3와 build PASS                                                                                           | `RBAC-M04` 시작                                                                         |
+| 2026-09-01 | `RBAC-M04`  | `DONE`    | `main@13dc26a`                         | uncommitted working tree                   | invalid mode/tenantMode와 Date/subject/resource/requirement runtime shape를 작은 assertion layer에서 `RBAC_CONFIG_ERROR` 또는 기존 resolver deny로 fail closed; A/B, HTTP E2E, packed CJS/ESM consumer PASS                                        | `RBAC-M05` 시작                                                                         |
+| 2026-09-01 | `RBAC-M05`  | `DONE`    | `main@c3297c8`                         | uncommitted working tree                   | custom user type 호환성을 유지하고 valid RBAC subject/user/API-key identity를 exact tuple로 조정해 conflict를 subject missing으로 fail closed; namespace isolation, A/B, Guard E2E와 build PASS                                                    | `RBAC-M06` 시작                                                                         |
+| 2026-09-01 | `RBAC-M06`  | `DONE`    | `main@7e4f9cf`                         | uncommitted working tree                   | service/InMemory/Prisma가 공통 outer-whitespace canonicalization을 사용하고 API-key subject identity는 exact 보존; create→assign→can, update/delete/list, audit/change event, non-canonical storage deny와 A/B/C1/C2/C3 PASS                       | `RBAC-M07` 시작                                                                         |
+| 2026-09-01 | `RBAC-M07`  | `DONE`    | `main@5fc74b0`                         | uncommitted working tree                   | optional mutation-result capability로 built-in create/update/delete/grant/revoke/assign의 committed/no-op/conflict를 구분하고 missing update 생성과 no-op 성공 event를 차단; legacy fallback/deprecation 문서화, A/B/C2/C3와 audit-log, build PASS | `RBAC-M08` 시작                                                                         |
+| 2026-09-01 | `RBAC-M08`  | `DONE`    | `main@b2f3a59`                         | uncommitted working tree                   | stacked requirement audit를 request-final로 변경해 later deny의 선행 allow event를 제거하고 실패 index/reason과 HTTP 결과를 일치시킴; A/B/C1과 audit-log adapter PASS                                                                              | `RBAC-M09` 결정 시작                                                                    |
+| 2026-09-01 | `RBAC-M09`  | `DONE`    | `main@ea34994`                         | uncommitted working tree                   | Node 22/24 runtime·maintainer·release 계약, exact peer evidence/semver 표, Node 22 types와 dual packed lane 정렬; A/B/C1/C2/C3/D PASS                                                                                                              | `RBAC-M10` exact Nest 10.4.22/Prisma 5.22.0 하한 lane 시작                              |
+| 2026-09-01 | `RBAC-M10`  | `DONE`    | `main@183cb77`                         | uncommitted working tree                   | exact Nest 10.4.22 strict packed CJS/ESM/DI/types와 Prisma 5.22.0 PostgreSQL 16 34/34 skip 0; A/B/C4/D PASS                                                                                                                                        | `RBAC-M11` CI/release parity와 tag ancestry 시작                                        |
+| 2026-09-01 | `RBAC-M11`  | `DONE`    | `main@3ea9f61`                         | uncommitted working tree                   | release Node 22/24, Nest 10/11, Prisma 5/6/7 parity와 tag→target→main ancestry를 publish 선행 gate로 고정; A/B/C2/C3/D와 release graph PASS                                                                                                        | `RBAC-M12A` lock-safe dev advisory 갱신 시작                                            |
+| 2026-09-01 | `RBAC-M12A` | `DONE`    | `main@1c4842b`                         | uncommitted working tree                   | lock-safe 5경로만 patch해 full audit 9→4, production 0 유지; A/D audit PASS                                                                                                                                                                        | `RBAC-M12B` tsup/esbuild 결정                                                           |
+| 2026-09-01 | `RBAC-M12B` | `DONE`    | `main@1c4842b`                         | uncommitted working tree                   | tsup-scoped esbuild 0.28.2 override, A/B/D와 packed consumers PASS, 0.27.7 대비 dist byte-identical                                                                                                                                                | `RBAC-M12C` Prisma/deepmerge-ts 결정                                                    |
+| 2026-09-01 | `RBAC-M12C` | `DONE`    | `main@1c4842b`                         | uncommitted working tree                   | @prisma/config 7.10.0-scoped deepmerge-ts 8.0.2 override, full/production audit 0, config/generate/cycle/PG16 34/34 PASS                                                                                                                           | `RBAC-M13A` 역사 문서 배너와 canonical queue link 시작                                  |
+| 2026-09-02 | `RBAC-M13A` | `DONE`    | `main@a51d33f`                         | uncommitted working tree                   | 역사 문서 6개 배너, 계획 checkbox 176개 보존, absolute canonical queue link와 package exclusion 확인                                                                                                                                               | `RBAC-M13B` support/trust 동기화                                                        |
+| 2026-09-02 | `RBAC-M13B` | `DONE`    | `main@a51d33f`                         | uncommitted working tree                   | actual CI/release matrix, plain/strict 및 tenant/API-key/storage trust 계약 동기화; A/D docs 검증 PASS                                                                                                                                             | `RBAC-M14` public decision/error 계약 ADR 시작                                          |
+| 2026-09-02 | `RBAC-M14`  | `DONE`    | `main@44daec7`                         | uncommitted working tree                   | producer-accurate service/testing decision 타입, broad compatibility envelope와 dormant API deprecation ADR; A/B/D와 packed type fixture PASS                                                                                                      | `RBAC-M15` indexed role lookup 시작                                                     |
+| 2026-09-02 | `RBAC-M15`  | `DONE`    | `main@05838fc`                         | uncommitted working tree                   | optional `findRoleById`, InMemory Map/Prisma PK query, custom capability와 deprecated legacy scan fallback; A/B/C2/D PASS                                                                                                                          | `RBAC-M16` transport 계약 결정 시작                                                     |
+| 2026-09-02 | `RBAC-M16`  | `DONE`    | `main@8052a9a`                         | uncommitted working tree                   | 0.2.x HTTP-only Guard 계약, transport-neutral service 경계, future carrier acceptance; A/C1/D PASS                                                                                                                                                 | `RBAC-M17` executable examples/Prisma setup 시작                                        |
+| 2026-09-02 | `RBAC-M17`  | `DONE`    | `main@c532472`                         | uncommitted working tree                   | packed example source 7개 typecheck, Prisma 6/7 copyable setup과 PostgreSQL 16 36/36 skip 0; A/B/C2/C3/D PASS                                                                                                                                      | `RBAC-M19A` audit automation/만료형 예외 정책 시작 (`RBAC-M18`은 external blocker 유지) |
+| 2026-09-02 | `RBAC-M18`  | `DONE`    | `main@e11468b`                         | uncommitted working tree + GitHub settings | `SECURITY.md`, private reporting enabled, `main` force-push/deletion protection, supported line/reporting/trust boundary 문서 검증 PASS                                                                                                            | `RBAC-M19A` audit automation/만료형 예외 정책 시작                                      |
+| 2026-09-02 | `RBAC-M19A` | `DONE`    | `main@e9f6a9d`                         | uncommitted working tree                   | PR/release production audit 0, exact full-audit risk register, owner/review-date 만료 gate, M12 override 추적; audit policy/unit/A/D PASS                                                                                                          | `RBAC-M19B` Actions/dependency automation 시작                                          |
+| 2026-09-02 | `RBAC-M19B` | `DONE`    | `main@e9f6a9d`                         | uncommitted working tree                   | checkout/setup-node v6 full SHA pin, least-privilege OIDC, Dependabot Nest/Prisma/lint-test/Actions groups; workflow/YAML/A/B/D PASS                                                                                                               | `RBAC-M20A` Guard behavior-preserving 분해 시작                                         |
+| 2026-09-02 | `RBAC-M20A` | `DONE`    | `main@f2013b7`                         | uncommitted combined M20 working tree      | Guard 453→66줄, source/evaluation/audit 내부 seam; Guard golden 91/91, 전체 326/326 PASS                                                                                                                                                           | `RBAC-M20B` service behavior-preserving 분해                                            |
+| 2026-09-02 | `RBAC-M20B` | `DONE`    | `main@f2013b7`                         | uncommitted combined M20 working tree      | service 1,157→668줄, input/decision/mutation-support 내부 seam; focused 125/125와 전체 326/326 PASS                                                                                                                                                | `RBAC-M20C` Prisma adapter behavior-preserving 분해                                     |
+| 2026-09-02 | `RBAC-M20C` | `DONE`    | `main@f2013b7`                         | uncommitted combined M20 working tree      | Prisma adapter 787→529줄, mapper/query/mutation-error 내부 seam; PG16 36/36, final 329/329, coverage/build/packed consumer PASS                                                                                                                    | `RBAC-M22` package contract 시작 (`RBAC-M21`은 계속 blocked)                            |
+| 2026-09-02 | `RBAC-M22`  | `DONE`    | `main@04568b3`                         | uncommitted combined M22/M21 working tree  | pack-once 79 files/263,287 bytes, allowlist/size/docs/export contract, 6 public subpath CJS/ESM/types, exact modern/Nest 10 consumers와 provenance registry contract PASS                                                                          | `RBAC-M21` workflow hygiene 시작                                                        |
+| 2026-09-02 | `RBAC-M21`  | `DONE`    | `main@04568b3 + RBAC-M22 working tree` | uncommitted combined M22/M21 working tree  | CI/release reusable graph, all runner timeouts, concurrency 보존, Node 24 dist 재사용과 per-lane Prisma generate; focused workflow/package contract PASS                                                                                           | `RBAC-M23A` exact Nest 12 compatibility 결정 스파이크                                   |
+| 2026-09-02 | `RBAC-M23A` | `DONE`    | `main@e164fea`                         | uncommitted M23A/B working tree            | exact Nest 12.0.1 strict packed consumer가 Node 22.20.0/24.11.1에서 CJS/ESM/DI/types/provenance PASS; peer `>=10 <13`, Nest 10/11 regression과 package contract PASS                                                                               | Prisma 8 stable milestone 감시                                                          |
+| 2026-09-02 | `RBAC-M23B` | `BLOCKED` | `main@e164fea + M23A working tree`     | uncommitted M23A/B working tree            | npm latest 8.0.0-rc.12, matching `@prisma/client` 없음, 새 contract/query/transaction API가 현 delegate adapter와 구조적으로 비호환함을 ADR로 고정                                                                                                 | stable release 뒤 adapter/bridge와 disposable PostgreSQL full contract                  |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1259,4 +1266,32 @@ Commands and exact results: reusable workflow/package focused contract PASS (2 f
 Unverified paths and reason: GitHub-hosted workflow_call 실행, artifact upload/download, PostgreSQL matrix, npm trusted publish는 commit되지 않은 로컬 workflow에서 실행할 수 없다. package consumers는 실제 동일 artifact로 실행했고 workflow/YAML/graph contracts로 CI와 release 구성을 검증했다.
 External PR/release evidence: 없음. GitHub API로 actions/upload-artifact v4=ea165f8d65b6e75b540449e92b4886f43607fa02, actions/download-artifact v4=d3f86a106a0bac45b974a628896c90dbdf5c8093를 read-only 확인했으며 PR/release/publish는 만들지 않았다.
 Next exact action: RBAC-M23A에서 exact Nest 12 stable strict packed consumer를 실행하고 peer range/semver 결정을 ADR로 작성한다. peer 범위 변경은 별도 합의 전 수행하지 않는다.
+```
+
+### 2026-09-02 RBAC-M23A 인계
+
+```text
+Task: RBAC-M23A
+State: DONE
+Start ref / end ref: main@e164fea / main@e164fea + uncommitted RBAC-M23A/B working tree
+Changed files: .github/package-contract.json, .github/workflows/verification.yml, README.md, changelog.md, docs/adr/0004-nest-12-prisma-8-compatibility.md, docs/compatibility.md, docs/installation.md, docs/prisma.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, package.json, package-lock.json, scripts/verify-nest10-consumer.cjs, scripts/verify-nest12-consumer.cjs, test/unit/dependency-audit-policy.spec.ts, test/unit/package-smoke.spec.ts
+Contract decision: exact Nest 12.0.1 strict packed consumer가 maintained Node 22/24에서 통과했으므로 @nestjs/common/core peer를 additive하게 >=10 <13으로 확대한다. Nest 12 core ESM은 Node 22 line에서 22.12+를 요구하므로 exact Node 22.20.0과 24.11.1에서 CJS/ESM/DI/declaration을 검증하고 CI/release도 두 maintained line을 사용한다. 기존 exact Nest 10.4.22와 Nest 11.2.1 consumer를 유지한다. install 범위 확대와 exact lane 추가는 기존 0.2.x semver 정책상 patch-safe다.
+Commands and exact results: git fetch --prune --tags PASS; start HEAD e164fea, origin/main 69bf0e1 확인; first focused RED는 peer >=10 <12와 missing Nest 12 fixture 두 건으로 실패; focused package/workflow contract GREEN (2 files, 19 tests); final package artifact verify PASS (80 files, 265,576 bytes, unpacked 1,264,525 bytes, SHA-512 cuzhwx...Bjzn6A==); exact Nest 12.0.1 consumer PASS on Node 22.20.0 and 24.11.1; exact Nest 10.4.22 regression PASS; exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2 modern consumer and 7 shipped examples PASS; npm run lint PASS; npm run typecheck PASS; npm test PASS (17 files, 333 tests); fresh coverage PASS (16 files, 323 tests; statements 93.10%, branches 86.93%, functions 96.56%, lines 94.36%); npm run build PASS; dependency audit policy PASS (production 0, approved full findings 2, tracked overrides 2); git diff --check PASS. 최초 전체 test는 새 workflow job count 계약 6→7 갱신 필요와 sandbox listen EPERM으로 실패했고 수정 및 network/listen 허용 재실행은 통과했다. 최초 full audit은 sandbox DNS ENOTFOUND로 실패했고 network 허용 재실행은 통과했다.
+Unverified paths and reason: GitHub-hosted reusable workflow 자체는 commit 전이라 실행하지 않았다. 동일 runner를 local exact Node 22/24에서 실행했고 workflow/package unit contract와 YAML을 검증한다. runtime authorization/storage code와 database schema는 바꾸지 않았다.
+External PR/release evidence: 없음. npm publish, GitHub PR/release, repository settings는 변경하지 않았다.
+Next exact action: Prisma 8 stable dist-tag가 실제 stable version을 가리킬 때 RBAC-M23B adapter/bridge 결정을 재개한다.
+```
+
+### 2026-09-02 RBAC-M23B 인계
+
+```text
+Task: RBAC-M23B
+State: BLOCKED
+Start ref / end ref: main@e164fea + RBAC-M23A working tree / main@e164fea + uncommitted RBAC-M23A/B working tree
+Changed files: changelog.md, docs/adr/0004-nest-12-prisma-8-compatibility.md, docs/compatibility.md, docs/installation.md, docs/prisma.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md
+Contract decision: Prisma 8 preview를 existing optional peer에 추가하지 않는다. current PrismaRbacStorage는 generated-client lowercase delegates와 callback $transaction을 요구하지만 Prisma 8 RC는 contract artifact, db.orm.public.Model query builder, db.transaction을 사용하며 matching @prisma/client v8 package도 없다. existing adapter 교체는 breaking이고, additive adapter/bridge도 stable exact packages와 PostgreSQL full storage contract가 먼저다.
+Commands and exact results: 2026-09-02 npm registry 조회에서 prisma latest/version 8.0.0-rc.12, @prisma/orm-postgres 8.0.0-rc.8, @prisma/client stable 7.10.0 확인; @prisma/client@8.0.0-rc.12 조회는 expected E404; Prisma 8 official ORM/client/transaction/PostgreSQL upgrade contract 검토 완료; package metadata contract는 Prisma peers >=5 <8을 유지한다.
+Unverified paths and reason: EXT-PRISMA8-STABLE이 충족되지 않아 stable exact install, disposable PostgreSQL migration handoff, Prisma 8 adapter storage contract를 실행할 수 없다. RC-only adapter를 production peer로 공개하면 task의 stable acceptance와 package support 계약을 위반하므로 구현하지 않았다.
+External PR/release evidence: Prisma registry/docs read-only evidence만 사용했다. external stable release는 아직 없다.
+Next exact action: npm prisma latest가 prerelease가 아닌 stable 8.x를 가리키고 official PostgreSQL migration guide가 그 stable tuple로 검증되면 별도 adapter 또는 compatibility bridge를 선택한 뒤 disposable PostgreSQL에서 shared storage contract 전부를 skip 0으로 실행한다.
 ```

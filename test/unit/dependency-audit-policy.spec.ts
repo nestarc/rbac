@@ -98,8 +98,8 @@ describe('dependency audit policy', () => {
 
     expect(ciWorkflow).toContain('uses: ./.github/workflows/verification.yml');
     expect(releaseWorkflow).toContain('uses: ./.github/workflows/verification.yml');
-    expect(verificationWorkflow.match(/runs-on: ubuntu-latest/g)).toHaveLength(6);
-    expect(verificationWorkflow.match(/timeout-minutes:/g)).toHaveLength(6);
+    expect(verificationWorkflow.match(/runs-on: ubuntu-latest/g)).toHaveLength(7);
+    expect(verificationWorkflow.match(/timeout-minutes:/g)).toHaveLength(7);
     expect(releaseWorkflow.match(/runs-on: ubuntu-latest/g)).toHaveLength(2);
     expect(releaseWorkflow.match(/timeout-minutes:/g)).toHaveLength(2);
     expect(verificationWorkflow.match(/run: npm run build/g)).toHaveLength(1);

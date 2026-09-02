@@ -19,6 +19,14 @@ connection. Prisma 5/6 applications can omit them and keep their existing
 Prisma 5.22.0, 6.19.3, and 7.10.0 have PostgreSQL 16 real-database evidence. See
 [Compatibility and support](compatibility.md) before selecting a version.
 
+NestJS 10, 11, and 12 are accepted by the peer range. Exact 12.0.1 packed
+consumers run on Node 22 and 24; NestJS 12's ESM packages require a sufficiently
+recent Node release even when the application remains CommonJS.
+
+Prisma 8 preview packages do not expose the generated-client delegate shape used
+by `PrismaRbacStorage`. Keep this adapter on Prisma 5-7 until a stable Prisma 8
+adapter contract is published and passes the real-database gate.
+
 The root package exports dependency-free RBAC primitives:
 
 ```ts

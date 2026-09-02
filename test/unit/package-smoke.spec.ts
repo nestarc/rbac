@@ -46,8 +46,8 @@ describe('package exports', () => {
 
     expect(packageJson.engines).toBeUndefined();
     expect(packageJson.devDependencies['@types/node']).toBe('22.20.1');
-    expect(packageJson.peerDependencies['@nestjs/common']).toBe('>=10 <12');
-    expect(packageJson.peerDependencies['@nestjs/core']).toBe('>=10 <12');
+    expect(packageJson.peerDependencies['@nestjs/common']).toBe('>=10 <13');
+    expect(packageJson.peerDependencies['@nestjs/core']).toBe('>=10 <13');
     expect(packageJson.peerDependencies['@prisma/client']).toBe('>=5 <8');
     expect(packageJson.peerDependencies.prisma).toBe('>=5 <8');
     expect(packageJson.peerDependencies['reflect-metadata']).toBe('>=0.1.13');
@@ -66,7 +66,7 @@ describe('package exports', () => {
     );
   });
 
-  it('declares exact lower-bound compatibility gates', () => {
+  it('declares exact Nest compatibility gates', () => {
     const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
     const verificationWorkflowPath = fileURLToPath(
       new URL('../../.github/workflows/verification.yml', import.meta.url),
@@ -74,21 +74,31 @@ describe('package exports', () => {
     const nest10RunnerPath = fileURLToPath(
       new URL('../../scripts/verify-nest10-consumer.cjs', import.meta.url),
     );
+    const nest12RunnerPath = fileURLToPath(
+      new URL('../../scripts/verify-nest12-consumer.cjs', import.meta.url),
+    );
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       scripts: Record<string, string>;
     };
     const verificationWorkflow = readFileSync(verificationWorkflowPath, 'utf8');
     const nest10Runner = readFileSync(nest10RunnerPath, 'utf8');
+    const nest12Runner = readFileSync(nest12RunnerPath, 'utf8');
 
     expect(packageJson.scripts['test:consumer:nest10:artifact']).toContain(
       'scripts/verify-nest10-consumer.cjs',
     );
-    expect(nest10Runner).toContain("'@nestjs/common': '10.4.22'");
-    expect(nest10Runner).toContain("'@nestjs/core': '10.4.22'");
+    expect(nest10Runner).toContain("runnerName === 'verify-nest12-consumer.cjs'");
+    expect(nest10Runner).toContain("? '12.0.1'");
+    expect(nest10Runner).toContain("? '10.4.22'");
+    expect(nest12Runner).toContain("require('./verify-nest10-consumer.cjs')");
     expect(nest10Runner).toContain("'--strict-peer-deps'");
     expect(nest10Runner).not.toContain("'--force'");
     expect(nest10Runner).not.toContain("'--legacy-peer-deps'");
+    expect(packageJson.scripts['test:consumer:nest12:artifact']).toContain(
+      'scripts/verify-nest12-consumer.cjs',
+    );
     expect(verificationWorkflow).toContain('Nest 10.4.22');
+    expect(verificationWorkflow).toContain('Nest 12.0.1');
     expect(verificationWorkflow).toContain('prisma-version: 5.22.0');
     expect(verificationWorkflow).toContain('prisma-version: 6.19.3');
     expect(verificationWorkflow).toContain('prisma-version: 7.10.0');

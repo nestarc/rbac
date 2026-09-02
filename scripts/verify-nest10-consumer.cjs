@@ -8,16 +8,25 @@ const { loadPackageCandidate } = require('./package-candidate.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 const packageJson = readJson(path.join(repositoryRoot, 'package.json'));
-const temporaryPrefix = 'rbac-nest10-consumer-';
+const runnerName = path.basename(process.argv[1]);
+const nestVersion =
+  runnerName === 'verify-nest12-consumer.cjs'
+    ? '12.0.1'
+    : runnerName === 'verify-nest10-consumer.cjs'
+      ? '10.4.22'
+      : undefined;
+if (!nestVersion) throw new Error(`Unsupported Nest consumer runner: ${runnerName}`);
+const nestMajor = nestVersion.split('.')[0];
+const temporaryPrefix = `rbac-nest${nestMajor}-consumer-`;
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), temporaryPrefix));
 const consumerDirectory = path.join(temporaryRoot, 'consumer');
 const { manifest: pack, tarballPath } = loadPackageCandidate(process.argv.slice(2), repositoryRoot);
 const exactDependencies = {
   '@types/node': '22.20.1',
-  '@nestjs/common': '10.4.22',
-  '@nestjs/core': '10.4.22',
-  '@nestjs/platform-express': '10.4.22',
-  '@nestjs/testing': '10.4.22',
+  '@nestjs/common': nestVersion,
+  '@nestjs/core': nestVersion,
+  '@nestjs/platform-express': nestVersion,
+  '@nestjs/testing': nestVersion,
   'reflect-metadata': '0.2.2',
   rxjs: '7.8.2',
   typescript: '5.9.3',
@@ -27,12 +36,12 @@ assertSafeNpmConfig();
 
 try {
   if (temporaryRoot.startsWith(`${repositoryRoot}${path.sep}`)) {
-    throw new Error('Nest 10 consumer fixture must run outside the repository tree');
+    throw new Error(`Nest ${nestMajor} consumer fixture must run outside the repository tree`);
   }
 
   fs.mkdirSync(consumerDirectory);
   writeJson(path.join(consumerDirectory, 'package.json'), {
-    name: 'rbac-nest10-consumer',
+    name: `rbac-nest${nestMajor}-consumer`,
     private: true,
   });
 
@@ -79,7 +88,7 @@ try {
       '    imports: [RbacModule.forRoot({ storage: new InMemoryRbacStorage() })],',
       '  }).compile();',
       '  if (!(moduleRef.get(RbacService) instanceof RbacService)) {',
-      "    throw new Error('Nest 10 did not construct RbacService from RbacModule');",
+      `    throw new Error('Nest ${nestMajor} did not construct RbacService from RbacModule');`,
       '  }',
       '  await moduleRef.close();',
       '})().catch((error) => {',
@@ -89,7 +98,12 @@ try {
       '',
     ].join('\n'),
   );
-  runCommand(process.execPath, ['smoke.cjs'], consumerDirectory, 'Nest 10 CommonJS module smoke');
+  runCommand(
+    process.execPath,
+    ['smoke.cjs'],
+    consumerDirectory,
+    `Nest ${nestMajor} CommonJS module smoke`,
+  );
 
   fs.writeFileSync(
     path.join(consumerDirectory, 'smoke.mjs'),
@@ -97,11 +111,16 @@ try {
       "import 'reflect-metadata';",
       "import { InMemoryRbacStorage, RbacModule } from '@nestarc/rbac';",
       'const dynamicModule = RbacModule.forRoot({ storage: new InMemoryRbacStorage() });',
-      "if (dynamicModule.module !== RbacModule) throw new Error('invalid Nest 10 dynamic module');",
+      `if (dynamicModule.module !== RbacModule) throw new Error('invalid Nest ${nestMajor} dynamic module');`,
       '',
     ].join('\n'),
   );
-  runCommand(process.execPath, ['smoke.mjs'], consumerDirectory, 'Nest 10 ESM module smoke');
+  runCommand(
+    process.execPath,
+    ['smoke.mjs'],
+    consumerDirectory,
+    `Nest ${nestMajor} ESM module smoke`,
+  );
 
   fs.writeFileSync(
     path.join(consumerDirectory, 'smoke.ts'),
@@ -130,7 +149,7 @@ try {
     process.execPath,
     [path.join('node_modules', 'typescript', 'bin', 'tsc')],
     consumerDirectory,
-    'Nest 10 TypeScript declaration smoke',
+    `Nest ${nestMajor} TypeScript declaration smoke`,
   );
 
   console.log(
