@@ -6,448 +6,61 @@ import {
   RBAC_SKIP_METADATA,
   RBAC_SUBJECT_REQUEST_KEY,
 } from './constants';
-import {
-  mapRbacErrorToHttpException,
-  RbacError,
-  RbacPermissionDeniedError,
-  RbacConfigError,
-  RbacResourceMissingError,
-  RbacStorageError,
-  RbacSubjectMissingError,
-  RbacTenantMissingError,
-} from './errors';
-import { defaultHttpSubjectResolver, resolveHttpResource } from './resolvers';
-import {
-  resolveHttpTenantSources,
-  type RbacHttpTenantSource,
-} from './resolvers/default-http-tenant.resolver';
+import { mapRbacErrorToHttpException, RbacPermissionDeniedError } from './errors';
+import { RbacGuardAudit } from './guard/rbac-guard-audit';
+import { RbacGuardContextResolver } from './guard/rbac-guard-context.resolver';
+import { RbacGuardRequirementEvaluator } from './guard/rbac-guard-requirement.evaluator';
+import type { RbacModuleOptions } from './interfaces';
 import { RbacService } from './rbac.service';
-import { assertRbacRequirements, isRbacSubject } from './utils/runtime-validation';
-import type {
-  RbacBuiltInResourceDeclaration,
-  RbacAuditEvent,
-  RbacCanInput,
-  RbacDecisionReason,
-  RbacModuleOptions,
-  RbacRequirement,
-  RbacRequirementOptions,
-  RbacResourceRef,
-  RbacResourceResolver,
-  RbacResourceResolverFn,
-  RbacResourceResolverToken,
-  RbacResourceResolverTokenRef,
-  RbacServiceDecision,
-  RbacSubject,
-  RbacTenantMode,
-} from './interfaces';
 
 type HttpRequest = Record<string, unknown>;
-type RbacResourceResolverClassToken = abstract new (...args: never[]) => RbacResourceResolver;
-type RbacGuardAuditContext = {
-  subject: RbacSubject;
-  tenantId?: string | null | undefined;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim() !== '';
-
-const auditResource = (resource: RbacResourceRef | undefined): RbacResourceRef | undefined =>
-  resource ? { type: resource.type, id: resource.id } : undefined;
-
-const auditIdentity = (context: RbacGuardAuditContext): Partial<RbacAuditEvent> => ({
-  tenantId: context.tenantId,
-  subjectType: context.subject.type,
-  subjectId: context.subject.id,
-});
-
-const isBuiltInResourceDeclaration = (
-  resource: RbacRequirementOptions['resource'],
-): resource is RbacBuiltInResourceDeclaration =>
-  isRecord(resource) &&
-  typeof resource.type === 'string' &&
-  ('idParam' in resource || 'idHeader' in resource || 'idQuery' in resource);
-
-const isResolverTokenRef = (
-  resource: RbacRequirementOptions['resource'],
-): resource is RbacResourceResolverTokenRef => isRecord(resource) && 'resolverToken' in resource;
-
-const isClassResolverToken = (resource: unknown): resource is RbacResourceResolverClassToken =>
-  typeof resource === 'function' &&
-  isRecord(resource.prototype) &&
-  typeof resource.prototype.resolve === 'function';
-
-const isStringOrSymbolResolverToken = (resource: unknown): resource is RbacResourceResolverToken =>
-  typeof resource === 'string' || typeof resource === 'symbol';
 
 /** Nest HTTP authorization guard. Other transports should call `RbacService` from their adapter. */
 @Injectable()
 export class RbacGuard implements CanActivate {
+  private readonly audit: RbacGuardAudit;
+  private readonly contextResolver: RbacGuardContextResolver;
+  private readonly requirementEvaluator: RbacGuardRequirementEvaluator;
+
   constructor(
     private readonly reflector: Reflector,
-    private readonly rbac: RbacService,
+    rbac: RbacService,
     @Inject(RBAC_OPTIONS) private readonly options: RbacModuleOptions,
-    private readonly moduleRef: ModuleRef,
-  ) {}
+    moduleRef: ModuleRef,
+  ) {
+    this.audit = new RbacGuardAudit(options);
+    this.contextResolver = new RbacGuardContextResolver(options, moduleRef, this.audit);
+    this.requirementEvaluator = new RbacGuardRequirementEvaluator(
+      rbac,
+      options,
+      this.audit,
+      this.contextResolver,
+    );
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const targets = [context.getHandler(), context.getClass()];
     const skip = this.reflector.getAllAndOverride<unknown>(RBAC_SKIP_METADATA, targets);
-    if (skip !== undefined) {
-      return true;
-    }
+    if (skip !== undefined) return true;
 
     const requirements =
       this.reflector.getAllAndMerge<unknown[]>(RBAC_REQUIREMENTS_METADATA, targets) ?? [];
     if (requirements.length === 0) {
       if (this.options.requireMetadata) {
-        await this.logAudit({
-          type: 'rbac.permission.denied',
-          metadata: { reason: 'rbac_metadata_missing' },
-        });
+        await this.audit.metadataMissing();
         throw mapRbacErrorToHttpException(new RbacPermissionDeniedError());
       }
 
       return true;
     }
-    try {
-      assertRbacRequirements(requirements);
-    } catch (error) {
-      if (error instanceof RbacConfigError) {
-        throw mapRbacErrorToHttpException(error);
-      }
-      throw error;
-    }
+    const validatedRequirements = this.requirementEvaluator.validate(requirements);
 
-    const subject = await this.resolveSubject(context);
+    const subject = await this.contextResolver.resolveSubject(context);
     const request = context.switchToHttp().getRequest<HttpRequest>();
     request[RBAC_SUBJECT_REQUEST_KEY] = subject;
 
-    const allowedDecisions: RbacServiceDecision[] = [];
-    for (const [requirementIndex, requirement] of requirements.entries()) {
-      const decision = await this.checkRequirement(context, requirement, subject);
-      if (!decision.allowed) {
-        await this.logDeniedDecision(decision, requirementIndex);
-        throw this.deniedDecisionToHttpException(decision.reason);
-      }
-
-      allowedDecisions.push(decision);
-    }
-
-    if (this.options.logAllowedDecisions) {
-      await this.logAllowedRequest(allowedDecisions);
-    }
+    await this.requirementEvaluator.assertAllowed(context, validatedRequirements, subject);
 
     return true;
-  }
-
-  private async checkRequirement(
-    context: ExecutionContext,
-    requirement: RbacRequirement,
-    subject: RbacSubject,
-  ) {
-    try {
-      return await this.rbac.can(await this.toCanInput(context, requirement, subject));
-    } catch (error) {
-      if (error instanceof RbacError) {
-        throw mapRbacErrorToHttpException(error);
-      }
-
-      throw error;
-    }
-  }
-
-  private async resolveSubject(context: ExecutionContext): Promise<RbacSubject> {
-    const resolver = this.options.subjectResolver ?? defaultHttpSubjectResolver();
-    const subject = await resolver(context);
-
-    if (!isRbacSubject(subject)) {
-      await this.logAudit({
-        type: 'rbac.permission.denied',
-        metadata: { reason: 'denied_subject_missing' },
-      });
-      throw mapRbacErrorToHttpException(new RbacSubjectMissingError());
-    }
-
-    return subject;
-  }
-
-  private async toCanInput(
-    context: ExecutionContext,
-    requirement: RbacRequirement,
-    subject: RbacSubject,
-  ): Promise<RbacCanInput> {
-    const tenantMode = this.resolveTenantMode(requirement.options);
-    const tenantId = await this.resolveTenant(context, requirement.options, subject);
-    const resource = await this.resolveResource(context, requirement.options.resource, {
-      subject,
-      tenantId,
-    });
-
-    if (requirement.kind === 'role') {
-      return {
-        subject,
-        tenantId,
-        tenantMode,
-        roleKey: requirement.roleKey,
-        ...(resource !== undefined ? { resource } : {}),
-      };
-    }
-
-    return {
-      subject,
-      tenantId,
-      tenantMode,
-      permissions: requirement.permissions,
-      mode: requirement.mode,
-      ...(resource !== undefined ? { resource } : {}),
-    };
-  }
-
-  private resolveTenantMode(options: RbacRequirementOptions): RbacTenantMode {
-    return options.tenant ?? (this.options.tenant?.requiredByDefault ? 'required' : 'optional');
-  }
-
-  private async resolveTenant(
-    context: ExecutionContext,
-    requirementOptions: RbacRequirementOptions,
-    subject: RbacSubject,
-  ): Promise<string | null | undefined> {
-    if (requirementOptions.tenant === 'none') return null;
-
-    const httpSources = resolveHttpTenantSources(context, requirementOptions, subject);
-    const resolver = this.options.tenantResolver;
-    const resolverMode = this.options.tenant?.resolverMode ?? 'authoritative';
-
-    if (resolverMode === 'legacy-fallback' && httpSources.length > 0) {
-      await this.ensureTenantSourcesAgree(httpSources, subject);
-      return httpSources[0]?.tenantId;
-    }
-
-    const trustedTenantId = await resolver?.(context, requirementOptions, subject);
-    const sources =
-      trustedTenantId === undefined
-        ? httpSources
-        : [{ source: 'configuredResolver' as const, tenantId: trustedTenantId }, ...httpSources];
-
-    await this.ensureTenantSourcesAgree(sources, subject);
-
-    return trustedTenantId !== undefined ? trustedTenantId : httpSources[0]?.tenantId;
-  }
-
-  private async ensureTenantSourcesAgree(
-    sources: Array<
-      | RbacHttpTenantSource
-      | {
-          source: 'configuredResolver';
-          tenantId: string | null;
-        }
-    >,
-    subject: RbacSubject,
-  ): Promise<void> {
-    const selected = sources[0]?.tenantId;
-    if (sources.every((source) => source.tenantId === selected)) return;
-
-    await this.logAudit({
-      type: 'rbac.permission.denied',
-      subjectType: subject.type,
-      subjectId: subject.id,
-      metadata: { reason: 'tenant_source_conflict' },
-    });
-    throw mapRbacErrorToHttpException(new RbacPermissionDeniedError());
-  }
-
-  private async resolveResource(
-    context: ExecutionContext,
-    resource: RbacRequirementOptions['resource'],
-    auditContext: RbacGuardAuditContext,
-  ): Promise<RbacResourceRef | undefined> {
-    if (resource === undefined) {
-      return undefined;
-    }
-
-    if (isBuiltInResourceDeclaration(resource)) {
-      return this.ensureResource(resolveHttpResource(context, resource), auditContext);
-    }
-
-    if (isResolverTokenRef(resource)) {
-      const resolver = this.resolveResourceProvider(resource);
-
-      return this.ensureResource(await resolver.resolve(context), auditContext);
-    }
-
-    if (isClassResolverToken(resource)) {
-      const resolver = this.resolveResourceProvider(resource);
-
-      return this.ensureResource(await resolver.resolve(context), auditContext);
-    }
-
-    if (typeof resource === 'function') {
-      const resolver = resource as RbacResourceResolverFn;
-
-      return this.ensureResource(await resolver(context), auditContext);
-    }
-
-    if (isStringOrSymbolResolverToken(resource)) {
-      const resolver = this.resolveResourceProvider(resource);
-
-      return this.ensureResource(await resolver.resolve(context), auditContext);
-    }
-
-    return undefined;
-  }
-
-  private resolveResourceProvider(
-    resource: RbacResourceResolverToken | RbacResourceResolverTokenRef,
-  ): RbacResourceResolver {
-    const resolverToken = isResolverTokenRef(resource) ? resource.resolverToken : resource;
-
-    try {
-      const resolver = this.moduleRef.get<RbacResourceResolver | undefined>(resolverToken, {
-        strict: false,
-      });
-
-      if (resolver === undefined || typeof resolver.resolve !== 'function') {
-        throw new RbacResourceMissingError({
-          resolverToken: String(resolverToken),
-        });
-      }
-
-      return resolver;
-    } catch (error) {
-      if (error instanceof RbacResourceMissingError) {
-        throw mapRbacErrorToHttpException(error);
-      }
-
-      throw mapRbacErrorToHttpException(
-        new RbacResourceMissingError({ resolverToken: String(resolverToken) }, { cause: error }),
-      );
-    }
-  }
-
-  private async ensureResource(
-    resource: unknown,
-    auditContext: RbacGuardAuditContext,
-  ): Promise<RbacResourceRef> {
-    if (!isRecord(resource) || !isNonEmptyString(resource.type) || !isNonEmptyString(resource.id)) {
-      await this.logAudit({
-        type: 'rbac.permission.denied',
-        ...auditIdentity(auditContext),
-        metadata: { reason: 'denied_resource_missing' },
-      });
-      throw mapRbacErrorToHttpException(new RbacResourceMissingError());
-    }
-
-    return {
-      type: resource.type.trim(),
-      id: resource.id.trim(),
-    };
-  }
-
-  private deniedDecisionToHttpException(reason: RbacDecisionReason) {
-    switch (reason) {
-      case 'denied_subject_missing':
-        return mapRbacErrorToHttpException(new RbacSubjectMissingError());
-      case 'denied_tenant_missing':
-        return mapRbacErrorToHttpException(new RbacTenantMissingError());
-      case 'denied_resource_missing':
-        return mapRbacErrorToHttpException(new RbacResourceMissingError());
-      case 'denied_storage_error':
-        return mapRbacErrorToHttpException(new RbacStorageError());
-      default:
-        return mapRbacErrorToHttpException(new RbacPermissionDeniedError());
-    }
-  }
-
-  private async logDeniedDecision(
-    decision: RbacServiceDecision,
-    requirementIndex: number,
-  ): Promise<void> {
-    await this.logAudit({
-      type: 'rbac.permission.denied',
-      tenantId: decision.tenantId,
-      subjectType: decision.subject?.type,
-      subjectId: decision.subject?.id,
-      metadata: {
-        reason: decision.reason,
-        requirementIndex,
-        permission: decision.permission,
-        permissions: decision.permissions,
-        roleKey: decision.roleKey,
-        resource: auditResource(decision.resource),
-        details: decision.details,
-      },
-    });
-  }
-
-  private async logAllowedRequest(decisions: RbacServiceDecision[]): Promise<void> {
-    const firstDecision = decisions[0]!;
-
-    if (decisions.length === 1) {
-      await this.logAllowedDecision(firstDecision);
-      return;
-    }
-
-    const tenantId = decisions.every((decision) => decision.tenantId === firstDecision.tenantId)
-      ? firstDecision.tenantId
-      : undefined;
-
-    await this.logAudit({
-      type: 'rbac.permission.allowed',
-      tenantId,
-      subjectType: firstDecision.subject?.type,
-      subjectId: firstDecision.subject?.id,
-      metadata: {
-        reason: 'allowed_all_requirements',
-        requirements: decisions.map((decision, requirementIndex) => ({
-          requirementIndex,
-          reason: decision.reason,
-        })),
-      },
-    });
-  }
-
-  private async logAllowedDecision(decision: RbacServiceDecision): Promise<void> {
-    const metadata: Record<string, unknown> = { reason: decision.reason };
-    if (decision.permission !== undefined) {
-      metadata.permission = decision.permission;
-    }
-    if (decision.permissions !== undefined) {
-      metadata.permissions = decision.permissions;
-    }
-    if (decision.roleKey !== undefined) {
-      metadata.roleKey = decision.roleKey;
-    }
-    if (decision.matchedRoleKeys !== undefined) {
-      metadata.matchedRoleKeys = decision.matchedRoleKeys;
-    }
-    if (decision.matchedPermissions !== undefined) {
-      metadata.matchedPermissions = decision.matchedPermissions;
-    }
-    if (decision.details !== undefined) {
-      metadata.details = decision.details;
-    }
-    const resource = auditResource(decision.resource);
-    if (resource !== undefined) {
-      metadata.resource = resource;
-    }
-
-    await this.logAudit({
-      type: 'rbac.permission.allowed',
-      tenantId: decision.tenantId,
-      subjectType: decision.subject?.type,
-      subjectId: decision.subject?.id,
-      metadata,
-    });
-  }
-
-  private async logAudit(event: RbacAuditEvent): Promise<void> {
-    try {
-      await this.options.auditLogger?.log(event);
-    } catch {
-      // Preserve the RBAC HTTP response even when audit logging fails.
-    }
   }
 }

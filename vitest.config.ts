@@ -14,7 +14,7 @@ export default defineConfig({
         branches: 85,
         functions: 90,
         lines: 90,
-        'src/rbac.guard.ts': {
+        'src/{rbac.guard.ts,guard/**/*.ts}': {
           statements: 95,
           branches: 95,
           functions: 95,

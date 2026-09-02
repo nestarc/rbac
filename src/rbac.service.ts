@@ -15,67 +15,30 @@ import type {
   ListBindingsInput,
   ListPermissionsInput,
   ListRolesInput,
-  RbacAuditEvent,
   RbacCanInput,
   RbacEffectivePermission,
   RbacEffectiveRole,
   RbacModuleOptions,
-  RbacMutationResult,
-  RbacPolicyChangeEvent,
-  RbacRequirementMode,
   RbacResourceRef,
   RbacRole,
   RbacRoleBinding,
   RbacServiceDecision,
-  RbacServiceDecisionDetails,
-  RbacServiceDecisionReason,
   RbacSubject,
   RevokePermissionInput,
   RevokeRoleInput,
   UpdateRoleInput,
 } from './interfaces';
-import {
-  assertNonEmptyString,
-  matchesPermission,
-  matchesResource,
-  normalizePermission,
-  normalizePermissions,
-} from './utils';
+import { matchesPermission, matchesResource, normalizePermission } from './utils';
 import {
   canonicalizeIdentifier,
-  canonicalizeResource,
   canonicalizeSubject,
   canonicalizeTenantId,
   isCanonicalIdentifier,
 } from './utils/canonicalization';
-import {
-  assertCanInput,
-  assertFiniteDate,
-  isRbacResourceRef,
-  isRbacSubject,
-} from './utils/runtime-validation';
-
-interface ResolvedTenant {
-  tenantId: string | null;
-  missing: boolean;
-  conflict: boolean;
-}
-
-interface PermissionRequirement {
-  permission?: string | undefined;
-  permissions: string[];
-  mode: RbacRequirementMode;
-  invalid: boolean;
-}
-
-type DecisionOverrides = Partial<RbacServiceDecision> & {
-  allowed: boolean;
-  missingPermissions?: string[] | undefined;
-};
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim() !== '';
-}
+import { RbacServiceDecisionFactory } from './service/rbac-service-decision.factory';
+import { RbacServiceInput } from './service/rbac-service-input';
+import { RbacServiceMutationSupport } from './service/rbac-service-mutation-support';
+import { assertFiniteDate, isRbacSubject } from './utils/runtime-validation';
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
@@ -87,23 +50,30 @@ function auditResource(resource: RbacResourceRef | undefined): RbacResourceRef |
 
 @Injectable()
 export class RbacService {
-  constructor(@Inject(RBAC_OPTIONS) private readonly options: RbacModuleOptions) {}
+  private readonly decisions: RbacServiceDecisionFactory;
+  private readonly inputs: RbacServiceInput;
+  private readonly mutations: RbacServiceMutationSupport;
+
+  constructor(@Inject(RBAC_OPTIONS) private readonly options: RbacModuleOptions) {
+    this.decisions = new RbacServiceDecisionFactory();
+    this.inputs = new RbacServiceInput(options);
+    this.mutations = new RbacServiceMutationSupport(options);
+  }
 
   async can(input: RbacCanInput): Promise<RbacServiceDecision> {
-    this.validateCanInput(input);
-    const canonicalInput = this.canonicalizeCanInput(input);
+    const canonicalInput = this.inputs.canonicalizeCan(input);
     const subject = isRbacSubject(canonicalInput.subject) ? canonicalInput.subject : undefined;
-    const tenant = this.resolveTenant(canonicalInput, subject);
+    const tenant = this.inputs.resolveTenant(canonicalInput, subject);
 
     if (!subject) {
-      return this.decision(canonicalInput, 'denied_subject_missing', {
+      return this.decisions.create(canonicalInput, 'denied_subject_missing', {
         allowed: false,
         tenantId: tenant.tenantId,
       });
     }
 
     if (tenant.conflict) {
-      return this.decision(canonicalInput, 'denied_tenant_conflict', {
+      return this.decisions.create(canonicalInput, 'denied_tenant_conflict', {
         allowed: false,
         subject,
         tenantId: tenant.tenantId,
@@ -111,14 +81,14 @@ export class RbacService {
     }
 
     if (tenant.missing) {
-      return this.decision(canonicalInput, 'denied_tenant_missing', {
+      return this.decisions.create(canonicalInput, 'denied_tenant_missing', {
         allowed: false,
         subject,
         tenantId: tenant.tenantId,
       });
     }
 
-    if (this.isRoleCheck(canonicalInput)) {
+    if (this.inputs.isRoleCheck(canonicalInput)) {
       return this.canRole(canonicalInput, subject, tenant.tenantId);
     }
 
@@ -130,17 +100,11 @@ export class RbacService {
 
     if (decision.allowed) return;
 
-    throw new RbacPermissionDeniedError({ decision: this.sanitizeDecision(decision) });
+    throw new RbacPermissionDeniedError({ decision: this.decisions.sanitize(decision) });
   }
 
   async createRole(input: CreateRoleInput): Promise<RbacRole> {
-    this.validateCreateRoleInput(input);
-    const canonicalInput: CreateRoleInput = {
-      ...input,
-      tenantId: canonicalizeTenantId(input.tenantId),
-      key: canonicalizeIdentifier(input.key, 'role key'),
-      permissions: normalizePermissions(input.permissions),
-    };
+    const canonicalInput = this.inputs.canonicalizeCreateRole(input);
     const result = this.options.storage.mutationResults
       ? await this.options.storage.mutationResults.createRole(canonicalInput)
       : {
@@ -150,18 +114,18 @@ export class RbacService {
     if (result.outcome === 'conflict') {
       throw new RbacConfigError({ operation: 'createRole', reason: result.reason ?? 'conflict' });
     }
-    const role = this.requireMutationValue('createRole', result);
+    const role = this.mutations.requireValue('createRole', result);
     if (result.outcome === 'no-op') return role;
     const created = result.outcome === 'created';
     if (!created && result.outcome !== 'updated') {
       throw new RbacConfigError({ operation: 'createRole', reason: 'invalid_mutation_outcome' });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: created ? 'rbac.role.created' : 'rbac.role.updated',
       tenantId: role.tenantId,
       metadata: { roleId: role.id, roleKey: role.key },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: created ? 'role.created' : 'role.updated',
       tenantId: role.tenantId,
       roleId: role.id,
@@ -173,16 +137,7 @@ export class RbacService {
   }
 
   async updateRole(input: UpdateRoleInput): Promise<RbacRole> {
-    this.validateUpdateRoleInput(input);
-    const canonicalInput: UpdateRoleInput = {
-      ...input,
-      roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
-      ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
-      ...(input.key !== undefined ? { key: canonicalizeIdentifier(input.key, 'role key') } : {}),
-      ...(input.permissions !== undefined
-        ? { permissions: normalizePermissions(input.permissions) }
-        : {}),
-    };
+    const canonicalInput = this.inputs.canonicalizeUpdateRole(input);
     const result = this.options.storage.mutationResults
       ? await this.options.storage.mutationResults.updateRole(canonicalInput)
       : {
@@ -192,17 +147,17 @@ export class RbacService {
     if (result.outcome === 'conflict' && result.reason === 'role_not_found') {
       throw new RbacRoleNotFoundError({ roleId: canonicalInput.roleId });
     }
-    const role = this.requireMutationValue('updateRole', result);
+    const role = this.mutations.requireValue('updateRole', result);
     if (result.outcome === 'no-op') return role;
     if (result.outcome !== 'updated') {
       throw new RbacConfigError({ operation: 'updateRole', reason: 'invalid_mutation_outcome' });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: 'rbac.role.updated',
       tenantId: role.tenantId,
       metadata: { roleId: role.id, roleKey: role.key },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: 'role.updated',
       tenantId: role.tenantId,
       roleId: role.id,
@@ -217,16 +172,16 @@ export class RbacService {
     const roleId = canonicalizeIdentifier(input.roleId, 'roleId');
     const result = this.options.storage.mutationResults
       ? await this.options.storage.mutationResults.deleteRole({ roleId })
-      : await this.legacyMutation(() => this.options.storage.deleteRole({ roleId }), 'deleted');
+      : await this.mutations.legacy(() => this.options.storage.deleteRole({ roleId }), 'deleted');
     if (result.outcome === 'no-op' || result.outcome === 'conflict') return;
     if (result.outcome !== 'deleted') {
       throw new RbacConfigError({ operation: 'deleteRole', reason: 'invalid_mutation_outcome' });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: 'rbac.role.deleted',
       metadata: { roleId },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: 'role.deleted',
       roleId,
     });
@@ -237,7 +192,7 @@ export class RbacService {
     const permission = normalizePermission(input.permission);
     const result = this.options.storage.mutationResults
       ? await this.options.storage.mutationResults.grantPermission({ roleId, permission })
-      : await this.legacyMutation(
+      : await this.mutations.legacy(
           () => this.options.storage.grantPermission({ roleId, permission }),
           'created',
         );
@@ -248,11 +203,11 @@ export class RbacService {
         reason: 'invalid_mutation_outcome',
       });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: 'rbac.permission.granted',
       metadata: { roleId, permission },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: 'permission.granted',
       roleId,
       permissions: [permission],
@@ -264,7 +219,7 @@ export class RbacService {
     const permission = normalizePermission(input.permission);
     const result = this.options.storage.mutationResults
       ? await this.options.storage.mutationResults.revokePermission({ roleId, permission })
-      : await this.legacyMutation(
+      : await this.mutations.legacy(
           () => this.options.storage.revokePermission({ roleId, permission }),
           'deleted',
         );
@@ -275,11 +230,11 @@ export class RbacService {
         reason: 'invalid_mutation_outcome',
       });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: 'rbac.permission.revoked',
       metadata: { roleId, permission },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: 'permission.revoked',
       roleId,
       permissions: [permission],
@@ -287,10 +242,9 @@ export class RbacService {
   }
 
   async assignRole(input: AssignRoleInput): Promise<RbacRoleBinding> {
-    this.validateAssignRoleInput(input);
-    const canonicalInput = this.canonicalizeAssignRoleInput(input);
+    const canonicalInput = this.inputs.canonicalizeAssignRole(input);
     const { roleId, roleKey, role } = await this.resolveAssignRoleIdentifier(canonicalInput);
-    this.validateAssignRoleBoundary(canonicalInput, role);
+    this.inputs.validateAssignRoleBoundary(canonicalInput, role);
     const storageInput: AssignRoleStorageInput = {
       tenantId: canonicalInput.tenantId,
       subject: canonicalInput.subject,
@@ -308,12 +262,12 @@ export class RbacService {
     if (result.outcome === 'conflict' && result.reason === 'role_not_found') {
       throw new RbacRoleNotFoundError({ roleId });
     }
-    const binding = this.requireMutationValue('assignRole', result);
+    const binding = this.mutations.requireValue('assignRole', result);
     if (result.outcome === 'no-op') return binding;
     if (result.outcome !== 'created' && result.outcome !== 'updated') {
       throw new RbacConfigError({ operation: 'assignRole', reason: 'invalid_mutation_outcome' });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: 'rbac.role.assigned',
       tenantId: binding.tenantId,
       subjectType: binding.subjectType,
@@ -327,7 +281,7 @@ export class RbacService {
           : {}),
       },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: 'role.assigned',
       tenantId: binding.tenantId,
       subject: { type: binding.subjectType, id: binding.subjectId },
@@ -350,16 +304,16 @@ export class RbacService {
     const storageInput = { ...input, bindingId };
     const result = this.options.storage.mutationResults
       ? await this.options.storage.mutationResults.revokeRole(storageInput)
-      : await this.legacyMutation(() => this.options.storage.revokeRole(storageInput), 'updated');
+      : await this.mutations.legacy(() => this.options.storage.revokeRole(storageInput), 'updated');
     if (result.outcome === 'no-op' || result.outcome === 'conflict') return;
     if (result.outcome !== 'updated' && result.outcome !== 'deleted') {
       throw new RbacConfigError({ operation: 'revokeRole', reason: 'invalid_mutation_outcome' });
     }
-    await this.logAudit({
+    await this.mutations.audit({
       type: 'rbac.role.revoked',
       metadata: { bindingId },
     });
-    await this.publishChange({
+    await this.mutations.publish({
       type: 'role.revoked',
       bindingId,
     });
@@ -393,7 +347,7 @@ export class RbacService {
   ): Promise<RbacServiceDecision> {
     const roleKey = input.roleKey.trim();
     if (roleKey === '') {
-      return this.decision(input, 'denied_no_matching_role', {
+      return this.decisions.create(input, 'denied_no_matching_role', {
         allowed: false,
         subject,
         tenantId,
@@ -401,14 +355,14 @@ export class RbacService {
       });
     }
 
-    const now = this.resolveNow(input);
+    const now = this.inputs.resolveNow(input);
     try {
       const roles = await this.listEffectiveRolesForTenant(input, subject, tenantId, now);
       const matchedRoleKeys = unique(
         roles.filter((role) => role.roleKey === roleKey).map((role) => role.roleKey),
       );
 
-      return this.decision(
+      return this.decisions.create(
         input,
         matchedRoleKeys.length > 0 ? 'allowed_by_role' : 'denied_no_matching_role',
         {
@@ -429,10 +383,10 @@ export class RbacService {
     subject: RbacSubject,
     tenantId: string | null,
   ): Promise<RbacServiceDecision> {
-    const requirement = this.resolvePermissionRequirement(input);
+    const requirement = this.inputs.permissionRequirement(input);
 
     if (requirement.invalid || requirement.permissions.length === 0) {
-      return this.decision(input, 'denied_no_matching_permission', {
+      return this.decisions.create(input, 'denied_no_matching_permission', {
         allowed: false,
         subject,
         tenantId,
@@ -444,7 +398,7 @@ export class RbacService {
       });
     }
 
-    const now = this.resolveNow(input);
+    const now = this.inputs.resolveNow(input);
     try {
       const effectivePermissions = await this.listEffectivePermissionsForTenant(
         input,
@@ -461,7 +415,7 @@ export class RbacService {
         (required) => !matches.byRequired.has(required),
       );
 
-      return this.decision(
+      return this.decisions.create(
         input,
         allowed ? 'allowed_by_role_permission' : 'denied_no_matching_permission',
         {
@@ -512,217 +466,6 @@ export class RbacService {
     };
   }
 
-  private resolveTenant(input: RbacCanInput, subject: RbacSubject | undefined): ResolvedTenant {
-    const mode =
-      input.tenantMode ?? (this.options.tenant?.requiredByDefault ? 'required' : 'optional');
-
-    const explicitTenantId = this.normalizeTenantForComparison(input.tenantId);
-    const subjectTenantId = this.normalizeTenantForComparison(subject?.tenantId);
-    const conflict =
-      explicitTenantId !== undefined &&
-      explicitTenantId !== null &&
-      subjectTenantId !== undefined &&
-      explicitTenantId !== subjectTenantId;
-
-    if (mode === 'none') {
-      return { tenantId: null, missing: false, conflict };
-    }
-    if (input.tenantId === null) {
-      return { tenantId: null, missing: mode === 'required', conflict: false };
-    }
-
-    const rawTenantId = input.tenantId !== undefined ? input.tenantId : subject?.tenantId;
-    const tenantId = isNonEmptyString(rawTenantId) ? rawTenantId.trim() : null;
-
-    return {
-      tenantId,
-      missing: mode === 'required' && tenantId === null,
-      conflict,
-    };
-  }
-
-  private normalizeTenantForComparison(
-    tenantId: string | null | undefined,
-  ): string | null | undefined {
-    if (tenantId === null) return null;
-    if (isNonEmptyString(tenantId)) return tenantId.trim();
-
-    return undefined;
-  }
-
-  private resolvePermissionRequirement(input: RbacCanInput): PermissionRequirement {
-    const permission = 'permission' in input ? input.permission : undefined;
-    const rawPermissions = this.rawPermissions(input);
-    const mode = input.mode ?? (rawPermissions.length > 1 ? 'all' : 'any');
-
-    try {
-      return {
-        permission: permission ? normalizePermission(permission) : undefined,
-        permissions: normalizePermissions(rawPermissions),
-        mode,
-        invalid: false,
-      };
-    } catch {
-      return {
-        permission: typeof permission === 'string' ? permission : undefined,
-        permissions: rawPermissions.filter(
-          (candidate): candidate is string => typeof candidate === 'string',
-        ),
-        mode,
-        invalid: true,
-      };
-    }
-  }
-
-  private rawPermissions(input: RbacCanInput): string[] {
-    const permissions: string[] = [];
-    if ('permission' in input && typeof input.permission === 'string') {
-      permissions.push(input.permission);
-    }
-    if ('permissions' in input && Array.isArray(input.permissions)) {
-      permissions.push(
-        ...input.permissions.filter(
-          (permission): permission is string => typeof permission === 'string',
-        ),
-      );
-    }
-
-    return permissions;
-  }
-
-  private validateCanInput(input: RbacCanInput): void {
-    assertCanInput(input);
-  }
-
-  private canonicalizeCanInput(input: RbacCanInput): RbacCanInput {
-    const base = {
-      ...input,
-      ...(input.subject !== undefined ? { subject: canonicalizeSubject(input.subject) } : {}),
-      ...(input.tenantId !== undefined ? { tenantId: canonicalizeTenantId(input.tenantId) } : {}),
-      ...(input.resource !== undefined ? { resource: canonicalizeResource(input.resource) } : {}),
-    };
-
-    if ('roleKey' in input && input.roleKey !== undefined) {
-      return {
-        ...base,
-        roleKey: canonicalizeIdentifier(input.roleKey, 'roleKey'),
-      } as RbacCanInput;
-    }
-
-    return {
-      ...base,
-      ...('permission' in input && input.permission !== undefined
-        ? { permission: normalizePermission(input.permission) }
-        : {}),
-      ...('permissions' in input && input.permissions !== undefined
-        ? { permissions: normalizePermissions(input.permissions) }
-        : {}),
-    } as RbacCanInput;
-  }
-
-  private canonicalizeAssignRoleInput(input: AssignRoleInput): AssignRoleInput {
-    const base = {
-      tenantId: canonicalizeTenantId(input.tenantId),
-      subject: canonicalizeSubject(input.subject),
-      ...(input.resource !== undefined ? { resource: canonicalizeResource(input.resource) } : {}),
-      ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
-      ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-    };
-
-    if ('roleId' in input && input.roleId !== undefined) {
-      return {
-        ...base,
-        roleId: canonicalizeIdentifier(input.roleId, 'roleId'),
-      };
-    }
-
-    return {
-      ...base,
-      roleKey: canonicalizeIdentifier(input.roleKey, 'roleKey'),
-    };
-  }
-
-  private sanitizeDecision(decision: RbacServiceDecision): RbacServiceDecision {
-    return {
-      ...decision,
-      subject: decision.subject ? this.sanitizeSubject(decision.subject) : undefined,
-    };
-  }
-
-  private sanitizeSubject(subject: RbacSubject): RbacSubject {
-    return {
-      type: subject.type,
-      id: subject.id,
-      ...(subject.tenantId !== undefined ? { tenantId: subject.tenantId } : {}),
-    };
-  }
-
-  private validateCreateRoleInput(input: CreateRoleInput): void {
-    this.validateOptionalTenantId(input.tenantId);
-    assertNonEmptyString(input.key, 'role key');
-    normalizePermissions(input.permissions);
-  }
-
-  private validateUpdateRoleInput(input: UpdateRoleInput): void {
-    assertNonEmptyString(input.roleId, 'roleId');
-    this.validateOptionalTenantId(input.tenantId);
-    if (input.key !== undefined) {
-      assertNonEmptyString(input.key, 'role key');
-    }
-    if (input.permissions !== undefined) {
-      normalizePermissions(input.permissions);
-    }
-  }
-
-  private validateAssignRoleInput(input: AssignRoleInput): void {
-    this.validateOptionalTenantId(input.tenantId);
-    this.validateSubjectForWrite(input.subject);
-    this.validateAssignRoleSubjectTenant(input);
-    const hasRoleId = 'roleId' in input && input.roleId !== undefined;
-    const hasRoleKey = 'roleKey' in input && input.roleKey !== undefined;
-    if (hasRoleId === hasRoleKey) {
-      throw new RbacConfigError({
-        reason: 'assignRole() accepts exactly one role identifier per call',
-      });
-    }
-    if (hasRoleId) {
-      assertNonEmptyString(input.roleId, 'roleId');
-    }
-    if (hasRoleKey) {
-      assertNonEmptyString(input.roleKey, 'roleKey');
-    }
-    if (input.resource !== undefined && !isRbacResourceRef(input.resource)) {
-      throw new RbacConfigError({
-        operation: 'assignRole',
-        field: 'resource',
-        reason: 'invalid_runtime_shape',
-      });
-    }
-    if (input.expiresAt !== undefined && input.expiresAt !== null) {
-      assertFiniteDate(input.expiresAt, 'assignRole', 'expiresAt');
-    }
-  }
-
-  private validateAssignRoleSubjectTenant(input: AssignRoleInput): void {
-    if (
-      this.options.writeValidation?.rejectTenantMismatch !== true ||
-      input.subject.tenantId === undefined
-    ) {
-      return;
-    }
-
-    const subjectTenantId = input.subject.tenantId?.trim() ?? null;
-    const bindingTenantId = input.tenantId?.trim() ?? null;
-    if (subjectTenantId === bindingTenantId) return;
-
-    throw new RbacConfigError({
-      operation: 'assignRole',
-      reason: 'subject_tenant_mismatch',
-      subjectTenantId,
-      bindingTenantId,
-    });
-  }
-
   private async resolveAssignRoleIdentifier(
     input: AssignRoleInput,
   ): Promise<{ roleId: string; roleKey?: string | undefined; role?: RbacRole | undefined }> {
@@ -768,80 +511,6 @@ export class RbacService {
     return roles.find((role) => role.id === roleId);
   }
 
-  private validateAssignRoleBoundary(input: AssignRoleInput, role: RbacRole | undefined): void {
-    const validation = this.options.writeValidation;
-
-    if (
-      validation?.rejectResourceWithoutTenant === true &&
-      input.resource !== undefined &&
-      input.tenantId == null
-    ) {
-      throw new RbacConfigError({
-        operation: 'assignRole',
-        reason: 'resource_binding_requires_tenant',
-      });
-    }
-
-    if (role === undefined) return;
-
-    const roleTenantId = role.tenantId ?? null;
-    const bindingTenantId = input.tenantId ?? null;
-
-    if (
-      validation?.rejectTenantMismatch === true &&
-      roleTenantId !== null &&
-      roleTenantId !== bindingTenantId
-    ) {
-      throw new RbacConfigError({
-        operation: 'assignRole',
-        reason: 'role_tenant_mismatch',
-        roleId: role.id,
-        roleTenantId,
-        bindingTenantId,
-      });
-    }
-
-    if (
-      validation?.rejectGlobalRoleInTenantBinding === true &&
-      roleTenantId === null &&
-      bindingTenantId !== null
-    ) {
-      throw new RbacConfigError({
-        operation: 'assignRole',
-        reason: 'global_role_tenant_binding_rejected',
-        roleId: role.id,
-        bindingTenantId,
-      });
-    }
-  }
-
-  private validateSubjectForWrite(subject: RbacSubject): void {
-    if (!isRbacSubject(subject)) {
-      throw new RbacConfigError({
-        operation: 'assignRole',
-        field: 'subject',
-        reason: 'invalid_runtime_shape',
-      });
-    }
-  }
-
-  private validateOptionalTenantId(tenantId: string | null | undefined, name = 'tenantId'): void {
-    if (tenantId !== null && tenantId !== undefined) {
-      assertNonEmptyString(tenantId, name);
-    }
-  }
-
-  private isRoleCheck(input: RbacCanInput): input is RbacCanInput & { roleKey: string } {
-    return 'roleKey' in input && typeof input.roleKey === 'string';
-  }
-
-  private resolveNow(input: RbacCanInput): Date {
-    const now = input.now ?? this.options.now?.() ?? new Date();
-    assertFiniteDate(now, 'can', 'now');
-
-    return now;
-  }
-
   private handleStorageError(
     input: RbacCanInput,
     error: unknown,
@@ -852,131 +521,11 @@ export class RbacService {
       throw new RbacStorageError({ operation: 'can' }, { cause: error });
     }
 
-    return this.decision(input, 'denied_storage_error', {
+    return this.decisions.create(input, 'denied_storage_error', {
       allowed: false,
       subject,
       tenantId,
     });
-  }
-
-  private decision(
-    input: RbacCanInput,
-    reason: RbacServiceDecisionReason,
-    overrides: DecisionOverrides,
-  ): RbacServiceDecision {
-    const decision = {
-      allowed: overrides.allowed,
-      reason,
-      subject: overrides.subject ?? input.subject,
-      tenantId: overrides.tenantId,
-      permission: overrides.permission ?? ('permission' in input ? input.permission : undefined),
-      permissions: overrides.permissions ?? this.rawPermissions(input),
-      roleKey: overrides.roleKey ?? ('roleKey' in input ? input.roleKey : undefined),
-      mode: overrides.mode ?? ('mode' in input ? input.mode : undefined),
-      matchedRoleKeys: overrides.matchedRoleKeys,
-      matchedPermissions: overrides.matchedPermissions,
-      resource: input.resource,
-    };
-
-    return {
-      ...decision,
-      details: overrides.details ?? this.buildDecisionDetails(decision, overrides),
-    };
-  }
-
-  private buildDecisionDetails(
-    decision: Omit<RbacServiceDecision, 'details'>,
-    overrides: DecisionOverrides,
-  ): RbacServiceDecisionDetails {
-    const requirement = this.buildRequirementDetails(decision);
-    const matched = this.buildMatchedDetails(decision);
-    const missing = this.buildMissingDetails(decision, overrides);
-
-    return {
-      ...(requirement !== undefined ? { requirement } : {}),
-      ...(matched !== undefined ? { matched } : {}),
-      ...(missing !== undefined ? { missing } : {}),
-      evaluationPath: [this.evaluationStep(decision.reason)],
-      safeMessage: decision.reason,
-    };
-  }
-
-  private buildRequirementDetails(
-    decision: Omit<RbacServiceDecision, 'details'>,
-  ): NonNullable<RbacServiceDecisionDetails['requirement']> | undefined {
-    if (decision.roleKey !== undefined) {
-      return { type: 'role', roleKeys: [decision.roleKey] };
-    }
-
-    if (decision.permissions !== undefined) {
-      return {
-        type: 'permission',
-        permissions: decision.permissions,
-        mode: decision.mode ?? (decision.permissions.length > 1 ? 'all' : 'any'),
-      };
-    }
-
-    return undefined;
-  }
-
-  private buildMatchedDetails(
-    decision: Omit<RbacServiceDecision, 'details'>,
-  ): NonNullable<RbacServiceDecisionDetails['matched']> | undefined {
-    if (decision.matchedRoleKeys === undefined && decision.matchedPermissions === undefined) {
-      return undefined;
-    }
-
-    return {
-      roleKeys: decision.matchedRoleKeys ?? [],
-      ...(decision.matchedPermissions !== undefined
-        ? { permissions: decision.matchedPermissions }
-        : {}),
-    };
-  }
-
-  private buildMissingDetails(
-    decision: Omit<RbacServiceDecision, 'details'>,
-    overrides: DecisionOverrides,
-  ): NonNullable<RbacServiceDecisionDetails['missing']> | undefined {
-    switch (decision.reason) {
-      case 'denied_subject_missing':
-        return { subject: true };
-      case 'denied_tenant_missing':
-        return { tenant: true };
-      case 'denied_tenant_conflict':
-        return undefined;
-      case 'denied_no_matching_role':
-        return decision.roleKey !== undefined ? { roleKeys: [decision.roleKey] } : undefined;
-      case 'denied_no_matching_permission':
-        return {
-          permissions: overrides.missingPermissions ?? decision.permissions ?? [],
-        };
-      default:
-        return undefined;
-    }
-  }
-
-  private evaluationStep(
-    reason: RbacServiceDecisionReason,
-  ): RbacServiceDecisionDetails['evaluationPath'][number] {
-    switch (reason) {
-      case 'allowed_by_role':
-        return { code: 'role_matched', outcome: 'allow' };
-      case 'allowed_by_role_permission':
-        return { code: 'permission_matched', outcome: 'allow' };
-      case 'denied_subject_missing':
-        return { code: 'subject_missing', outcome: 'deny' };
-      case 'denied_tenant_missing':
-        return { code: 'tenant_missing', outcome: 'deny' };
-      case 'denied_tenant_conflict':
-        return { code: 'tenant_conflict', outcome: 'deny' };
-      case 'denied_no_matching_role':
-        return { code: 'role_missing', outcome: 'deny' };
-      case 'denied_no_matching_permission':
-        return { code: 'permission_missing', outcome: 'deny' };
-      case 'denied_storage_error':
-        return { code: 'storage_error', outcome: 'deny' };
-    }
   }
 
   private async listEffectiveRolesForTenant(
@@ -1115,43 +664,5 @@ export class RbacService {
     }
 
     return matchesResource({ resourceType, resourceId }, resource);
-  }
-
-  private async logAudit(event: RbacAuditEvent): Promise<void> {
-    try {
-      await this.options.auditLogger?.log(event);
-    } catch {
-      // Audit logging must not change RBAC write or authorization behavior.
-    }
-  }
-
-  private requireMutationValue<T>(operation: string, result: RbacMutationResult<T>): T {
-    if (result.value !== undefined) return result.value;
-
-    throw new RbacConfigError({
-      operation,
-      reason: result.reason ?? 'mutation_result_missing_value',
-      outcome: result.outcome,
-    });
-  }
-
-  private async legacyMutation(
-    mutation: () => Promise<void>,
-    outcome: 'created' | 'updated' | 'deleted',
-  ): Promise<RbacMutationResult> {
-    await mutation();
-
-    return { outcome };
-  }
-
-  private async publishChange(event: Omit<RbacPolicyChangeEvent, 'occurredAt'>): Promise<void> {
-    try {
-      await this.options.changePublisher?.publish({
-        occurredAt: this.options.now?.() ?? new Date(),
-        ...event,
-      });
-    } catch {
-      // Change hooks are for cache/outbox integration and must not alter write results.
-    }
   }
 }

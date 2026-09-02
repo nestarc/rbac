@@ -177,9 +177,9 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 18 | `RBAC-M18` | P2 | `DONE` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
 | 19A | `RBAC-M19A` | P2 | `DONE` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
 | 19B | `RBAC-M19B` | P2 | `DONE` | S | 없음 | Actions pinning과 dependency bot |
-| 20A | `RBAC-M20A` | P3 | `READY` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
-| 20B | `RBAC-M20B` | P3 | `BLOCKED` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
-| 20C | `RBAC-M20C` | P3 | `BLOCKED` | M | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` | Prisma adapter behavior-preserving 분해 |
+| 20A | `RBAC-M20A` | P3 | `DONE` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
+| 20B | `RBAC-M20B` | P3 | `DONE` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
+| 20C | `RBAC-M20C` | P3 | `DONE` | M | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` | Prisma adapter behavior-preserving 분해 |
 | 21 | `RBAC-M21` | P3 | `BLOCKED` | S | `RBAC-M11`, `RBAC-M19A`, `RBAC-M19B`, `RBAC-M22` | reusable workflow/timeout/중복 build 정리 |
 | 22 | `RBAC-M22` | P3 | `READY` | S | `RBAC-M11` | tarball allowlist·size·subpath·provenance contract |
 | 23A | `RBAC-M23A` | P3 | `DECISION` | S | 없음 | Nest 12 stable 호환성 스파이크 |
@@ -591,16 +591,16 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M20A/B/C` — behavior-preserving 분해
 
-- `RBAC-M20A` (`RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` 뒤): 376줄 Guard에서 source resolution, requirement evaluation, audit formatting을 분리한다.
-- `RBAC-M20B` (`RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` 뒤): 838줄 service에서 validation, decision construction, mutation events를 분리한다.
-- `RBAC-M20C` (`RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` 뒤): 608줄 Prisma adapter에서 mapping, query, transaction/error translation을 분리한다.
+- `RBAC-M20A` (`P3 / DONE`): Guard facade를 453줄에서 66줄로 줄이고 HTTP subject/tenant/resource source resolution, requirement evaluation, audit formatting을 `src/guard/**` 내부 seam으로 분리했다.
+- `RBAC-M20B` (`P3 / DONE`): service를 1,157줄에서 668줄로 줄이고 validation/canonicalization, decision/detail construction, mutation audit/change support를 `src/service/**` 내부 seam으로 분리했다.
+- `RBAC-M20C` (`P3 / DONE`): Prisma adapter를 787줄에서 529줄로 줄이고 row/metadata mapping, query construction, mutation/error helpers를 `src/adapters/prisma-rbac-*` 내부 seam으로 분리했다.
 
 공통 완료 조건:
 
-- [ ] 한 subtask당 한 PR이다.
-- [ ] P0/P1 contract와 public golden output을 먼저 고정한다.
-- [ ] move와 behavior change를 같은 commit에 섞지 않는다.
-- [ ] coverage/성능/real DB 결과가 악화되지 않는다.
+- [x] 기본 실행 단위는 한 subtask당 한 PR이지만, 2026-09-02 사용자의 A/B/C 일괄 실행 요청에 따라 한 working tree에서 A→B→C를 직렬 검증했다. PR/release는 만들지 않았다.
+- [x] P0/P1 contract와 public golden output 326 tests를 먼저 확인하고 각 seam 추출 뒤 동일 결과를 재검증했다.
+- [x] runtime/public behavior change 없이 내부 move와 coverage target의 Guard subsystem 경로 갱신만 수행했다.
+- [x] fresh coverage는 94.40%/87.47%/97.13%/95.55%로 직전 94.04%/87.23%/96.71%/95.16%보다 모두 높고, indexed role lookup과 PostgreSQL 16 real-DB 36/36도 통과했다.
 
 ### `RBAC-M21` — workflow hygiene
 
@@ -803,15 +803,18 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M18`: 최신 published minor `0.2.x` 지원, GitHub private reporting와 `security@nestarc.dev` fallback, subject/tenant/header/API-key/storage trust boundary, 최소 `main` protection.
 - [x] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [x] `RBAC-M19B`: Actions/dependency automation policy.
+- [x] `RBAC-M20A`: Guard source resolution, requirement evaluation, audit formatting 내부 seam과 HTTP/public golden 보존.
+- [x] `RBAC-M20B`: service validation/canonicalization, decision construction, mutation event support 내부 seam과 service contract 보존.
+- [x] `RBAC-M20C`: Prisma mapping/query/mutation-error 내부 seam과 indexed lookup/real PostgreSQL contract 보존.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
 
 향후 gate를 현재 P0 patch의 선행 조건으로 소급 적용하지 않는다.
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M19A/B working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M19B`를 반복하지 않고 실행 가능한 다음 항목 `RBAC-M20A`를 선택한다.
-3. exact dependency 완료와 Guard public golden test를 확인한 뒤 source-resolution helper 하나만 move-only로 추출한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M20A/B/C working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M20C`를 반복하지 않고 실행 가능한 다음 항목 `RBAC-M22`를 선택한다.
+3. 한 번 생성한 tarball의 allowlist/size와 모든 public subpath CJS/ESM/types를 고정한 뒤 release가 검증한 같은 파일을 publish하도록 연결한다.
 4. M19 risk register의 review date는 exclusive deadline이다. Dependabot parent-tool/Prisma PR에서는 audit path와 M12 override 제거 가능성을 함께 재검토한다.
 5. `RBAC-M21`은 M19A/B가 끝났지만 `RBAC-M22` pack-once/package contract 전까지 계속 blocked다.
 
@@ -845,6 +848,9 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M18` | `DONE` | `main@e11468b` | uncommitted working tree + GitHub settings | `SECURITY.md`, private reporting enabled, `main` force-push/deletion protection, supported line/reporting/trust boundary 문서 검증 PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 |
 | 2026-09-02 | `RBAC-M19A` | `DONE` | `main@e9f6a9d` | uncommitted working tree | PR/release production audit 0, exact full-audit risk register, owner/review-date 만료 gate, M12 override 추적; audit policy/unit/A/D PASS | `RBAC-M19B` Actions/dependency automation 시작 |
 | 2026-09-02 | `RBAC-M19B` | `DONE` | `main@e9f6a9d` | uncommitted working tree | checkout/setup-node v6 full SHA pin, least-privilege OIDC, Dependabot Nest/Prisma/lint-test/Actions groups; workflow/YAML/A/B/D PASS | `RBAC-M20A` Guard behavior-preserving 분해 시작 |
+| 2026-09-02 | `RBAC-M20A` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | Guard 453→66줄, source/evaluation/audit 내부 seam; Guard golden 91/91, 전체 326/326 PASS | `RBAC-M20B` service behavior-preserving 분해 |
+| 2026-09-02 | `RBAC-M20B` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | service 1,157→668줄, input/decision/mutation-support 내부 seam; focused 125/125와 전체 326/326 PASS | `RBAC-M20C` Prisma adapter behavior-preserving 분해 |
+| 2026-09-02 | `RBAC-M20C` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | Prisma adapter 787→529줄, mapper/query/mutation-error 내부 seam; PG16 36/36, final 329/329, coverage/build/packed consumer PASS | `RBAC-M22` package contract 시작 (`RBAC-M21`은 계속 blocked) |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1166,4 +1172,46 @@ Commands and exact results: GitHub API에서 checkout/setup-node refs/tags/v6가
 Unverified paths and reason: Dependabot이 실제 update PR을 만드는 동작과 GitHub-hosted CI/release run은 default branch에 commit되지 않아 실행할 수 없다. workflow graph의 기존 Node/Nest/Prisma 검증 의미는 바꾸지 않았고 로컬 정적/단위/YAML/package gate로 구성 유효성을 확인했다.
 External PR/release evidence: 없음. GitHub API는 upstream Action tag-to-SHA 조회에만 사용했고 저장소 설정, PR, release, publish는 변경하지 않았다.
 Next exact action: RBAC-M20A에서 exact dependency 완료와 Guard public golden test를 확인한 뒤 source-resolution helper 하나를 move-only로 추출한다. RBAC-M21은 RBAC-M22 완료 전까지 BLOCKED다.
+```
+
+### 2026-09-02 RBAC-M20A 인계
+
+```text
+Task: RBAC-M20A
+State: DONE
+Start ref / end ref: main@f2013b7 / main@f2013b7 + uncommitted combined RBAC-M20A/B/C working tree
+Changed files: docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/rbac.guard.ts, src/guard/rbac-guard-audit.ts, src/guard/rbac-guard-context.resolver.ts, src/guard/rbac-guard-requirement.evaluator.ts, vitest.config.ts
+Contract decision: RbacGuard의 public class/DI constructor/canActivate 계약과 HTTP-only 경계는 유지한다. facade는 metadata/skip orchestration과 request subject 저장만 소유하고, subject·authoritative tenant·resource source resolution, requirement-to-can input/evaluation, request-final audit formatting을 package-private src/guard seam으로 이동했다. public exports, HTTP error code, tenant conflict category, stacked requirement ordering/index, allowed/denied audit payload는 바꾸지 않았다. 기존 단일-file coverage target은 이동한 전체 Guard subsystem을 같은 95% 기준으로 추적하도록 glob을 갱신했다.
+Commands and exact results: git fetch --prune --tags PASS; baseline HEAD f2013b7, origin/main/v0.2.1 69bf0e1 확인; baseline npm run typecheck PASS; baseline npm test PASS (16 files, 326 tests); focused Guard/default resolver golden PASS (2 files, 91 tests); M20A 직후 npm test PASS (16 files, 326 tests); final combined npm test PASS (17 files, 329 tests); final fresh npm run test:coverage PASS (16 files, 319 tests; statements 94.40%, branches 87.47%, functions 97.13%, lines 95.55%; Guard subsystem aggregate가 configured 95% thresholds PASS); npm run lint PASS; npm run typecheck PASS; npm run build PASS; npm run test:consumer:modern PASS with exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2 and 7 shipped example sources; git diff --check PASS. sandbox npm test는 HTTP listen EPERM, 최초 packed consumer는 ~/.npm cache EPERM으로 실패했고 허용된 동일 명령 재실행은 통과했다.
+Unverified paths and reason: Nest 10/Node 22 packed lanes는 public surface와 runtime behavior를 바꾸지 않은 move-only refactor이고 exact modern packed consumer와 기존 public golden을 통과했으므로 로컬 재실행하지 않았다. 실제 PR/CI run은 만들지 않았다.
+External PR/release evidence: 없음. public export, package metadata, release/npm은 변경하지 않았고 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M20B에서 service public contract를 유지한 채 validation/decision seam을 move-only로 추출한다.
+```
+
+### 2026-09-02 RBAC-M20B 인계
+
+```text
+Task: RBAC-M20B
+State: DONE
+Start ref / end ref: main@f2013b7 + RBAC-M20A working tree / main@f2013b7 + uncommitted combined RBAC-M20A/B/C working tree
+Changed files: docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/rbac.service.ts, src/service/rbac-service-decision.factory.ts, src/service/rbac-service-input.ts, src/service/rbac-service-mutation-support.ts, test/unit/rbac-service-seams.spec.ts
+Contract decision: RbacService public methods, injected RbacModuleOptions, decision/error shape와 storage protocol은 유지한다. runtime validation·canonicalization·tenant/permission resolution과 strict assignment boundary는 RbacServiceInput, decision/detail/sanitization은 RbacServiceDecisionFactory, mutation value/legacy fallback/best-effort audit/change delivery는 RbacServiceMutationSupport로 이동했다. service facade는 authorization/storage orchestration과 mutation별 public event payload를 계속 소유한다. 내부 seam은 package root나 subpath에서 export하지 않는다.
+Commands and exact results: M20B 전 public 전체 golden PASS (16 files, 326 tests); focused service/decision/audit/InMemory contract PASS (4 files, 125 tests); M20B 직후 npm test PASS (16 files, 326 tests); 새 seam boundary regression PASS (1 file, 3 tests); final combined npm test PASS (17 files, 329 tests); fresh coverage PASS (16 files, 319 tests; 94.40%/87.47%/97.13%/95.55%, 직전 baseline 94.04%/87.23%/96.71%/95.16%보다 전 항목 상승); lint/typecheck/build/modern packed consumer/git diff --check PASS.
+Unverified paths and reason: M20B 자체는 storage adapter/schema/query를 바꾸지 않아 Prisma 5/6 lanes를 재실행하지 않았다. Prisma 7 real-DB는 이어진 M20C 최종 상태에서 실행했다. 실제 PR/CI run은 만들지 않았다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M20C에서 Prisma adapter public/real-DB contract를 유지한 채 mapper/query seam을 move-only로 추출한다.
+```
+
+### 2026-09-02 RBAC-M20C 인계
+
+```text
+Task: RBAC-M20C
+State: DONE
+Start ref / end ref: main@f2013b7 + RBAC-M20A/B working tree / main@f2013b7 + uncommitted combined RBAC-M20A/B/C working tree
+Changed files: docs/2026-08-30-p0-p3-maintenance-work-plan.md, src/adapters/prisma-rbac.storage.ts, src/adapters/prisma-rbac.mapper.ts, src/adapters/prisma-rbac.query.ts, src/adapters/prisma-rbac-mutation.ts
+Contract decision: PrismaRbacStorage와 PrismaRbacClientLike public export, delegate calls, query predicates, transaction/retry behavior, metadata encoding, Date/expiry equality, mutation outcomes와 generated IDs를 유지한다. row/metadata encode-decode와 public record mapping은 prisma-rbac.mapper, canonical input/role/effective-binding query construction은 prisma-rbac.query, ID/active-date/unique-error/mutation-count translation은 prisma-rbac-mutation으로 이동했다. helper는 public prisma subpath에서 export하지 않는다.
+Commands and exact results: npm run prisma:generate PASS with Prisma 7.10.0; initial sandbox migration은 localhost P1001로 실패했고 허용된 동일 npm run prisma:migrate:test PASS; disposable PostgreSQL 16 real-DB RBAC_PRISMA_CLIENT=modern npm run test:prisma PASS (2 files, 36 tests, skip 0), indexed role lookup fixture 포함; 임시 --rm container 제거; final npm run lint PASS; npm run typecheck PASS; npm test PASS (17 files, 329 tests); fresh npm run test:coverage PASS (16 files, 319 tests; statements 94.40%, branches 87.47%, functions 97.13%, lines 95.55%); npm run build PASS; npm run test:consumer:modern PASS with exact modern dependency tuple and package integrity; git diff --check PASS.
+Unverified paths and reason: Prisma 5.22.0/6.19.3 real-DB lanes와 Node 22/Nest 10 packed lanes는 로컬에서 재실행하지 않았다. public Prisma types/delegate surface/schema/migration은 바뀌지 않았고 Prisma 7 real DB, indexed query, build와 modern packed artifact로 move-only 최종 상태를 확인했다. 실제 PR/CI run은 만들지 않았다.
+External PR/release evidence: 없음. 검증용 PostgreSQL 16 컨테이너는 persistent volume 없이 제거했고, 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M22에서 pack-once allowlist/size/all-subpath CJS/ESM/types와 publish-same-tarball/provenance contract를 구현한다. RBAC-M21은 RBAC-M22 완료 전까지 BLOCKED다.
 ```
