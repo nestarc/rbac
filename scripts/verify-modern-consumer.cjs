@@ -297,6 +297,40 @@ try {
     'TypeScript declaration smoke',
   );
 
+  const installedExamplesDirectory = path.join(
+    consumerDirectory,
+    'node_modules',
+    '@nestarc',
+    'rbac',
+    'examples',
+  );
+  const consumerExamplesDirectory = path.join(consumerDirectory, 'examples');
+  fs.cpSync(installedExamplesDirectory, consumerExamplesDirectory, { recursive: true });
+  const shippedExampleSources = listFiles(consumerExamplesDirectory).filter((filePath) =>
+    filePath.endsWith('.ts'),
+  );
+  if (shippedExampleSources.length === 0) {
+    throw new Error('Packed RBAC package did not contain any TypeScript example sources');
+  }
+  writeJson(path.join(consumerDirectory, 'tsconfig.examples.json'), {
+    compilerOptions: {
+      experimentalDecorators: true,
+      module: 'NodeNext',
+      moduleResolution: 'NodeNext',
+      noEmit: true,
+      skipLibCheck: true,
+      strict: true,
+      target: 'ES2022',
+    },
+    include: ['examples/**/*.ts'],
+  });
+  runCommand(
+    process.execPath,
+    [path.join('node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.examples.json'],
+    consumerDirectory,
+    'Shipped examples TypeScript smoke',
+  );
+
   console.log(
     JSON.stringify({
       package: pack.name,
@@ -305,6 +339,9 @@ try {
       nest: exactDependencies['@nestjs/core'],
       prisma: exactDependencies['@prisma/client'],
       apiKeys: exactDependencies['@nestarc/api-keys'],
+      exampleSources: shippedExampleSources
+        .map((filePath) => path.relative(consumerExamplesDirectory, filePath))
+        .sort(),
       node: process.version,
       result: 'passed',
     }),
@@ -387,6 +424,13 @@ function readJson(filePath) {
 
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+function listFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = path.join(directory, entry.name);
+    return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
+  });
 }
 
 function runNpm(args, cwd) {

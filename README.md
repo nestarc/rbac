@@ -346,7 +346,7 @@ Prisma 7 applications should keep their `prisma-client` generator and datasource
 URL in `prisma.config.ts`, then create the generated client with the driver adapter
 for their database. `PrismaRbacStorage` accepts both that client and the legacy
 Prisma 5/6 `@prisma/client` shape. See [docs/prisma.md](docs/prisma.md) for the
-complete Prisma 7 setup.
+separate, copyable Prisma 5/6 and Prisma 7 setup and verification procedures.
 
 ```ts
 import { Module } from '@nestjs/common';
@@ -369,13 +369,10 @@ import { PrismaService } from './prisma.service';
 export class AppModule {}
 ```
 
-Run this package's Prisma adapter contract tests with:
-
-```bash
-npm run test:prisma
-```
-
-See [docs/prisma.md](docs/prisma.md).
+Do not use `npm run test:prisma` alone as database evidence: without a configured
+database URL the suite is intentionally skipped. See [docs/prisma.md](docs/prisma.md)
+for the complete PostgreSQL URL → generate → migrate → test sequence and the
+required `skip 0` check.
 
 ## API Key Recipe
 

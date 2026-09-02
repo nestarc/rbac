@@ -23,6 +23,8 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Added
 
+- The strict modern packed-consumer gate now copies every shipped TypeScript
+  example out of the installed tarball and typechecks it from the clean consumer.
 - Added producer-accurate `RbacServiceDecision`,
   `RbacServiceDecisionReason`, `RbacServiceDecisionDetails`, and
   `RbacServiceEvaluationStep` types for `RbacService.can()` and the public testing
@@ -42,6 +44,9 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Split the Prisma documentation into explicit Prisma 5/6 legacy-client and
+  Prisma 7 driver-adapter setup, migration, and real-PostgreSQL verification
+  procedures.
 - Documented the 0.2.x Guard/decorator/default-resolver contract as Nest HTTP-only.
   Custom resolver hooks do not imply GraphQL, RPC, or WebSocket support;
   application-owned integrations should call the transport-neutral `RbacService`

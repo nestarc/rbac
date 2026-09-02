@@ -173,7 +173,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 14 | `RBAC-M14` | P2 | `DONE` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
 | 15 | `RBAC-M15` | P2 | `DONE` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
 | 16 | `RBAC-M16` | P2 | `DONE` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
-| 17 | `RBAC-M17` | P2 | `READY` | S | 없음 | examples/Prisma docs executable smoke |
+| 17 | `RBAC-M17` | P2 | `DONE` | S | 없음 | examples/Prisma docs executable smoke |
 | 18 | `RBAC-M18` | P2 | `BLOCKED` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
 | 19A | `RBAC-M19A` | P2 | `READY` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
 | 19B | `RBAC-M19B` | P2 | `READY` | S | 없음 | Actions pinning과 dependency bot |
@@ -547,14 +547,14 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M17` — executable examples와 Prisma setup
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 
 완료 조건:
 
-- [ ] shipped `examples/**`를 clean packed consumer에서 typecheck한다.
-- [ ] PostgreSQL URL → generate → migrate → test 절차를 복사 실행 가능하게 만든다.
-- [ ] Prisma 6 legacy와 Prisma 7 adapter setup을 명확히 분리한다.
-- [ ] 문서 import가 실제 public subpath와 일치한다.
+- [x] shipped `examples/**`의 TypeScript source 7개를 clean packed consumer에서 typecheck한다.
+- [x] PostgreSQL URL → generate → migrate → test 절차를 복사 실행 가능하게 만들고 실제 PostgreSQL 16에서 skip 0으로 검증했다.
+- [x] Prisma 5/6 legacy client와 Prisma 7 driver adapter setup을 generator, datasource, import, constructor, CLI 절차별로 명확히 분리했다.
+- [x] 문서와 예제의 RBAC import를 실제 root 및 `@nestarc/rbac/prisma`, `@nestarc/rbac/integrations/api-keys` public subpath와 일치시켰다.
 
 ### `RBAC-M18` — SECURITY와 reporting
 
@@ -798,6 +798,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M14`: producer-accurate decision/reason/detail 타입, dormant API deprecation, packed public type fixture와 ADR.
 - [x] `RBAC-M15`: optional indexed role-ID lookup, built-in/custom capability contract, legacy scan fallback과 packed public type fixture.
 - [x] `RBAC-M16`: 0.2.x Guard/decorator/default resolver HTTP-only 계약, transport-neutral service 경계와 future carrier acceptance ADR.
+- [x] `RBAC-M17`: packed tarball의 shipped example 7개 typecheck와 Prisma 6/7 URL→generate→migrate→test 문서/real-DB contract.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -806,9 +807,9 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M16 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M16`을 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M17`만 선택한다.
-3. shipped `examples/**`를 clean packed consumer에서 typecheck해 첫 실패를 기록하고 Prisma 6/7 setup 문서를 실행 가능한 절차로 분리한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M17 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M17`을 반복하지 않는다. `RBAC-M18`은 외부 security channel 결정 전까지 건너뛰고 실행 가능한 다음 항목 `RBAC-M19A`만 선택한다.
+3. production/full audit의 자동 실패 조건과 owner/review-date가 있는 만료형 exception 형식을 먼저 작성한다. 2026-09-02 RBAC-M17 종료 시 production audit은 0이고 full audit은 Prisma dev-tool의 `mysql2<3.22.0` 경로 high 2건이다.
 4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
 5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. 2026-09-02 M14 검증에서 production audit은 0이었고 full audit에는 Prisma dev-tool의 `mysql2<3.22.0` 새 high advisory 2건이 나타났다. 자동 정책과 만료형 예외는 M19A에서 재분류한다.
 
@@ -838,6 +839,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M14` | `DONE` | `main@44daec7` | uncommitted working tree | producer-accurate service/testing decision 타입, broad compatibility envelope와 dormant API deprecation ADR; A/B/D와 packed type fixture PASS | `RBAC-M15` indexed role lookup 시작 |
 | 2026-09-02 | `RBAC-M15` | `DONE` | `main@05838fc` | uncommitted working tree | optional `findRoleById`, InMemory Map/Prisma PK query, custom capability와 deprecated legacy scan fallback; A/B/C2/D PASS | `RBAC-M16` transport 계약 결정 시작 |
 | 2026-09-02 | `RBAC-M16` | `DONE` | `main@8052a9a` | uncommitted working tree | 0.2.x HTTP-only Guard 계약, transport-neutral service 경계, future carrier acceptance; A/C1/D PASS | `RBAC-M17` executable examples/Prisma setup 시작 |
+| 2026-09-02 | `RBAC-M17` | `DONE` | `main@c532472` | uncommitted working tree | packed example source 7개 typecheck, Prisma 6/7 copyable setup과 PostgreSQL 16 36/36 skip 0; A/B/C2/C3/D PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 (`RBAC-M18`은 external blocker 유지) |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1103,4 +1105,18 @@ Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HE
 Unverified paths and reason: GraphQL/RPC/WS E2E는 지원을 선언하지 않기로 한 결정의 비범위이며 package adapter/dependency도 추가하지 않았다. runtime authorization/storage/schema를 변경하지 않았으므로 fresh coverage와 Prisma 5/6/7 real-DB lanes는 재실행하지 않았다. GitHub Release와 npm latest metadata 조회는 sandbox network에서 사용할 수 없었고, git fetch로 origin/tag만 갱신했다.
 External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M17에서 shipped examples를 clean packed consumer로 typecheck해 첫 실패를 기록하고 Prisma 6/7 setup 문서를 실행 가능한 절차로 분리한다.
+```
+
+### 2026-09-02 RBAC-M17 인계
+
+```text
+Task: RBAC-M17
+State: DONE
+Start ref / end ref: main@c532472 / main@c532472 + uncommitted RBAC-M17 working tree
+Changed files: .github/workflows/ci.yml, .github/workflows/release.yml, README.md, changelog.md, docs/compatibility.md, docs/prisma.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, scripts/verify-modern-consumer.cjs, test/unit/package-smoke.spec.ts
+Contract decision: shipped example gate는 별도 중복 install lane을 만들지 않고 Node 22/24 CI와 release가 공유하는 strict modern packed-consumer에 포함한다. fixture는 repository source가 아니라 설치된 tarball의 examples를 clean consumer로 복사하고 모든 .ts source를 동적으로 찾아 zero-source를 실패시키며 strict NodeNext로 typecheck한다. Prisma 문서는 5/6 legacy client와 7 driver adapter를 generator, datasource, public import, constructor, CLI별로 분리한다. repository real-DB evidence는 두 URL을 같은 PostgreSQL 16 database로 지정한 URL→generate→migrate→test 전체 절차와 skip 0을 요구한다.
+Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HEAD permission retry; origin/main과 v0.2.1 commit 69bf0e1, GitHub Release v0.2.1, npm latest 0.2.1 재확인; 최초 packed example gate는 source failure 없이 7개 모두 PASS했고 첫 sandbox 시도만 ~/.npm cache EPERM으로 중단된 뒤 허용된 동일 실행 PASS; focused package smoke PASS (1 file, 9 tests); npm run lint PASS; npm run typecheck PASS; npm test PASS with HTTP permission (15 files, 320 tests); fresh npm run test:coverage PASS (14 files, 310 tests; statements 94.04%, branches 87.23%, functions 96.71%, lines 95.16%); PostgreSQL 16에서 Prisma 7.10.0 C2 PASS (2 files, 36 tests, skip 0); disposable checkout에서 Prisma 6.19.3 C3 PASS (2 files, 36 tests, skip 0); npm run test:consumer:modern PASS with 7 packed example sources, exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2; npm run test:consumer:nest10 PASS; npm pack --dry-run --json PASS (79 files, 258941 bytes); npm audit --omit=dev --json PASS (0); full npm audit snapshot은 Prisma dev-tool→mysql2<3.22.0 high 2건; targeted Prettier와 git diff --check PASS. 검증용 PostgreSQL container, Prisma 6 checkout, fresh coverage directory는 종료 후 제거했다.
+Unverified paths and reason: Node 22 packed example runner와 Prisma 5.22.0 real-DB lane은 로컬에서 재실행하지 않았다. 두 경로는 기존 CI/release gate이며 M17은 runtime/storage/schema를 변경하지 않았다. Node 24 packed tarball과 Prisma 6/7 문서 대상 real-DB 절차를 직접 검증했다.
+External PR/release evidence: 없음. 공개 기준은 계속 GitHub/npm v0.2.1이고 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M18은 EXT-SECURITY-CHANNEL 전까지 BLOCKED로 유지하고, RBAC-M19A에서 production audit 0 자동 gate와 owner/review-date가 만료되면 실패하는 full-audit exception 형식을 먼저 작성한다.
 ```

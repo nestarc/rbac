@@ -65,7 +65,9 @@ describe('package exports', () => {
 
   it('declares exact lower-bound compatibility gates', () => {
     const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
-    const ciWorkflowPath = fileURLToPath(new URL('../../.github/workflows/ci.yml', import.meta.url));
+    const ciWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/ci.yml', import.meta.url),
+    );
     const nest10RunnerPath = fileURLToPath(
       new URL('../../scripts/verify-nest10-consumer.cjs', import.meta.url),
     );
@@ -87,6 +89,27 @@ describe('package exports', () => {
     expect(ciWorkflow).toContain('prisma-version: 5.22.0');
     expect(ciWorkflow).toContain('prisma-version: 6.19.3');
     expect(ciWorkflow).toContain('prisma-version: 7.10.0');
+  });
+
+  it('typechecks every shipped TypeScript example from the packed consumer', () => {
+    const modernConsumerPath = fileURLToPath(
+      new URL('../../scripts/verify-modern-consumer.cjs', import.meta.url),
+    );
+    const ciWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/ci.yml', import.meta.url),
+    );
+    const releaseWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/release.yml', import.meta.url),
+    );
+    const modernConsumer = readFileSync(modernConsumerPath, 'utf8');
+    const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
+    const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8');
+
+    expect(modernConsumer).toContain("include: ['examples/**/*.ts']");
+    expect(modernConsumer).toContain('Packed RBAC package did not contain any TypeScript example');
+    expect(modernConsumer).toContain('Shipped examples TypeScript smoke');
+    expect(ciWorkflow).toContain('packed consumer, shipped examples');
+    expect(releaseWorkflow).toContain('packed consumer, shipped examples');
   });
 
   it('pins advisory overrides to the affected parent tool versions', () => {
