@@ -2,7 +2,7 @@
 
 All notable changes to `@nestarc/rbac` will be documented in this file.
 
-## Unreleased
+## 0.2.2 - 2026-09-02
 
 ### Security
 
