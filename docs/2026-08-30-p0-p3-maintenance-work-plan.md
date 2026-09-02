@@ -175,8 +175,8 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 16 | `RBAC-M16` | P2 | `DONE` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `DONE` | S | 없음 | examples/Prisma docs executable smoke |
 | 18 | `RBAC-M18` | P2 | `DONE` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
-| 19A | `RBAC-M19A` | P2 | `READY` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
-| 19B | `RBAC-M19B` | P2 | `READY` | S | 없음 | Actions pinning과 dependency bot |
+| 19A | `RBAC-M19A` | P2 | `DONE` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
+| 19B | `RBAC-M19B` | P2 | `DONE` | S | 없음 | Actions pinning과 dependency bot |
 | 20A | `RBAC-M20A` | P3 | `READY` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
 | 20B | `RBAC-M20B` | P3 | `BLOCKED` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
 | 20C | `RBAC-M20C` | P3 | `BLOCKED` | M | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` | Prisma adapter behavior-preserving 분해 |
@@ -569,23 +569,23 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M19A` — audit automation과 예외 정책
 
-- 상태: `P2 / READY (RBAC-M12A, RBAC-M12B DONE)`
+- 상태: `P2 / DONE`
 
 완료 조건:
 
-- [ ] PR에서 production audit 0을 요구한다.
-- [ ] full dev audit는 만료형 allowlist/risk register로 관리한다.
-- [ ] `RBAC-M12C` override 제거 추적과 향후 upstream-blocked finding도 owner/review date가 만료되면 실패한다.
+- [x] PR과 release에서 production audit 0을 요구한다.
+- [x] full dev audit는 finding의 package/severity/range/via/effects/node가 정확히 일치하는 만료형 risk register로 관리한다.
+- [x] `RBAC-M12B`/`RBAC-M12C` override 제거 추적과 향후 upstream-blocked finding도 owner/review date가 만료되면 실패한다.
 
 ### `RBAC-M19B` — workflow dependency hygiene
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 
 완료 조건:
 
-- [ ] Actions SHA/version 정책과 permissions를 통일한다.
-- [ ] Dependabot/Renovate group을 Nest, Prisma, lint/test stack별로 구성한다.
-- [ ] provenance 생성, tag ancestry, tarball contract는 각각 현재 baseline/`RBAC-M11`/`RBAC-M22` 소유로 남기고 중복 구현하지 않는다.
+- [x] 모든 GitHub Action을 검토한 v6 full commit SHA로 고정하고 기본 `contents: read`, publish job만 `id-token: write`로 통일한다.
+- [x] Dependabot group을 Nest, Prisma, lint/test stack 및 GitHub Actions별 weekly update로 구성한다.
+- [x] provenance 생성, tag ancestry, tarball contract는 각각 현재 baseline/`RBAC-M11`/`RBAC-M22` 소유로 남기고 중복 구현하지 않는다.
 
 ## 6. P3와 결정 대기 backlog
 
@@ -604,7 +604,7 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M21` — workflow hygiene
 
-- 상태: `P3 / BLOCKED (RBAC-M19A, RBAC-M19B, RBAC-M22)`
+- 상태: `P3 / BLOCKED (RBAC-M22)`
 - reusable workflow, job timeout, concurrency, 중복 build/Prisma generate를 정리한다.
 - 검증 graph를 바꾸지 않는 refactor로 한정한다.
 
@@ -763,19 +763,20 @@ Tenancy ecosystem: published exact tuple E2E
 
 ### 9.1 현재 실제 자동 gate
 
+- CI/release `dependency-audit`: Node 24에서 production audit 0, full dev audit exact risk-register match, 모든 audit/override exception의 owner/review-date 유효성을 검사한다.
 - CI `verify`: Node 22/24에서 install, Prisma generate, lint, typecheck, unit, HTTP E2E, build, unit/contract coverage.
 - CI `modern-consumer`: Node 22/24, Nest 11.2.1/Prisma 7.10.0 strict packed consumer.
-- CI `prisma-integration`: PostgreSQL 16에서 Prisma 6.19.3 legacy와 7.10.0 modern real-DB contract.
-- release: tag checkout, Node 24, Prisma 7/PostgreSQL 16, tag/package version, lint/typecheck/unit/E2E/build, modern consumer, `npm pack --dry-run`, publish.
-- release에는 현재 Prisma 6, coverage, production/full audit가 없다. tag가 main descendant인지와 검증한 동일 `.tgz` 게시도 확인하지 않는다.
+- CI `prisma-integration`: PostgreSQL 16에서 Prisma 5.22.0/6.19.3 legacy와 7.10.0 modern real-DB contract.
+- release: tag→target→main ancestry, Node 22/24 source/coverage, Nest 10/11 packed consumer, Prisma 5/6/7 PostgreSQL 16, dependency audit, `npm pack --dry-run`, publish.
+- release는 아직 검증한 동일 `.tgz`를 게시하는 pack-once contract를 확인하지 않는다.
 
 ### 9.2 이번 조사에서 수동 확인한 증거
 
 - fresh unit/contract coverage: statements 94.8%, branches 87.58%, functions 96.96%, lines 95.53%.
-- production audit 0, full dev audit high 7/low 2. full audit exit 1은 알려진 finding을 나타내며 자동 pass gate가 아니다.
+- 최초 조사 snapshot은 production audit 0, full dev audit high 7/low 2였다. M12 이후 현재 snapshot은 production 0, Prisma dev-tool의 `mysql2<3.22.0` 경로 high 2건이다.
 - npm `0.2.1` provenance attestation, release/tag/main commit, published timestamp를 수동 확인했다.
 
-이 snapshot은 future release gate가 아니며 새 PR/release에서 재실행·자동화해야 한다.
+최초 snapshot은 역사적 기준선이다. 현재 PR/release는 M19A risk-register 정책으로 새 결과를 매번 재조회한다.
 
 ### 9.3 완료 뒤 활성화할 future gate
 
@@ -800,19 +801,19 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M16`: 0.2.x Guard/decorator/default resolver HTTP-only 계약, transport-neutral service 경계와 future carrier acceptance ADR.
 - [x] `RBAC-M17`: packed tarball의 shipped example 7개 typecheck와 Prisma 6/7 URL→generate→migrate→test 문서/real-DB contract.
 - [x] `RBAC-M18`: 최신 published minor `0.2.x` 지원, GitHub private reporting와 `security@nestarc.dev` fallback, subject/tenant/header/API-key/storage trust boundary, 최소 `main` protection.
-- [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
-- [ ] `RBAC-M19B`: Actions/dependency automation policy.
+- [x] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
+- [x] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
 
 향후 gate를 현재 P0 patch의 선행 조건으로 소급 적용하지 않는다.
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M18 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M18`을 반복하지 않고 실행 가능한 다음 항목 `RBAC-M19A`를 선택한다.
-3. production/full audit의 자동 실패 조건과 owner/review-date가 있는 만료형 exception 형식을 먼저 작성한다. 2026-09-02 RBAC-M17 종료 시 production audit은 0이고 full audit은 Prisma dev-tool의 `mysql2<3.22.0` 경로 high 2건이다.
-4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
-5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. 2026-09-02 M14 검증에서 production audit은 0이었고 full audit에는 Prisma dev-tool의 `mysql2<3.22.0` 새 high advisory 2건이 나타났다. 자동 정책과 만료형 예외는 M19A에서 재분류한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M19A/B working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M19B`를 반복하지 않고 실행 가능한 다음 항목 `RBAC-M20A`를 선택한다.
+3. exact dependency 완료와 Guard public golden test를 확인한 뒤 source-resolution helper 하나만 move-only로 추출한다.
+4. M19 risk register의 review date는 exclusive deadline이다. Dependabot parent-tool/Prisma PR에서는 audit path와 M12 override 제거 가능성을 함께 재검토한다.
+5. `RBAC-M21`은 M19A/B가 끝났지만 `RBAC-M22` pack-once/package contract 전까지 계속 blocked다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -842,6 +843,8 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M16` | `DONE` | `main@8052a9a` | uncommitted working tree | 0.2.x HTTP-only Guard 계약, transport-neutral service 경계, future carrier acceptance; A/C1/D PASS | `RBAC-M17` executable examples/Prisma setup 시작 |
 | 2026-09-02 | `RBAC-M17` | `DONE` | `main@c532472` | uncommitted working tree | packed example source 7개 typecheck, Prisma 6/7 copyable setup과 PostgreSQL 16 36/36 skip 0; A/B/C2/C3/D PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 (`RBAC-M18`은 external blocker 유지) |
 | 2026-09-02 | `RBAC-M18` | `DONE` | `main@e11468b` | uncommitted working tree + GitHub settings | `SECURITY.md`, private reporting enabled, `main` force-push/deletion protection, supported line/reporting/trust boundary 문서 검증 PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 |
+| 2026-09-02 | `RBAC-M19A` | `DONE` | `main@e9f6a9d` | uncommitted working tree | PR/release production audit 0, exact full-audit risk register, owner/review-date 만료 gate, M12 override 추적; audit policy/unit/A/D PASS | `RBAC-M19B` Actions/dependency automation 시작 |
+| 2026-09-02 | `RBAC-M19B` | `DONE` | `main@e9f6a9d` | uncommitted working tree | checkout/setup-node v6 full SHA pin, least-privilege OIDC, Dependabot Nest/Prisma/lint-test/Actions groups; workflow/YAML/A/B/D PASS | `RBAC-M20A` Guard behavior-preserving 분해 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1135,4 +1138,32 @@ Commands and exact results: git fetch --prune --tags PASS; start HEAD e11468b, o
 Unverified paths and reason: 실제 vulnerability report나 fallback email은 테스트하지 않았다. 전자는 불필요한 draft advisory를 만들고 후자는 외부 수신자에게 테스트 메일을 보내므로, 관리자 API 상태와 조직의 기존 공개 정책으로 확인했다. 보호 동작을 확인하기 위한 force-push/deletion도 파괴적이므로 실행하지 않고 GitHub branch-protection API를 재조회했다.
 External PR/release evidence: GitHub repository settings는 즉시 적용됐고 private vulnerability reporting enabled=true와 main branch protection을 API로 재확인했다. SECURITY.md와 계획 문서 변경은 아직 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M19A에서 production audit 0 자동 gate와 owner/review-date가 만료되면 실패하는 full-audit exception 형식을 먼저 작성한다.
+```
+
+### 2026-09-02 RBAC-M19A 인계
+
+```text
+Task: RBAC-M19A
+State: DONE
+Start ref / end ref: main@e9f6a9d / main@e9f6a9d + uncommitted RBAC-M19A/B working tree
+Changed files: .github/dependency-risk-register.json, .github/workflows/ci.yml, .github/workflows/release.yml, changelog.md, docs/compatibility.md, docs/dependency-security.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, package.json, scripts/verify-dependency-audit.cjs, test/unit/dependency-audit-policy.spec.ts, test/unit/package-smoke.spec.ts
+Contract decision: PR과 release의 독립 Node 24 dependency-audit job은 production npm audit exit 0과 finding 0을 무조건 요구한다. full audit의 원래 JSON/exit code는 로그에 보존하되 package/severity/direct/range/advisory-or-dependency via/effects/node가 risk register와 정확히 일치할 때만 알려진 dev-only finding을 허용한다. 새 finding, 변경된 finding, 해결됐지만 남은 예외는 모두 실패한다. 모든 audit/override 예외는 owner/reason/removeWhen과 Asia/Seoul 기준 exclusive reviewBy를 가지며 deadline 당일부터 실패한다. 현재 허용은 Prisma 7.10.0 dev CLI의 prisma→mysql2<3.22.0 high 2건이고 reviewBy는 2026-10-02다. tsup→esbuild 0.28.2와 @prisma/config@7.10.0→deepmerge-ts 8.0.2 override도 같은 deadline으로 exact 추적하며 package.json의 미등록 override를 허용하지 않는다.
+Commands and exact results: git fetch --prune --tags PASS; start HEAD e9f6a9d와 origin/main 69bf0e1 확인; focused dependency policy PASS (1 file, 6 tests); final npm run verify:dependency-audit PASS with production exit 0/findings 0, full original exit 1/high 2 exact match, audit exceptions 2 and tracked overrides 2; npm run lint PASS; npm run typecheck PASS; npm test PASS (16 files, 326 tests); fresh npm run test:coverage PASS (15 files, 316 tests; statements 94.04%, branches 87.23%, functions 96.71%, lines 95.16%); npm run build PASS; npm pack --dry-run --json PASS (79 files, 258888 bytes); YAML parse, targeted formatting, git diff --check PASS. 최초 combined audit는 sandbox DNS가 production 조회 뒤 full 조회를 막아 실패했고 network 허용 재실행과 최종 재실행은 모두 PASS했다. 최초 package dry-run은 ~/.npm cache EPERM으로 실패했고 허용된 재실행은 PASS했다.
+Unverified paths and reason: 새 commit의 실제 PR/release event는 생성하지 않았으므로 GitHub-hosted Node 22/24 및 release dependency-audit job은 로컬 workflow/YAML/정적 계약으로만 확인했다. runtime/storage/schema는 변경하지 않아 Prisma real-DB lane을 재실행하지 않았다. 등록된 dev finding은 생산 의존성이 아니며 production audit 0을 별도 gate로 확인했다.
+External PR/release evidence: 없음. 현재 workflow와 정책은 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M19B의 Actions full-SHA/permissions와 Dependabot stack grouping을 같은 workflow graph에서 검증한다.
+```
+
+### 2026-09-02 RBAC-M19B 인계
+
+```text
+Task: RBAC-M19B
+State: DONE
+Start ref / end ref: main@e9f6a9d / main@e9f6a9d + uncommitted RBAC-M19A/B working tree
+Changed files: .github/dependabot.yml, .github/workflows/ci.yml, .github/workflows/release.yml, changelog.md, docs/dependency-security.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, test/unit/dependency-audit-policy.spec.ts, test/unit/package-smoke.spec.ts
+Contract decision: actions/checkout v6는 d23441a48e516b6c34aea4fa41551a30e30af803, actions/setup-node v6는 249970729cb0ef3589644e2896645e5dc5ba9c38 full commit SHA로 고정하고 major comment를 남긴다. workflow 기본 권한은 contents: read이며 release publish job만 provenance/trusted publishing에 필요한 id-token: write를 받는다. Dependabot은 Asia/Seoul 월요일 weekly schedule로 npm의 NestJS, Prisma, development-only lint/test minor/patch를 별도 group으로 만들고 GitHub Actions dependency도 한 group으로 갱신한다. PostgreSQL version lane, 기존 provenance, M11 tag ancestry, M22 pack-once contract는 소유권을 변경하거나 중복 구현하지 않는다.
+Commands and exact results: GitHub API에서 checkout/setup-node refs/tags/v6가 각각 위 full SHA를 가리킴을 확인; CI/release 12개 uses ref full-SHA 정적 검사 PASS; id-token: write가 release publish job에만 1회 존재하는 unit contract PASS; Dependabot Nest/Prisma/lint-test/Actions group contract PASS; CI/release/Dependabot 3개 YAML safe parse PASS; npm run lint PASS; npm run typecheck PASS; npm test PASS (16 files, 326 tests); fresh npm run test:coverage PASS (15 files, 316 tests; statements 94.04%, branches 87.23%, functions 96.71%, lines 95.16%); npm run build PASS; npm pack --dry-run --json PASS (79 files, 258888 bytes); git diff --check PASS.
+Unverified paths and reason: Dependabot이 실제 update PR을 만드는 동작과 GitHub-hosted CI/release run은 default branch에 commit되지 않아 실행할 수 없다. workflow graph의 기존 Node/Nest/Prisma 검증 의미는 바꾸지 않았고 로컬 정적/단위/YAML/package gate로 구성 유효성을 확인했다.
+External PR/release evidence: 없음. GitHub API는 upstream Action tag-to-SHA 조회에만 사용했고 저장소 설정, PR, release, publish는 변경하지 않았다.
+Next exact action: RBAC-M20A에서 exact dependency 완료와 Guard public golden test를 확인한 뒤 source-resolution helper 하나를 move-only로 추출한다. RBAC-M21은 RBAC-M22 완료 전까지 BLOCKED다.
 ```

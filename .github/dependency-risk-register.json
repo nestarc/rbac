@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "auditExceptions": [
+    {
+      "id": "GHSA-3f6p-5ww8-9rcr",
+      "package": "mysql2",
+      "severity": "high",
+      "isDirect": false,
+      "range": "<3.22.0",
+      "via": ["advisory:1153173"],
+      "effects": ["prisma"],
+      "nodes": ["node_modules/mysql2"],
+      "owner": "repository-maintainers",
+      "reviewBy": "2026-10-02",
+      "reason": "Development-only Prisma CLI dependency; production installs contain no vulnerable package.",
+      "removeWhen": "Upgrade Prisma when its supported release resolves mysql2 to 3.22.0 or newer."
+    },
+    {
+      "id": "prisma-via-GHSA-3f6p-5ww8-9rcr",
+      "package": "prisma",
+      "severity": "high",
+      "isDirect": true,
+      "range": ">=6.20.0-dev.1",
+      "via": ["dependency:mysql2"],
+      "effects": [],
+      "nodes": ["node_modules/prisma"],
+      "owner": "repository-maintainers",
+      "reviewBy": "2026-10-02",
+      "reason": "npm reports the development-only Prisma CLI as affected through its mysql2 dependency.",
+      "removeWhen": "Remove together with GHSA-3f6p-5ww8-9rcr after the supported Prisma release is safe."
+    }
+  ],
+  "overrideExceptions": [
+    {
+      "id": "RBAC-M12B-tsup-esbuild",
+      "selector": "tsup",
+      "package": "esbuild",
+      "version": "0.28.2",
+      "owner": "repository-maintainers",
+      "reviewBy": "2026-10-02",
+      "reason": "Keep the build-only esbuild advisory fix scoped to tsup 8.5.1.",
+      "removeWhen": "Remove after the supported tsup release selects esbuild 0.28.1 or newer without an override."
+    },
+    {
+      "id": "RBAC-M12C-prisma-config-deepmerge",
+      "selector": "@prisma/config@7.10.0",
+      "package": "deepmerge-ts",
+      "version": "8.0.2",
+      "owner": "repository-maintainers",
+      "reviewBy": "2026-10-02",
+      "reason": "Keep the compatibility-tested deepmerge-ts fix scoped to Prisma config 7.10.0.",
+      "removeWhen": "Remove when a supported Prisma release no longer resolves the affected deepmerge-ts version."
+    }
+  ]
+}

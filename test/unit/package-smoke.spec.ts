@@ -158,7 +158,7 @@ describe('package exports', () => {
     expect(releaseWorkflow).toContain('prisma-version: 6.19.3');
     expect(releaseWorkflow).toContain('prisma-version: 7.10.0');
     expect(releaseWorkflow).toMatch(
-      /publish:\n[\s\S]*?needs:\n\s+- release-target\n\s+- verify\n\s+- modern-consumer\n\s+- nest10-consumer\n\s+- prisma-integration/,
+      /publish:\n[\s\S]*?needs:\n\s+- release-target\n\s+- dependency-audit\n\s+- verify\n\s+- modern-consumer\n\s+- nest10-consumer\n\s+- prisma-integration/,
     );
   });
 

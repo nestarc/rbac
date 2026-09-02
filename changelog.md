@@ -23,6 +23,11 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Added
 
+- Added a CI and release dependency-audit policy that requires zero production
+  vulnerabilities and exact, owner-assigned, expiring exceptions for development
+  findings and package overrides.
+- Added weekly Dependabot groups for NestJS, Prisma, the lint/test toolchain, and
+  GitHub Actions.
 - The strict modern packed-consumer gate now copies every shipped TypeScript
   example out of the installed tarball and typechecks it from the clean consumer.
 - Added producer-accurate `RbacServiceDecision`,
@@ -44,6 +49,8 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Pinned every GitHub Action to a full reviewed commit SHA and restricted npm OIDC
+  permission to the release publish job; all other workflow jobs remain read-only.
 - Split the Prisma documentation into explicit Prisma 5/6 legacy-client and
   Prisma 7 driver-adapter setup, migration, and real-PostgreSQL verification
   procedures.

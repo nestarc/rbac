@@ -104,6 +104,7 @@
     "test:consumer:modern": "npm run build && node scripts/verify-modern-consumer.cjs",
     "test:consumer:nest10": "npm run build && node scripts/verify-nest10-consumer.cjs",
     "verify:release-target": "node scripts/verify-release-target.cjs",
+    "verify:dependency-audit": "node scripts/verify-dependency-audit.cjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage test/unit test/contract",
     "prisma:generate": "prisma generate --config=prisma.config.ts",

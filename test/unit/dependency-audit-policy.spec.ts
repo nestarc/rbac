@@ -1,0 +1,159 @@
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const auditPolicy = createRequire(import.meta.url)('../../scripts/verify-dependency-audit.cjs') as {
+  verifyProductionReport(report: unknown): void;
+  verifyFullReport(report: unknown, exceptions: unknown[], today: string): void;
+  verifyOverrideExceptions(packageJson: unknown, exceptions: unknown[], today: string): void;
+};
+
+const activeFields = {
+  owner: 'repository-maintainers',
+  reviewBy: '2026-10-02',
+  reason: 'Development-only fixture.',
+  removeWhen: 'Remove when the parent tool is fixed.',
+};
+
+const fullReport = {
+  vulnerabilities: {
+    mysql2: {
+      severity: 'high',
+      isDirect: false,
+      via: [{ source: 1153173 }],
+      effects: ['prisma'],
+      range: '<3.22.0',
+      nodes: ['node_modules/mysql2'],
+    },
+  },
+};
+
+const auditException = {
+  id: 'GHSA-fixture',
+  package: 'mysql2',
+  severity: 'high',
+  isDirect: false,
+  range: '<3.22.0',
+  via: ['advisory:1153173'],
+  effects: ['prisma'],
+  nodes: ['node_modules/mysql2'],
+  ...activeFields,
+};
+
+describe('dependency audit policy', () => {
+  it('requires a zero-vulnerability production report', () => {
+    expect(() =>
+      auditPolicy.verifyProductionReport({
+        vulnerabilities: {},
+        metadata: { vulnerabilities: { total: 0 } },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      auditPolicy.verifyProductionReport({
+        vulnerabilities: { mysql2: {} },
+        metadata: { vulnerabilities: { total: 1 } },
+      }),
+    ).toThrow(/zero vulnerabilities/);
+  });
+
+  it('pins every workflow action and limits OIDC permission to publishing', () => {
+    const workflows = ['ci.yml', 'release.yml'].map((name) =>
+      readFileSync(
+        fileURLToPath(new URL(`../../.github/workflows/${name}`, import.meta.url)),
+        'utf8',
+      ),
+    );
+    const actionRefs = workflows.flatMap((workflow) =>
+      [...workflow.matchAll(/^\s*uses:\s*[^@\s]+@([^\s#]+)/gm)]
+        .map((match) => match[1])
+        .filter((reference): reference is string => reference !== undefined),
+    );
+    const ciWorkflow = workflows[0] ?? '';
+    const releaseWorkflow = workflows[1] ?? '';
+
+    expect(actionRefs.length).toBeGreaterThan(0);
+    expect(actionRefs.every((reference) => /^[a-f0-9]{40}$/.test(reference))).toBe(true);
+    expect(ciWorkflow).not.toContain('id-token: write');
+    expect(releaseWorkflow.match(/id-token: write/g)).toHaveLength(1);
+    expect(releaseWorkflow).toMatch(
+      /publish:\n[\s\S]*?permissions:\n\s+contents: read\n\s+id-token: write/,
+    );
+  });
+
+  it('groups dependency updates by compatibility stack', () => {
+    const dependabot = readFileSync(
+      fileURLToPath(new URL('../../.github/dependabot.yml', import.meta.url)),
+      'utf8',
+    );
+
+    expect(dependabot).toContain('package-ecosystem: npm');
+    expect(dependabot).toContain('nestjs:');
+    expect(dependabot).toContain('prisma:');
+    expect(dependabot).toContain('lint-test:');
+    expect(dependabot).toContain('package-ecosystem: github-actions');
+    expect(dependabot).toContain('actions:');
+  });
+
+  it('accepts only an exact active full-audit exception', () => {
+    expect(() =>
+      auditPolicy.verifyFullReport(fullReport, [auditException], '2026-09-02'),
+    ).not.toThrow();
+    expect(() =>
+      auditPolicy.verifyFullReport(
+        {
+          vulnerabilities: {
+            ...fullReport.vulnerabilities,
+            unexpected: {
+              severity: 'low',
+              isDirect: false,
+              via: [],
+              effects: [],
+              range: '*',
+              nodes: ['node_modules/unexpected'],
+            },
+          },
+        },
+        [auditException],
+        '2026-09-02',
+      ),
+    ).toThrow(/do not match the risk register/);
+  });
+
+  it('fails on the review date and on changed advisory details', () => {
+    expect(() => auditPolicy.verifyFullReport(fullReport, [auditException], '2026-10-02')).toThrow(
+      /expired/,
+    );
+    expect(() =>
+      auditPolicy.verifyFullReport(
+        { vulnerabilities: { mysql2: { ...fullReport.vulnerabilities.mysql2, range: '<4' } } },
+        [auditException],
+        '2026-09-02',
+      ),
+    ).toThrow(/finding for mysql2 changed/);
+  });
+
+  it('requires every package override to have an active exact register entry', () => {
+    const overrideException = {
+      id: 'RBAC-fixture',
+      selector: 'parent@1',
+      package: 'child',
+      version: '2.0.0',
+      ...activeFields,
+    };
+    expect(() =>
+      auditPolicy.verifyOverrideExceptions(
+        { overrides: { 'parent@1': { child: '2.0.0' } } },
+        [overrideException],
+        '2026-09-02',
+      ),
+    ).not.toThrow();
+    expect(() =>
+      auditPolicy.verifyOverrideExceptions(
+        { overrides: { 'parent@1': { child: '2.0.1' } } },
+        [overrideException],
+        '2026-09-02',
+      ),
+    ).toThrow(/do not match the risk register/);
+  });
+});

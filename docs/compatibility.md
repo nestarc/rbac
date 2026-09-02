@@ -57,13 +57,17 @@ These lanes do not independently prove every Nest 10/11, Prisma 5/6/7, and Node
 | NestJS 10 packed consumer | Node 24 | Exact NestJS 10.4.22 under a strict peer install; CJS, ESM, Nest dependency injection, and declarations |
 | Prisma integration | Node 24 and PostgreSQL 16 | The 36-test integration suite with exact Prisma 5.22.0, 6.19.3, and 7.10.0, with no skipped tests |
 | Release target | Node 24 | Release tag/package version agreement, tag checkout identity, release target resolution, and tag-to-target-to-`main` ancestry |
+| Dependency audit | Node 24 | Production vulnerabilities are zero; full development findings and package overrides exactly match active, owner-assigned, expiring risk-register entries |
 | Release publish | Node 24 | Repeats source, packed-consumer, and Prisma lanes on the tag, then runs `npm pack --dry-run` before npm publishing |
 
-The release workflow does not currently run dependency audits or publish a single
-previously verified tarball; `npm pack --dry-run` and `npm publish` each prepare the
-package. Those are future maintenance gates, not current guarantees. The published
-0.2.1 package has provenance, but preservation and artifact-link verification must
-be repeated for each future release.
+Pull requests and releases run the dependency audit policy in
+`.github/dependency-risk-register.json`; production findings always fail, while
+full development findings must match an unexpired exception exactly. The release
+workflow still does not publish a single previously verified tarball:
+`npm pack --dry-run` and `npm publish` each prepare the package. That artifact
+identity check remains a future maintenance gate. The published 0.2.1 package has
+provenance, but preservation and artifact-link verification must be repeated for
+each future release.
 
 ## Optional Nestarc peers and imports
 
