@@ -172,12 +172,12 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 13B | `RBAC-M13B` | P2 | `DONE` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
 | 14 | `RBAC-M14` | P2 | `DONE` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
 | 15 | `RBAC-M15` | P2 | `DONE` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
-| 16 | `RBAC-M16` | P2 | `DECISION` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
+| 16 | `RBAC-M16` | P2 | `DONE` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `READY` | S | 없음 | examples/Prisma docs executable smoke |
 | 18 | `RBAC-M18` | P2 | `BLOCKED` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
 | 19A | `RBAC-M19A` | P2 | `READY` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
 | 19B | `RBAC-M19B` | P2 | `READY` | S | 없음 | Actions pinning과 dependency bot |
-| 20A | `RBAC-M20A` | P3 | `BLOCKED` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
+| 20A | `RBAC-M20A` | P3 | `READY` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
 | 20B | `RBAC-M20B` | P3 | `BLOCKED` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
 | 20C | `RBAC-M20C` | P3 | `BLOCKED` | M | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` | Prisma adapter behavior-preserving 분해 |
 | 21 | `RBAC-M21` | P3 | `BLOCKED` | S | `RBAC-M11`, `RBAC-M19A`, `RBAC-M19B`, `RBAC-M22` | reusable workflow/timeout/중복 build 정리 |
@@ -536,14 +536,14 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M16` — transport 계약
 
-- 상태: `P2 / DECISION (RBAC-M01, RBAC-M05)`
+- 상태: `P2 / DONE (RBAC-M01, RBAC-M05)`
 - 문제: Guard/decorator/default resolvers는 HTTP request carrier에 고정돼 custom resolver만으로 GraphQL/RPC/WS를 완전히 지원한다고 보기 어렵다.
 
 완료 조건:
 
-- [ ] 현재 지원을 HTTP-only로 명시할지 carrier abstraction을 제공할지 ADR로 결정한다.
-- [ ] abstraction을 선택하면 subject/tenant/resource storage를 transport-neutral하게 하고 HTTP adapter를 보존한다.
-- [ ] GraphQL/RPC/WS를 실제 E2E 없이 지원한다고 선언하지 않는다.
+- [x] ADR 0003에서 0.2.x 현재 지원을 HTTP-only로 명시하고 carrier abstraction은 별도 feature/release로 연기했다.
+- [x] `RbacService`만 transport-neutral authorization boundary로 확정하고, 향후 abstraction은 subject read/write, tenant source reconciliation, resource extraction, error mapping을 분리하면서 HTTP adapter를 보존하도록 acceptance를 고정했다.
+- [x] GraphQL/RPC/WS는 실제 adapter와 E2E가 없으므로 지원 대상이 아닌 unverified transport로 공개 문서에 명시했다.
 
 ### `RBAC-M17` — executable examples와 Prisma setup
 
@@ -797,6 +797,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M13B`: README/docs support·actual gate 및 tenant/API-key/storage trust/default-strict 계약.
 - [x] `RBAC-M14`: producer-accurate decision/reason/detail 타입, dormant API deprecation, packed public type fixture와 ADR.
 - [x] `RBAC-M15`: optional indexed role-ID lookup, built-in/custom capability contract, legacy scan fallback과 packed public type fixture.
+- [x] `RBAC-M16`: 0.2.x Guard/decorator/default resolver HTTP-only 계약, transport-neutral service 경계와 future carrier acceptance ADR.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -805,9 +806,9 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M15 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M15`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M16` 결정만 선택한다.
-3. HTTP-only support 문서화와 transport-neutral carrier abstraction의 호환성/semver/구현 범위를 ADR 표로 먼저 비교한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M16 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M16`을 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M17`만 선택한다.
+3. shipped `examples/**`를 clean packed consumer에서 typecheck해 첫 실패를 기록하고 Prisma 6/7 setup 문서를 실행 가능한 절차로 분리한다.
 4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
 5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. 2026-09-02 M14 검증에서 production audit은 0이었고 full audit에는 Prisma dev-tool의 `mysql2<3.22.0` 새 high advisory 2건이 나타났다. 자동 정책과 만료형 예외는 M19A에서 재분류한다.
 
@@ -836,6 +837,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M13B` | `DONE` | `main@a51d33f` | uncommitted working tree | actual CI/release matrix, plain/strict 및 tenant/API-key/storage trust 계약 동기화; A/D docs 검증 PASS | `RBAC-M14` public decision/error 계약 ADR 시작 |
 | 2026-09-02 | `RBAC-M14` | `DONE` | `main@44daec7` | uncommitted working tree | producer-accurate service/testing decision 타입, broad compatibility envelope와 dormant API deprecation ADR; A/B/D와 packed type fixture PASS | `RBAC-M15` indexed role lookup 시작 |
 | 2026-09-02 | `RBAC-M15` | `DONE` | `main@05838fc` | uncommitted working tree | optional `findRoleById`, InMemory Map/Prisma PK query, custom capability와 deprecated legacy scan fallback; A/B/C2/D PASS | `RBAC-M16` transport 계약 결정 시작 |
+| 2026-09-02 | `RBAC-M16` | `DONE` | `main@8052a9a` | uncommitted working tree | 0.2.x HTTP-only Guard 계약, transport-neutral service 경계, future carrier acceptance; A/C1/D PASS | `RBAC-M17` executable examples/Prisma setup 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1087,4 +1089,18 @@ Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HE
 Unverified paths and reason: Prisma 5/6 real-DB lanes and Node 22 runner were not rerun. The capability is additive, uses the existing Prisma delegate surface, and was verified with Prisma 7 real DB plus packed public declarations; no Nest runtime, Guard, HTTP, schema, or migration behavior changed. Actual Node 22 and legacy Prisma lanes remain CI/release gates.
 External PR/release evidence: 없음. git fetch 뒤 origin/main은 69bf0e1이며 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M16에서 HTTP-only support 문서화와 transport-neutral carrier abstraction의 compatibility/semver/구현 범위를 ADR 표로 비교하고 하나를 결정한다.
+```
+
+### 2026-09-02 RBAC-M16 인계
+
+```text
+Task: RBAC-M16
+State: DONE
+Start ref / end ref: main@8052a9a / main@8052a9a + uncommitted RBAC-M16 working tree
+Changed files: README.md, changelog.md, docs/adr/0003-http-transport-contract.md, docs/compatibility.md, docs/guards.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, package.json, src/decorators/current-rbac-subject.decorator.ts, src/interfaces/resolvers.ts, src/interfaces/resource.ts, src/rbac.guard.ts
+Contract decision: 0.2.x RbacGuard, route/parameter decorator pipeline, built-in resource declarations, default/integration resolvers는 Nest HTTP request만 지원한다. custom resolver가 general ExecutionContext를 받더라도 Guard의 subject request 저장, HTTP tenant source reconciliation, built-in resource extraction, CurrentRbacSubject, HTTP exception mapping을 제거하지 않으므로 다른 transport opt-in으로 보지 않는다. RbacService.can()/assertCan()은 transport-neutral boundary로 유지하고 GraphQL/RPC/WS/background adapter는 application-owned extraction/error translation으로만 연결한다. future carrier abstraction은 subject read/write, per-adapter tenant source reconciliation, explicit resource semantics, transport error mapping, HTTP 보존과 광고하는 각 transport의 실제 E2E를 함께 갖춘 별도 feature/release에서만 고려한다.
+Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HEAD permission retry; origin/main 69bf0e1, start HEAD 8052a9a 확인; baseline/final npm run lint PASS, npm run typecheck PASS, npm test PASS (15 files, 319 tests); npm run test:e2e PASS (1 file, 10 tests); npm run build PASS; npm run test:consumer:modern PASS with exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2; npm run test:consumer:nest10 PASS with exact Nest 10.4.22; npm pack --dry-run --json PASS (79 files, 257366 bytes, ADR 0003 included); npm audit --omit=dev --json PASS (0); targeted Prettier check and git diff --check PASS. packed consumer와 pack의 최초 sandbox 실행은 ~/.npm cache 접근 EPERM으로 실패했고 동일 명령을 허용된 환경에서 재실행해 통과했다.
+Unverified paths and reason: GraphQL/RPC/WS E2E는 지원을 선언하지 않기로 한 결정의 비범위이며 package adapter/dependency도 추가하지 않았다. runtime authorization/storage/schema를 변경하지 않았으므로 fresh coverage와 Prisma 5/6/7 real-DB lanes는 재실행하지 않았다. GitHub Release와 npm latest metadata 조회는 sandbox network에서 사용할 수 없었고, git fetch로 origin/tag만 갱신했다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M17에서 shipped examples를 clean packed consumer로 typecheck해 첫 실패를 기록하고 Prisma 6/7 setup 문서를 실행 가능한 절차로 분리한다.
 ```

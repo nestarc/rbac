@@ -42,6 +42,10 @@ All notable changes to `@nestarc/rbac` will be documented in this file.
 
 ### Changed
 
+- Documented the 0.2.x Guard/decorator/default-resolver contract as Nest HTTP-only.
+  Custom resolver hooks do not imply GraphQL, RPC, or WebSocket support;
+  application-owned integrations should call the transport-neutral `RbacService`
+  until a carrier abstraction and real transport E2E fixtures exist.
 - Deprecated the unused decorator `reason` option, the three decision reasons with
   no service producer, unpopulated decision-detail fields, and the dormant
   `RbacPermissionNotFoundError` / `RbacBindingNotFoundError` classes. No exported

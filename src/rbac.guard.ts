@@ -82,6 +82,7 @@ const isClassResolverToken = (resource: unknown): resource is RbacResourceResolv
 const isStringOrSymbolResolverToken = (resource: unknown): resource is RbacResourceResolverToken =>
   typeof resource === 'string' || typeof resource === 'symbol';
 
+/** Nest HTTP authorization guard. Other transports should call `RbacService` from their adapter. */
 @Injectable()
 export class RbacGuard implements CanActivate {
   constructor(

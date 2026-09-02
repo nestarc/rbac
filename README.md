@@ -9,7 +9,7 @@ from authentication. Your auth stack identifies the request subject, and RBAC de
 whether that subject has a tenant, global, or resource-scoped role with the required
 permission.
 
-- Works with route guards and service-level checks.
+- Works with Nest HTTP route guards and transport-neutral service-level checks.
 - Supports tenant-required, tenant-optional, and global-only decisions.
 - Handles exact permissions, suffix wildcards such as `reports.*`, and `*`.
 - Keeps persistence optional with in-memory storage for tests and Prisma/PostgreSQL
@@ -173,6 +173,15 @@ export class ReportsController {
 Use `@Can()` or `@RequirePermissions()` for permissions, `@RequireRole()` for role
 keys, and `@SkipRbac()` for health checks or public routes. See
 [docs/guards.md](docs/guards.md).
+
+The 0.2.x `RbacGuard`, route/parameter decorator pipeline, built-in resource
+declarations, and default/integration resolvers support Nest HTTP requests only.
+Custom resolvers can change how that HTTP pipeline obtains trusted values, but do
+not make the complete Guard work on GraphQL, RPC, or WebSockets. For another
+transport, extract its carrier values in application-owned code and call
+`RbacService.can()` or `assertCan()`. Those transports remain unverified and are
+not package-supported Guard integrations. See the
+[transport contract ADR](docs/adr/0003-http-transport-contract.md).
 
 The default HTTP subject resolver reconciles valid `request.rbacSubject`,
 `request.user`, and API-key identities by exact `(type, id, tenantId)`. Conflicting

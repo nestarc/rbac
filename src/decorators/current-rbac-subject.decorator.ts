@@ -3,6 +3,7 @@ import { RBAC_SUBJECT_REQUEST_KEY } from '../constants';
 import type { ExecutionContext } from '@nestjs/common';
 import type { RbacSubject } from '../interfaces';
 
+/** Reads the subject stored by `RbacGuard` on the current Nest HTTP request. */
 export const CurrentRbacSubject = createParamDecorator(
   (_data: unknown, context: ExecutionContext): RbacSubject | undefined => {
     const request = context

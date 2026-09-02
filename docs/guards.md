@@ -1,7 +1,24 @@
 # Guards
 
-`RbacGuard` evaluates route metadata created by the RBAC decorators. It can be used
-directly on controllers and handlers or registered as a global NestJS `APP_GUARD`.
+`RbacGuard` evaluates route metadata created by the RBAC decorators. In 0.2.x it is
+an HTTP-only Guard: it can be used directly on HTTP controllers and handlers or
+registered as a global NestJS `APP_GUARD` for an HTTP application.
+
+## Transport Support
+
+The complete Guard pipeline depends on `switchToHttp().getRequest()` to resolve
+and store the subject, reconcile tenant request/header sources, resolve built-in
+route/query/header resources, implement `@CurrentRbacSubject()`, and return HTTP
+exceptions. A custom subject, tenant, or resource resolver changes one value source
+inside that pipeline; it does not enable GraphQL, RPC, or WebSocket support.
+
+`RbacService.can()` and `assertCan()` accept plain authorization inputs and remain
+transport-neutral. Applications using another transport should extract and
+validate its carrier values in their own guard or adapter, call the service, and
+translate the result to that transport's error model. The package does not claim
+GraphQL, RPC, or WebSocket support without real end-to-end coverage. See
+[ADR 0003](adr/0003-http-transport-contract.md) for the dependency inventory and
+future carrier-abstraction acceptance criteria.
 
 ## Route-Level Guards
 

@@ -5,6 +5,20 @@ repository has actually exercised. A peer range means npm may install that versi
 it does not claim that every Cartesian combination of Node, NestJS, Prisma, and the
 optional Nestarc packages has an independent test lane.
 
+## Transport policy
+
+| Surface | 0.2.x support | Evidence |
+| --- | --- | --- |
+| `RbacService.can()` / `assertCan()` | Transport-neutral plain-input authorization API | Unit and storage contracts |
+| `RbacGuard`, decorators, built-in resources, default/integration resolvers | Nest HTTP requests only | Nest HTTP E2E and packed consumers |
+| GraphQL, RPC, and WebSocket Guard integrations | Unsupported and unverified | No package adapter or transport E2E |
+
+Custom resolvers receive Nest's general `ExecutionContext`, but the surrounding
+Guard still accesses an HTTP request and emits HTTP exceptions. Another transport
+must use application-owned extraction/error mapping around `RbacService` until a
+carrier abstraction and real transport E2E fixtures are added. See
+[ADR 0003](adr/0003-http-transport-contract.md).
+
 ## Runtime and maintainer Node policy
 
 | Concern | 0.2.x contract | Evidence | Next compatibility action |
