@@ -1,5 +1,12 @@
 # RBAC MVP Core Implementation Plan
 
+> [!WARNING]
+> **Historical/superseded execution plan.** The work described here has shipped. Keep
+> the original instructions and unchecked boxes as an implementation record; do not
+> execute them or treat them as active backlog. Use the
+> [canonical maintenance queue](https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
+> for current tasks.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `@nestarc/rbac` Milestone 0-2: package skeleton, public interfaces, in-memory RBAC engine, NestJS decorators, resolvers, guard, module, and HTTP E2E coverage.

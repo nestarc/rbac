@@ -53,6 +53,12 @@ Before enabling it globally:
 3. Confirm auth or tenancy middleware resolves tenant context before RBAC runs.
 4. Add denial tests for missing subject, missing tenant, missing resource, and missing permission.
 
+The helper preserves explicit overrides, so teams can migrate one default at a
+time. It enables `requireMetadata`, tenant-required defaults, tenant mismatch and
+resource-without-tenant write validation, and denied storage-error behavior. It
+does not change API-key/tenant source reconciliation or effective storage-row
+validation; those fail-closed boundaries apply to both plain and strict options.
+
 ## Use Audit-Log Integration
 
 The audit-log adapter is available from an optional subpath:

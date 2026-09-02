@@ -1,5 +1,12 @@
 # Technical Spec: `@nestarc/rbac` 0.2.0
 
+> [!WARNING]
+> **Historical/superseded implementation specification.** Version 0.2.0 has shipped,
+> and this draft is preserved as design history rather than a current behavior contract
+> or backlog. Use the [README](../README.md), the public docs in this directory, and the
+> [canonical maintenance queue](https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
+> for current behavior and work status.
+
 **Status:** Draft for implementation planning  
 **Date:** 2026-06-20  
 **Source:** `docs/spec.md`, `docs/prd.md`, repository audit, external ecosystem research  

@@ -168,8 +168,8 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 12A | `RBAC-M12A` | P2 | `DONE` | S | 없음 | lock-safe dev advisory 갱신 |
 | 12B | `RBAC-M12B` | P2 | `DONE` | S | `RBAC-M12A` | esbuild parent-tool upgrade/제한 override |
 | 12C | `RBAC-M12C` | P2 | `DONE` | S | `EXT-PRISMA7-AUDIT-FIX` | Prisma→deepmerge-ts upstream 추적 |
-| 13A | `RBAC-M13A` | P2 | `READY` | S | 없음 | 역사 문서 배너와 canonical queue link |
-| 13B | `RBAC-M13B` | P2 | `READY` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
+| 13A | `RBAC-M13A` | P2 | `DONE` | S | 없음 | 역사 문서 배너와 canonical queue link |
+| 13B | `RBAC-M13B` | P2 | `DONE` | S | `RBAC-M01`, `RBAC-M02`, `RBAC-M03`, `RBAC-M09` | support/trust 문서 동기화 |
 | 14 | `RBAC-M14` | P2 | `READY` | M | `RBAC-M03`, `RBAC-M07` | public decision/error 계약 ADR |
 | 15 | `RBAC-M15` | P2 | `READY` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
 | 16 | `RBAC-M16` | P2 | `DECISION` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
@@ -492,23 +492,23 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M13A` — 문서 권위와 history 정리
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 
 완료 조건:
 
-- [ ] 이 문서를 canonical maintenance queue로 README에 연결한다. 계획 파일이 package `files` allowlist 밖에 있으면 npm 상대 경로가 아닌 absolute GitHub link를 사용한다.
-- [ ] PRD/spec의 이미 구현된 항목과 오래된 `[ ]`에 historical/superseded 배너를 붙인다.
-- [ ] 역사 문서를 삭제하지 않는다.
+- [x] 이 문서를 canonical maintenance queue로 README에 연결한다. 계획 파일은 package `files` allowlist 밖에 있으므로 absolute GitHub link를 사용했다.
+- [x] PRD/spec 3개와 과거 실행 계획 3개에 historical/superseded 배너를 붙였다. 실행 계획의 오래된 미체크 항목 176개는 역사 기록으로 보존했다.
+- [x] 역사 문서를 삭제하지 않았다.
 
 ### `RBAC-M13B` — support/trust 문서 동기화
 
-- 상태: `P2 / READY`
+- 상태: `P2 / DONE`
 
 완료 조건:
 
-- [ ] 완료된 support matrix와 actual gate를 README/docs에 동기화한다.
-- [ ] tenant/API-key/storage trust boundary와 default/strict 차이를 migration-safe하게 설명한다.
-- [ ] 아직 구현되지 않은 미래 동작을 현재 보장처럼 쓰지 않는다.
+- [x] 완료된 Node 22/24, Nest 10.4.22/11.2.1, Prisma 5.22.0/6.19.3/7.10.0 support matrix와 실제 CI/release gate를 README와 compatibility 문서에 동기화했다.
+- [x] tenant/API-key/storage trust boundary와 plain/strict 차이를 README, Prisma, migration 문서에 migration-safe하게 설명했다.
+- [x] 전체 Cartesian matrix, automated audit, pack-once/publish-same-tarball, 미래 release provenance를 현재 보장으로 쓰지 않고 명시적 비보장/future gate로 남겼다.
 
 ### `RBAC-M14` — public decision/error 계약 ADR
 
@@ -792,6 +792,8 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M12A`: lock-safe dev dependency patch와 production/full audit snapshot.
 - [x] `RBAC-M12B`: tsup-scoped esbuild 0.28.2 override, profile A/B/D와 pre/post artifact equality.
 - [x] `RBAC-M12C`: Prisma-config-scoped deepmerge-ts 8.0.2 override, config/generate와 Prisma 7 real-DB contract.
+- [x] `RBAC-M13A`: 역사 문서 6개의 권위 배너, 176개 미체크 기록 보존, absolute canonical queue link.
+- [x] `RBAC-M13B`: README/docs support·actual gate 및 tenant/API-key/storage trust/default-strict 계약.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -800,9 +802,9 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M12 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M12C`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M13A`만 선택한다.
-3. README와 역사 문서의 unchecked 항목을 목록화하고 canonical queue link 및 historical/superseded 배너를 먼저 작성한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M13 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M13B`를 반복하지 않고 실행 큐의 다음 항목인 `RBAC-M14`만 선택한다.
+3. exported requirement reason, decision reason/detail, not-found error의 실제 생성/소비 여부를 `rg`와 public type fixture로 먼저 분류한다.
 4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
 5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. audit 0 snapshot을 자동 정책으로 옮기는 일은 M19A 소유다.
 
@@ -827,6 +829,8 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-01 | `RBAC-M12A` | `DONE` | `main@1c4842b` | uncommitted working tree | lock-safe 5경로만 patch해 full audit 9→4, production 0 유지; A/D audit PASS | `RBAC-M12B` tsup/esbuild 결정 |
 | 2026-09-01 | `RBAC-M12B` | `DONE` | `main@1c4842b` | uncommitted working tree | tsup-scoped esbuild 0.28.2 override, A/B/D와 packed consumers PASS, 0.27.7 대비 dist byte-identical | `RBAC-M12C` Prisma/deepmerge-ts 결정 |
 | 2026-09-01 | `RBAC-M12C` | `DONE` | `main@1c4842b` | uncommitted working tree | @prisma/config 7.10.0-scoped deepmerge-ts 8.0.2 override, full/production audit 0, config/generate/cycle/PG16 34/34 PASS | `RBAC-M13A` 역사 문서 배너와 canonical queue link 시작 |
+| 2026-09-02 | `RBAC-M13A` | `DONE` | `main@a51d33f` | uncommitted working tree | 역사 문서 6개 배너, 계획 checkbox 176개 보존, absolute canonical queue link와 package exclusion 확인 | `RBAC-M13B` support/trust 동기화 |
+| 2026-09-02 | `RBAC-M13B` | `DONE` | `main@a51d33f` | uncommitted working tree | actual CI/release matrix, plain/strict 및 tenant/API-key/storage trust 계약 동기화; A/D docs 검증 PASS | `RBAC-M14` public decision/error 계약 ADR 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1022,4 +1026,32 @@ Commands and exact results: npm ls/npm explain에서 prisma 7.10.0 → @prisma/c
 Unverified paths and reason: Prisma 5/6은 override가 exact @prisma/config 7.10.0에만 적용되므로 재실행하지 않았다. upstream Prisma 자체의 deepmerge-ts bump는 아직 게시되지 않았다.
 External PR/release evidence: Prisma upstream issue #30052는 2026-09-01 조회 시 open이고 Prisma 7.10.0 package는 deepmerge-ts 7.1.5를 exact pin한다. 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M13A에서 역사 문서 배너와 canonical maintenance queue link를 추가한다.
+```
+
+### 2026-09-02 RBAC-M13A 인계
+
+```text
+Task: RBAC-M13A
+State: DONE
+Start ref / end ref: main@a51d33f / main@a51d33f + uncommitted RBAC-M13A/B working tree
+Changed files: README.md, docs/prd.md, docs/spec.md, docs/spec-0.2.0.md, docs/superpowers/plans/2026-06-02-rbac-mvp-core.md, docs/superpowers/plans/2026-06-03-rbac-milestones-3-5.md, docs/superpowers/plans/2026-06-20-rbac-0-2-core.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md
+Contract decision: README와 현재 공개 docs, changelog, 이 maintenance queue가 현재 계약/작업 상태의 권위다. PRD/spec 3개와 과거 실행 계획 3개는 삭제·재작성하지 않고 historical/superseded 설계 기록으로 보존한다. 계획에 남은 미체크 176개는 완료 상태를 추적하는 backlog가 아니므로 체크 상태도 역사 그대로 유지한다. maintenance queue는 npm package files allowlist 밖에 있으므로 published README에서도 유효하도록 https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md absolute link를 사용한다.
+Commands and exact results: historical inventory PASS (PRD/spec 3개, plan 3개; plan unchecked 65+77+34=176); documentation contract PASS (6 historical banners, checkbox preservation, absolute queue link, package exclusion); local Markdown target scan PASS (README와 top-level public docs 12개); npm run lint PASS; npm run typecheck PASS; npm test PASS (14 files, 313 tests); npm pack --dry-run --json PASS (77 files, 247665 bytes); git diff --check PASS. 최초 sandbox pack은 ~/.npm cache EPERM으로 실패했고 동일 명령을 허용된 환경에서 재실행해 통과했다.
+Unverified paths and reason: historical 문서 본문의 오래된 예제/설계 주장을 현재 코드와 줄 단위로 갱신하지 않았다. 배너 목적은 본문을 현재 계약으로 오인하지 않게 하는 것이며, 본문 수정은 역사 기록을 훼손한다. 실제 GitHub 렌더링은 새 commit/PR이 없으므로 실행하지 않았다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M13B에서 완료된 support matrix와 trust/default-strict 계약을 public README/docs에 동기화한다.
+```
+
+### 2026-09-02 RBAC-M13B 인계
+
+```text
+Task: RBAC-M13B
+State: DONE
+Start ref / end ref: main@a51d33f / main@a51d33f + uncommitted RBAC-M13A/B working tree
+Changed files: README.md, docs/compatibility.md, docs/migration-0.2.0.md, docs/prisma.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md
+Contract decision: installable peer range와 exact automated evidence를 분리하고, Node 22/24 source/modern packed lanes, Nest 10.4.22/11.2.1 packed lanes, Prisma 5.22.0/6.19.3/7.10.0 PostgreSQL 16 lanes 및 release ancestry/publish dependencies만 현재 gate로 공개한다. 전체 Cartesian matrix, automated audit, pack-once/publish-same-tarball, 미래 release provenance는 보장하지 않는다. tenant/API-key source conflict와 effective storage-row validation은 plain/strict 모두 적용한다. strict helper는 별도 engine이 아니라 missing metadata/tenant와 write-validation default를 단계적으로 강화하며 explicit override를 보존한다. custom subject resolver와 custom storage는 각각 credential/identity 및 subject/revocation provenance를 책임지는 신뢰 경계로 명시한다.
+Commands and exact results: documentation support/workflow parity contract PASS; local Markdown target scan PASS (12 docs); README formatting check PASS; npm run lint PASS; npm run typecheck PASS; npm test PASS (14 files, 313 tests); npm pack --dry-run --json PASS after build (77 files, 247665 bytes; README, compatibility, migration, Prisma docs 포함; maintenance queue 제외); git diff --check PASS. package dry-run 최초 시도는 sandbox npm cache EPERM 후 허용된 재실행에서 통과했다.
+Unverified paths and reason: 문서 전용 변경이므로 PostgreSQL/packed consumer를 다시 실행하지 않았다. 공개한 exact matrix는 이미 자동화된 CI/release workflow와 기존 M09-M11 완료 증거를 대조했다. 실제 GitHub Actions release event와 npm publish는 새 release를 만들지 않아 실행하지 않았다.
+External PR/release evidence: 없음. 현재 결과는 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M14에서 exported requirement reason, decision reason/detail, not-found error의 실제 생성/소비 상태를 표로 만들고 public decision/error 계약 ADR을 작성한다.
 ```

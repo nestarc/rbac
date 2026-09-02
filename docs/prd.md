@@ -1,5 +1,13 @@
 # PRD: `@nestarc/rbac`
 
+> [!WARNING]
+> **Historical product input.** This document predates the shipped 0.2.x implementation
+> and is preserved for design history. Its status text and implementation directions
+> are not the current backlog or behavior contract. Use the [README](../README.md),
+> the public docs in this directory, and the
+> [canonical maintenance queue](https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
+> for current behavior and work status.
+
 **문서 버전:** 1.0  
 **작성일:** 2026-06-02  
 **대상 패키지:** `@nestarc/rbac`  

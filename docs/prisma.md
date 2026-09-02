@@ -70,6 +70,27 @@ const storage = new PrismaRbacStorage(prisma);
 Prisma 5 and 6 consumers can keep the `prisma-client-js` generator, datasource
 URL in the schema, and their existing `new PrismaClient()` setup.
 
+## Storage Trust Boundary
+
+Both built-in adapters implement the package storage contract. A custom
+`RbacStorage` is still a trusted authorization dependency: it must execute lookups
+for the requested subject, omit revoked bindings, protect its connection, and
+control any adapter side effects.
+
+`RbacService` defensively rechecks effective roles and permissions before using
+them. A returned row is eligible only when its tenant/global provenance matches
+the query, its optional expiry is a finite `Date` that is not earlier than the
+decision time, its resource scope is a complete matching pair, and its identifiers
+and permission shape are canonical. `expiresAt === now` remains active; only
+`expiresAt < now` is expired. Tenant checks query global rows only when
+`tenant.allowGlobalRolesInTenant` is explicitly enabled.
+
+This validation does not turn an arbitrary adapter into an untrusted sandbox. The
+effective-row interface contains neither the queried subject nor `revokedAt`, so
+RBAC cannot independently verify subject provenance or revocation. Custom adapters
+must preserve those filters and should run the shared storage contract. Invalid or
+out-of-scope rows fail closed rather than being silently repaired.
+
 ## Mutation Outcomes And Concurrency
 
 `PrismaRbacStorage` implements the optional outcome-aware mutation capability

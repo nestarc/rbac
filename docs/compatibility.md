@@ -34,6 +34,23 @@ maintainer environment, while the Nest 10 packed lane does not install Prisma.
 These lanes do not independently prove every Nest 10/11, Prisma 5/6/7, and Node
 22/24 pairing.
 
+## Actual CI and release gates
+
+| Gate | Runtime | What it verifies |
+| --- | --- | --- |
+| Source verification | Node 22 and 24 | Exact modern maintainer dependencies, Prisma generation, lint, typecheck, unit/contract tests, HTTP E2E, build, and coverage |
+| Modern packed consumer | Node 22 and 24 | Exact NestJS 11.2.1, Prisma 7.10.0, and API Keys 0.3.2 under a strict peer install; CJS, ESM, declarations, runtime behavior, and canonical/legacy API-key conflict handling |
+| NestJS 10 packed consumer | Node 24 | Exact NestJS 10.4.22 under a strict peer install; CJS, ESM, Nest dependency injection, and declarations |
+| Prisma integration | Node 24 and PostgreSQL 16 | The 34-test storage contract with exact Prisma 5.22.0, 6.19.3, and 7.10.0, with no skipped tests |
+| Release target | Node 24 | Release tag/package version agreement, tag checkout identity, release target resolution, and tag-to-target-to-`main` ancestry |
+| Release publish | Node 24 | Repeats source, packed-consumer, and Prisma lanes on the tag, then runs `npm pack --dry-run` before npm publishing |
+
+The release workflow does not currently run dependency audits or publish a single
+previously verified tarball; `npm pack --dry-run` and `npm publish` each prepare the
+package. Those are future maintenance gates, not current guarantees. The published
+0.2.1 package has provenance, but preservation and artifact-link verification must
+be repeated for each future release.
+
 ## Optional Nestarc peers and imports
 
 | Peer | Declared range | Evidence and boundary |

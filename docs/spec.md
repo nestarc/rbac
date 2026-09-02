@@ -1,5 +1,13 @@
 # Technical Spec: `@nestarc/rbac`
 
+> [!WARNING]
+> **Historical/superseded implementation specification.** This document is preserved
+> as design history and may describe already-shipped or subsequently changed behavior.
+> Its “Ready for implementation planning” status is not a current task state. Use the
+> [README](../README.md), the public docs in this directory, and the
+> [canonical maintenance queue](https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
+> for the current contract and backlog.
+
 **Status:** Ready for implementation planning  
 **Date:** 2026-06-02  
 **Source:** `docs/prd.md`  

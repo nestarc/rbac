@@ -44,6 +44,24 @@ documented in [docs/compatibility.md](docs/compatibility.md). Peer ranges descri
 install compatibility; the exact combinations listed there are the combinations
 continuously or explicitly verified by this repository.
 
+| Maintained axis   | Exact automated evidence                                             |
+| ----------------- | -------------------------------------------------------------------- |
+| Node.js           | Source and strict packed-consumer gates on Node 22 and 24            |
+| NestJS            | Nest 10.4.22 packed on Node 24; Nest 11.2.1 packed on Node 22 and 24 |
+| Prisma/PostgreSQL | Prisma 5.22.0, 6.19.3, and 7.10.0 adapter contracts on PostgreSQL 16 |
+
+These are representative lanes, not a promise that every Cartesian combination
+has a separate test. Release publishing repeats the compatibility lanes and first
+checks that the release tag, target, package version, and `main` ancestry agree.
+
+## Maintenance Status
+
+The repository's
+[canonical maintenance queue](https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
+is the source of truth for current work. Older PRDs, specifications, and execution
+plans are retained as historical design records; their status labels and unchecked
+boxes are not active backlog.
+
 ## Quickstart
 
 ```ts
@@ -118,6 +136,22 @@ RbacModule.forRoot(
 The helper enables `requireMetadata`, tenant-required defaults, tenant boundary
 write validation, and denied storage-error behavior. Explicit overrides remain
 available for routes or apps that need compatibility behavior.
+
+The preset does not create a separate authorization engine. Source-conflict and
+custom-storage output checks apply in both default and strict configurations; the
+preset changes the missing-metadata, missing-tenant, and write-validation defaults:
+
+| Behavior                                    | Plain `RbacModule.forRoot()`                | `createStrictRbacOptions()`                                              |
+| ------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| Route without RBAC metadata                 | Allowed unless `requireMetadata` is enabled | Denied unless explicitly overridden; use `@SkipRbac()` for public routes |
+| Requirement without an explicit tenant mode | Tenant-optional                             | Tenant-required                                                          |
+| Global roles during tenant checks           | Disabled unless explicitly enabled          | Disabled unless explicitly overridden                                    |
+| Storage errors during decisions             | Denied unless `storageErrors: 'throw'`      | Denied unless explicitly overridden                                      |
+| Tenant/resource write validation            | Opt-in flags                                | Tenant mismatch and resource-without-tenant checks enabled               |
+
+Adopt the preset incrementally and test existing public routes and data before
+turning it on application-wide. See the
+[0.2 migration guide](docs/migration-0.2.0.md#adopt-strict-options).
 
 ## Protecting Routes
 
@@ -384,6 +418,23 @@ RbacModule.forRoot({
   },
 });
 ```
+
+## Trust Boundaries
+
+RBAC authorizes an identity supplied by the application; it does not authenticate
+credentials or establish tenant membership. The boundaries are:
+
+| Boundary              | Application or adapter responsibility                                                                                                                                       | RBAC enforcement                                                                                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Subject carriers      | Auth code validates credentials and writes `request.rbacSubject`, `request.user`, or canonical `request.apiKey`; a custom `subjectResolver` must return a trusted identity. | Default HTTP subject carriers must agree on exact `(type, id, tenantId)`. Conflicts or malformed API-key carriers fail closed. A configured custom subject resolver is authoritative and is not reconciled with default carriers.                           |
+| Tenant carriers       | Tenancy/auth middleware owns the configured resolver and any request/header tenant values. A client-controlled header is not trusted merely because it exists.              | A configured tenant resolver is authoritative by default and its `string`/`null` result must agree with populated HTTP sources; `undefined` delegates to consistent HTTP sources. Conflicts fail closed.                                                    |
+| API-key compatibility | API-key auth validates the key and writes `request.apiKey`. Custom or stale middleware must migrate away from `request.apiKeyContext`.                                      | Canonical and legacy records must agree exactly when both exist. IDs are opaque strings and are not trimmed, normalized, case-folded, or coerced.                                                                                                           |
+| Storage results       | A custom `RbacStorage` must query the requested subject and omit revoked rows; secure transport and side effects remain adapter concerns.                                   | Effective rows are rechecked for tenant/global scope, finite expiry, resource shape, canonical identifiers, and permission shape before use. The effective-row interface has no subject or `revokedAt`, so RBAC cannot independently prove those two facts. |
+
+These checks apply to both plain and strict options. Detailed HTTP source behavior
+is in [docs/guards.md](docs/guards.md); API-key and tenancy integration behavior is
+in [docs/integrations.md](docs/integrations.md); custom storage limits are in
+[docs/prisma.md](docs/prisma.md#storage-trust-boundary).
 
 ## Security Notes
 
