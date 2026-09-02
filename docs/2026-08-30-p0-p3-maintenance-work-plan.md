@@ -144,7 +144,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | --- | --- | --- |
 | `TEN-M21` | `DONE` | 역사적 published-only full-flow를 tenancy 0.15.0/API Keys 0.3.2/RBAC 0.2.1/Nest 11.2.1/Prisma 7.10.0 tuple에서 완료했고 재개하지 않는다. 이후 tenancy `v0.16.0`/현재 main(`91b9fb7`)도 published tuple을 다시 검증했다. 최종 기록에는 API Keys `a24fe1d`, RBAC `69bf0e1`, Outbox `873f95b`, Webhook `60b2725`, Jobs `405e799`, modern/legacy E2E 각 3/3, targeted 38, unit 56 files/908 tests가 남아 있다. |
 | `TEN-ECO-NEXT` | `EXTERNAL` | 향후 RBAC/API Keys patch가 npm에 게시된 뒤 tenancy가 새 exact published tuple을 pin해 post-publish E2E를 수행한다. 어떤 pre-publish RBAC task도 이를 선행 조건으로 삼지 않는다. |
-| `EXT-SECURITY-CHANNEL` | `EXTERNAL` | 저장소 관리자가 실제 비공개 신고 채널과 지원 release line을 확정한다. |
+| `EXT-SECURITY-CHANNEL` | `DONE` | GitHub private vulnerability reporting을 `nestarc/rbac`에서 활성화했고 조직의 실제 fallback 주소 `security@nestarc.dev`를 확인했다. pre-1.0 정책은 최신 published minor line만 지원하므로 현재 지원 line은 `0.2.x`다. `main`에는 direct push를 유지하면서 force-push와 deletion을 막는 최소 branch protection을 적용했다. |
 | `EXT-PRISMA7-AUDIT-FIX` | `DONE` | Prisma 7.10.0 자체는 아직 `deepmerge-ts@7.1.5`를 고정하지만, `@prisma/config@7.10.0`에만 적용한 `deepmerge-ts@8.0.2` override가 config load/generate, 순환 객체 회귀, PostgreSQL 16 migration과 34/34 storage contract를 통과해 로컬 안전 근거를 충족했다. upstream [issue #30052](https://github.com/prisma/orm/issues/30052)가 해결된 Prisma release로 이동할 때 override를 제거한다. |
 | `EXT-PRISMA8-STABLE` | `EXTERNAL` | Prisma 8 stable과 공식 migration contract가 게시된다. 현재 latest 조회값은 `8.0.0-rc.12`이므로 충족되지 않았다. |
 
@@ -174,7 +174,7 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 15 | `RBAC-M15` | P2 | `DONE` | M | `RBAC-M07` | indexed role lookup으로 전체 scan 제거 |
 | 16 | `RBAC-M16` | P2 | `DONE` | M | `RBAC-M01`, `RBAC-M05` | HTTP-only transport 계약 또는 carrier abstraction |
 | 17 | `RBAC-M17` | P2 | `DONE` | S | 없음 | examples/Prisma docs executable smoke |
-| 18 | `RBAC-M18` | P2 | `BLOCKED` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
+| 18 | `RBAC-M18` | P2 | `DONE` | M | `EXT-SECURITY-CHANNEL` | SECURITY와 reporting 경로 |
 | 19A | `RBAC-M19A` | P2 | `READY` | S | `RBAC-M12A`, `RBAC-M12B` | audit automation과 만료형 예외 정책 |
 | 19B | `RBAC-M19B` | P2 | `READY` | S | 없음 | Actions pinning과 dependency bot |
 | 20A | `RBAC-M20A` | P3 | `READY` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
@@ -558,14 +558,14 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M18` — SECURITY와 reporting
 
-- 상태: `P2 / BLOCKED (EXT-SECURITY-CHANNEL)`
+- 상태: `P2 / DONE (EXT-SECURITY-CHANNEL)`
 
 완료 조건:
 
-- [ ] `SECURITY.md`에 supported release, 비공개 신고 경로, response 범위, 공개 PoC 주의를 기록한다.
-- [ ] tenant/header/subject/storage를 trusted/untrusted boundary로 설명한다.
-- [ ] 존재하지 않는 이메일/SLA를 발명하지 않는다.
-- [ ] private vulnerability reporting과 repository protection을 관리자 권한에서 결정한다.
+- [x] `SECURITY.md`에 supported release, 비공개 신고 경로, response 범위, 공개 PoC 주의를 기록한다.
+- [x] tenant/header/subject/storage를 trusted/untrusted boundary로 설명한다.
+- [x] 존재하지 않는 이메일/SLA를 발명하지 않는다.
+- [x] private vulnerability reporting과 repository protection을 관리자 권한에서 결정한다.
 
 ### `RBAC-M19A` — audit automation과 예외 정책
 
@@ -799,6 +799,7 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M15`: optional indexed role-ID lookup, built-in/custom capability contract, legacy scan fallback과 packed public type fixture.
 - [x] `RBAC-M16`: 0.2.x Guard/decorator/default resolver HTTP-only 계약, transport-neutral service 경계와 future carrier acceptance ADR.
 - [x] `RBAC-M17`: packed tarball의 shipped example 7개 typecheck와 Prisma 6/7 URL→generate→migrate→test 문서/real-DB contract.
+- [x] `RBAC-M18`: 최신 published minor `0.2.x` 지원, GitHub private reporting와 `security@nestarc.dev` fallback, subject/tenant/header/API-key/storage trust boundary, 최소 `main` protection.
 - [ ] `RBAC-M19A`: production audit와 만료형 full-audit exception automation.
 - [ ] `RBAC-M19B`: Actions/dependency automation policy.
 - [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
@@ -807,8 +808,8 @@ Tenancy ecosystem: published exact tuple E2E
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M17 working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M17`을 반복하지 않는다. `RBAC-M18`은 외부 security channel 결정 전까지 건너뛰고 실행 가능한 다음 항목 `RBAC-M19A`만 선택한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M18 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M18`을 반복하지 않고 실행 가능한 다음 항목 `RBAC-M19A`를 선택한다.
 3. production/full audit의 자동 실패 조건과 owner/review-date가 있는 만료형 exception 형식을 먼저 작성한다. 2026-09-02 RBAC-M17 종료 시 production audit은 0이고 full audit은 Prisma dev-tool의 `mysql2<3.22.0` 경로 high 2건이다.
 4. M12의 exact override는 `tsup@8.5.1`과 `@prisma/config@7.10.0`에만 적용된다. parent tool 또는 Prisma를 갱신할 때 upstream fixed dependency를 재조회하고, 안전한 parent release가 제공되면 override를 제거한다.
 5. `RBAC-M19A`는 M12A/B 완료로 `READY`지만 실행 큐 순서를 유지한다. 2026-09-02 M14 검증에서 production audit은 0이었고 full audit에는 Prisma dev-tool의 `mysql2<3.22.0` 새 high advisory 2건이 나타났다. 자동 정책과 만료형 예외는 M19A에서 재분류한다.
@@ -840,6 +841,7 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M15` | `DONE` | `main@05838fc` | uncommitted working tree | optional `findRoleById`, InMemory Map/Prisma PK query, custom capability와 deprecated legacy scan fallback; A/B/C2/D PASS | `RBAC-M16` transport 계약 결정 시작 |
 | 2026-09-02 | `RBAC-M16` | `DONE` | `main@8052a9a` | uncommitted working tree | 0.2.x HTTP-only Guard 계약, transport-neutral service 경계, future carrier acceptance; A/C1/D PASS | `RBAC-M17` executable examples/Prisma setup 시작 |
 | 2026-09-02 | `RBAC-M17` | `DONE` | `main@c532472` | uncommitted working tree | packed example source 7개 typecheck, Prisma 6/7 copyable setup과 PostgreSQL 16 36/36 skip 0; A/B/C2/C3/D PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 (`RBAC-M18`은 external blocker 유지) |
+| 2026-09-02 | `RBAC-M18` | `DONE` | `main@e11468b` | uncommitted working tree + GitHub settings | `SECURITY.md`, private reporting enabled, `main` force-push/deletion protection, supported line/reporting/trust boundary 문서 검증 PASS | `RBAC-M19A` audit automation/만료형 예외 정책 시작 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1119,4 +1121,18 @@ Commands and exact results: git fetch --prune --tags PASS after sandbox FETCH_HE
 Unverified paths and reason: Node 22 packed example runner와 Prisma 5.22.0 real-DB lane은 로컬에서 재실행하지 않았다. 두 경로는 기존 CI/release gate이며 M17은 runtime/storage/schema를 변경하지 않았다. Node 24 packed tarball과 Prisma 6/7 문서 대상 real-DB 절차를 직접 검증했다.
 External PR/release evidence: 없음. 공개 기준은 계속 GitHub/npm v0.2.1이고 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M18은 EXT-SECURITY-CHANNEL 전까지 BLOCKED로 유지하고, RBAC-M19A에서 production audit 0 자동 gate와 owner/review-date가 만료되면 실패하는 full-audit exception 형식을 먼저 작성한다.
+```
+
+### 2026-09-02 RBAC-M18 인계
+
+```text
+Task: RBAC-M18
+State: DONE
+Start ref / end ref: main@e11468b / main@e11468b + uncommitted RBAC-M18 working tree; GitHub settings updated in place
+Changed files: SECURITY.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md; external settings: GitHub private vulnerability reporting and main branch protection
+Contract decision: pre-1.0 security support는 최신 published minor line 하나만 제공하므로 현재 v0.2.1이 속한 0.2.x만 지원하고 0.1.x 이하는 upgrade 대상이다. 우선 비공개 신고 경로는 이 저장소의 GitHub private vulnerability reporting이며, 같은 Nestarc 조직에서 이미 운영 중인 security@nestarc.dev를 실제 fallback으로 사용한다. 고정 acknowledgement/remediation SLA는 두지 않는다. main 보호는 현재 직접 push 운영을 보존하되 force-push와 deletion을 금지하고, required review/status gate는 M19B의 workflow hygiene 범위와 별도 결정으로 남긴다. SECURITY.md는 인증 전제, subject, tenant/request/header, canonical/legacy API-key carrier, custom storage를 명시적 신뢰 경계로 설명한다.
+Commands and exact results: git fetch --prune --tags PASS; start HEAD e11468b, origin/main 69bf0e1, GitHub latest release v0.2.1 확인; initial GitHub GET은 private vulnerability reporting false와 main protection 404를 확인; 같은 조직 nestjs-tenancy SECURITY.md에서 security@nestarc.dev와 latest-published-minor 정책 확인; private vulnerability reporting PUT PASS 및 final GET enabled=true; main protection PUT PASS 및 final GET allow_force_pushes=false, allow_deletions=false, required status/review=null, enforce_admins=false; npx prettier --check SECURITY.md PASS; SECURITY.md local Markdown targets 3/3 PASS; RBAC-M18 plan markers 5/5 PASS; npm run lint PASS; npm run typecheck PASS; npm test PASS (15 files, 320 tests); git diff --check PASS. 최초 combined Prettier check는 새 SECURITY.md와 기존 대형 maintenance table 형식을 함께 지적했고, SECURITY.md만 포맷한 뒤 통과시켰으며 역사 문서 전체의 기계적 재포맷은 피했다. 최초 plan marker inline command는 shell backtick quoting 오류로 실패했고 single-quoted Node command로 재실행해 5/5 통과했다.
+Unverified paths and reason: 실제 vulnerability report나 fallback email은 테스트하지 않았다. 전자는 불필요한 draft advisory를 만들고 후자는 외부 수신자에게 테스트 메일을 보내므로, 관리자 API 상태와 조직의 기존 공개 정책으로 확인했다. 보호 동작을 확인하기 위한 force-push/deletion도 파괴적이므로 실행하지 않고 GitHub branch-protection API를 재조회했다.
+External PR/release evidence: GitHub repository settings는 즉시 적용됐고 private vulnerability reporting enabled=true와 main branch protection을 API로 재확인했다. SECURITY.md와 계획 문서 변경은 아직 commit/PR/release 전 working tree다.
+Next exact action: RBAC-M19A에서 production audit 0 자동 gate와 owner/review-date가 만료되면 실패하는 full-audit exception 형식을 먼저 작성한다.
 ```
