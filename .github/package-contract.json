@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "maxTarballBytes": 300000,
+  "maxUnpackedBytes": 1500000,
+  "allowedPaths": [
+    "LICENSE",
+    "README.md",
+    "changelog.md",
+    "package.json",
+    "dist/**",
+    "docs/adr/0002-public-decision-error-contract.md",
+    "docs/adr/0003-http-transport-contract.md",
+    "docs/compatibility.md",
+    "docs/guards.md",
+    "docs/installation.md",
+    "docs/integrations.md",
+    "docs/migration-0.2.0.md",
+    "docs/prisma.md",
+    "docs/testing.md",
+    "examples/**",
+    "prisma/**"
+  ],
+  "requiredPaths": [
+    "LICENSE",
+    "README.md",
+    "changelog.md",
+    "package.json",
+    "docs/compatibility.md",
+    "docs/guards.md",
+    "docs/installation.md",
+    "docs/integrations.md",
+    "docs/migration-0.2.0.md",
+    "docs/prisma.md",
+    "docs/testing.md",
+    "examples/api-keys/README.md",
+    "examples/basic-http/README.md",
+    "examples/resource-scoped/README.md",
+    "prisma/migrations/0001_init_rbac.sql",
+    "prisma/schema.prisma.example"
+  ]
+}

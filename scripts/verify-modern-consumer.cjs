@@ -1,17 +1,17 @@
 'use strict';
 
 const fs = require('node:fs');
-const { createHash } = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { loadPackageCandidate } = require('./package-candidate.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 const packageJson = readJson(path.join(repositoryRoot, 'package.json'));
 const temporaryPrefix = 'rbac-modern-consumer-';
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), temporaryPrefix));
-const packageDirectory = path.join(temporaryRoot, 'package');
 const consumerDirectory = path.join(temporaryRoot, 'consumer');
+const { manifest: pack, tarballPath } = loadPackageCandidate(process.argv.slice(2), repositoryRoot);
 const exactDependencies = {
   '@nestarc/api-keys': '0.3.2',
   '@nestjs/common': '11.2.1',
@@ -34,36 +34,14 @@ try {
     throw new Error('Modern consumer fixture must run outside the repository tree');
   }
 
-  fs.mkdirSync(packageDirectory);
   fs.mkdirSync(consumerDirectory);
   writeJson(path.join(consumerDirectory, 'package.json'), {
     name: 'rbac-modern-consumer',
     private: true,
   });
 
-  const packResult = spawnNpm(
-    ['pack', '--json', '--ignore-scripts', '--pack-destination', packageDirectory],
-    { cwd: repositoryRoot, encoding: 'utf8', env: process.env },
-  );
-  if (packResult.stderr) process.stderr.write(packResult.stderr);
-  assertCommandSucceeded(packResult, 'npm pack');
-
-  const [pack] = JSON.parse(packResult.stdout);
-  if (
-    pack?.name !== '@nestarc/rbac' ||
-    pack.version !== packageJson.version ||
-    !pack.filename ||
-    !pack.integrity
-  ) {
-    throw new Error('npm pack --json did not return the expected RBAC package identity');
-  }
-
-  const tarballPath = path.join(packageDirectory, pack.filename);
-  const tarballIntegrity = `sha512-${createHash('sha512')
-    .update(fs.readFileSync(tarballPath))
-    .digest('base64')}`;
-  if (tarballIntegrity !== pack.integrity) {
-    throw new Error(`Packed tarball integrity mismatch: ${tarballIntegrity} !== ${pack.integrity}`);
+  if (pack.name !== '@nestarc/rbac' || pack.version !== packageJson.version) {
+    throw new Error('Package candidate does not match the repository package identity');
   }
 
   runNpm(
@@ -102,9 +80,17 @@ try {
       "require('reflect-metadata');",
       "const rbac = require('@nestarc/rbac');",
       "const prisma = require('@nestarc/rbac/prisma');",
+      "const testing = require('@nestarc/rbac/testing');",
+      "const tenancy = require('@nestarc/rbac/integrations/tenancy');",
+      "const apiKeys = require('@nestarc/rbac/integrations/api-keys');",
+      "const auditLog = require('@nestarc/rbac/integrations/audit-log');",
       "const nestCore = require('@nestjs/core');",
       "if (typeof rbac.RbacModule !== 'function') throw new Error('missing RbacModule');",
       "if (typeof prisma.PrismaRbacStorage !== 'function') throw new Error('missing PrismaRbacStorage');",
+      "if (typeof testing.expectAllowed !== 'function') throw new Error('missing expectAllowed');",
+      "if (typeof tenancy.createTenancyTenantResolver !== 'function') throw new Error('missing tenancy resolver');",
+      "if (typeof apiKeys.createApiKeySubjectResolver !== 'function') throw new Error('missing API key resolver');",
+      "if (typeof auditLog.createAuditLogRbacLogger !== 'function') throw new Error('missing audit logger');",
       "if (typeof nestCore.NestFactory !== 'object') throw new Error('missing NestFactory');",
       '',
     ].join('\n'),
@@ -208,8 +194,16 @@ try {
       "import 'reflect-metadata';",
       "import { RbacModule } from '@nestarc/rbac';",
       "import { PrismaRbacStorage } from '@nestarc/rbac/prisma';",
+      "import { expectAllowed } from '@nestarc/rbac/testing';",
+      "import { createTenancyTenantResolver } from '@nestarc/rbac/integrations/tenancy';",
+      "import { createApiKeySubjectResolver } from '@nestarc/rbac/integrations/api-keys';",
+      "import { createAuditLogRbacLogger } from '@nestarc/rbac/integrations/audit-log';",
       "if (typeof RbacModule !== 'function') throw new Error('missing RbacModule');",
       "if (typeof PrismaRbacStorage !== 'function') throw new Error('missing PrismaRbacStorage');",
+      "if (typeof expectAllowed !== 'function') throw new Error('missing expectAllowed');",
+      "if (typeof createTenancyTenantResolver !== 'function') throw new Error('missing tenancy resolver');",
+      "if (typeof createApiKeySubjectResolver !== 'function') throw new Error('missing API key resolver');",
+      "if (typeof createAuditLogRbacLogger !== 'function') throw new Error('missing audit logger');",
       '',
     ].join('\n'),
   );
@@ -256,6 +250,9 @@ try {
       "import { RbacModule, type FindRoleByIdInput, type RbacLegacyDecisionReason, type RbacRole, type RbacService, type RbacServiceDecision, type RbacServiceDecisionReason, type RbacStorageRoleLookupCapability } from '@nestarc/rbac';",
       "import { PrismaRbacStorage, type PrismaRbacClientLike } from '@nestarc/rbac/prisma';",
       "import { expectDenied } from '@nestarc/rbac/testing';",
+      "import { createTenancyTenantResolver, type RbacTenantIdGetter } from '@nestarc/rbac/integrations/tenancy';",
+      "import { createApiKeySubjectResolver } from '@nestarc/rbac/integrations/api-keys';",
+      "import { createAuditLogRbacLogger, type AuditLogLike } from '@nestarc/rbac/integrations/audit-log';",
       'declare const prisma: PrismaRbacClientLike;',
       'RbacModule.forRoot({ storage: new PrismaRbacStorage(prisma) });',
       "type ServiceDecisionFromCan = Awaited<ReturnType<RbacService['can']>>;",
@@ -274,6 +271,11 @@ try {
       'void serviceReason;',
       'void helperDecision.details.safeMessage;',
       'void roleLookup;',
+      'const tenantGetter: RbacTenantIdGetter = () => null;',
+      'createTenancyTenantResolver(tenantGetter);',
+      'createApiKeySubjectResolver();',
+      'const auditLog: AuditLogLike = { log: () => undefined };',
+      'createAuditLogRbacLogger({ auditLog });',
       'void unavailableServiceReason;',
       '',
     ].join('\n'),

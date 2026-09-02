@@ -1,5 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
@@ -58,15 +61,15 @@ describe('package exports', () => {
     ]) {
       expect(packageJson.peerDependenciesMeta[optionalPeer]?.optional).toBe(true);
     }
-    expect(packageJson.scripts['test:consumer:modern']).toContain(
+    expect(packageJson.scripts['test:consumer:modern:artifact']).toContain(
       'scripts/verify-modern-consumer.cjs',
     );
   });
 
   it('declares exact lower-bound compatibility gates', () => {
     const packageJsonPath = fileURLToPath(new URL('../../package.json', import.meta.url));
-    const ciWorkflowPath = fileURLToPath(
-      new URL('../../.github/workflows/ci.yml', import.meta.url),
+    const verificationWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/verification.yml', import.meta.url),
     );
     const nest10RunnerPath = fileURLToPath(
       new URL('../../scripts/verify-nest10-consumer.cjs', import.meta.url),
@@ -74,10 +77,10 @@ describe('package exports', () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
       scripts: Record<string, string>;
     };
-    const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
+    const verificationWorkflow = readFileSync(verificationWorkflowPath, 'utf8');
     const nest10Runner = readFileSync(nest10RunnerPath, 'utf8');
 
-    expect(packageJson.scripts['test:consumer:nest10']).toContain(
+    expect(packageJson.scripts['test:consumer:nest10:artifact']).toContain(
       'scripts/verify-nest10-consumer.cjs',
     );
     expect(nest10Runner).toContain("'@nestjs/common': '10.4.22'");
@@ -85,31 +88,203 @@ describe('package exports', () => {
     expect(nest10Runner).toContain("'--strict-peer-deps'");
     expect(nest10Runner).not.toContain("'--force'");
     expect(nest10Runner).not.toContain("'--legacy-peer-deps'");
-    expect(ciWorkflow).toContain('Nest 10.4.22');
-    expect(ciWorkflow).toContain('prisma-version: 5.22.0');
-    expect(ciWorkflow).toContain('prisma-version: 6.19.3');
-    expect(ciWorkflow).toContain('prisma-version: 7.10.0');
+    expect(verificationWorkflow).toContain('Nest 10.4.22');
+    expect(verificationWorkflow).toContain('prisma-version: 5.22.0');
+    expect(verificationWorkflow).toContain('prisma-version: 6.19.3');
+    expect(verificationWorkflow).toContain('prisma-version: 7.10.0');
   });
 
   it('typechecks every shipped TypeScript example from the packed consumer', () => {
     const modernConsumerPath = fileURLToPath(
       new URL('../../scripts/verify-modern-consumer.cjs', import.meta.url),
     );
-    const ciWorkflowPath = fileURLToPath(
-      new URL('../../.github/workflows/ci.yml', import.meta.url),
-    );
-    const releaseWorkflowPath = fileURLToPath(
-      new URL('../../.github/workflows/release.yml', import.meta.url),
+    const verificationWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/verification.yml', import.meta.url),
     );
     const modernConsumer = readFileSync(modernConsumerPath, 'utf8');
-    const ciWorkflow = readFileSync(ciWorkflowPath, 'utf8');
-    const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const verificationWorkflow = readFileSync(verificationWorkflowPath, 'utf8');
 
     expect(modernConsumer).toContain("include: ['examples/**/*.ts']");
     expect(modernConsumer).toContain('Packed RBAC package did not contain any TypeScript example');
     expect(modernConsumer).toContain('Shipped examples TypeScript smoke');
-    expect(ciWorkflow).toContain('packed consumer, shipped examples');
-    expect(releaseWorkflow).toContain('packed consumer, shipped examples');
+    expect(verificationWorkflow).toContain('packed consumer, shipped examples');
+  });
+
+  it('builds one allowlisted package candidate for every public subpath and publish', () => {
+    const packageJson = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'),
+    ) as { exports: Record<string, unknown>; scripts: Record<string, string> };
+    const policy = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL('../../.github/package-contract.json', import.meta.url)),
+        'utf8',
+      ),
+    ) as { maxTarballBytes: number; maxUnpackedBytes: number };
+    const modernConsumer = readFileSync(
+      fileURLToPath(new URL('../../scripts/verify-modern-consumer.cjs', import.meta.url)),
+      'utf8',
+    );
+    const verificationWorkflow = readFileSync(
+      fileURLToPath(new URL('../../.github/workflows/verification.yml', import.meta.url)),
+      'utf8',
+    );
+    const releaseWorkflow = readFileSync(
+      fileURLToPath(new URL('../../.github/workflows/release.yml', import.meta.url)),
+      'utf8',
+    );
+    const publicSubpaths = [
+      '.',
+      './prisma',
+      './testing',
+      './integrations/tenancy',
+      './integrations/api-keys',
+      './integrations/audit-log',
+    ];
+
+    expect(Object.keys(packageJson.exports)).toEqual(publicSubpaths);
+    expect(policy.maxTarballBytes).toBe(300_000);
+    expect(policy.maxUnpackedBytes).toBe(1_500_000);
+    expect(packageJson.scripts['package:prepare']).toContain('prepare-package.cjs');
+    expect(packageJson.scripts['package:verify']).toContain('verify-package-artifact.cjs');
+    expect(packageJson.scripts['verify:published-package']).toContain(
+      'verify-published-package.cjs',
+    );
+    expect(modernConsumer).not.toContain("['pack'");
+    for (const subpath of publicSubpaths.slice(1)) {
+      expect(modernConsumer).toContain(`@nestarc/rbac/${subpath.slice(2)}`);
+    }
+    expect(verificationWorkflow.match(/Create and verify package once/g)).toHaveLength(1);
+    expect(verificationWorkflow).toContain('name: rbac-package');
+    expect(releaseWorkflow).toContain('name: rbac-package');
+    expect(releaseWorkflow).toContain('npm publish "${{ steps.package.outputs.tarball }}"');
+    expect(releaseWorkflow).toContain('--provenance');
+    expect(releaseWorkflow).toContain('npm run verify:published-package');
+  });
+
+  it('requires published bytes and SLSA provenance to match the package manifest', () => {
+    const publishedVerifier = createRequire(import.meta.url)(
+      '../../scripts/verify-published-package.cjs',
+    ) as {
+      verifyPublishedDist(dist: unknown, manifest: unknown): void;
+    };
+    const manifest = {
+      integrity: 'sha512-fixture',
+      shasum: 'sha1-fixture',
+      entryCount: 79,
+      unpackedSize: 1_251_602,
+    };
+    const dist = {
+      integrity: manifest.integrity,
+      shasum: manifest.shasum,
+      fileCount: manifest.entryCount,
+      unpackedSize: manifest.unpackedSize,
+      attestations: {
+        url: 'https://registry.npmjs.org/-/npm/v1/attestations/package@1.0.0',
+        provenance: { predicateType: 'https://slsa.dev/provenance/v1' },
+      },
+    };
+
+    expect(() => publishedVerifier.verifyPublishedDist(dist, manifest)).not.toThrow();
+    expect(() =>
+      publishedVerifier.verifyPublishedDist({ ...dist, integrity: 'sha512-other' }, manifest),
+    ).toThrow(/integrity/);
+    expect(() =>
+      publishedVerifier.verifyPublishedDist({ ...dist, fileCount: 78 }, manifest),
+    ).toThrow(/file metadata/);
+    expect(() =>
+      publishedVerifier.verifyPublishedDist({ ...dist, attestations: undefined }, manifest),
+    ).toThrow(/provenance/);
+    expect(() =>
+      publishedVerifier.verifyPublishedDist(
+        {
+          ...dist,
+          attestations: {
+            ...dist.attestations,
+            provenance: { predicateType: 'https://slsa.dev/provenance/v0.2' },
+          },
+        },
+        manifest,
+      ),
+    ).toThrow(/provenance/);
+  });
+
+  it('loads only untampered package candidates from a strict manifest', () => {
+    const packageCandidate = createRequire(import.meta.url)(
+      '../../scripts/package-candidate.cjs',
+    ) as {
+      loadPackageCandidate(
+        args: string[],
+        cwd: string,
+      ): { manifest: { filename: string }; tarballPath: string };
+      parseOption(args: string[], name: string): string | undefined;
+    };
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'rbac-package-candidate-'));
+    const packageDirectory = join(fixtureRoot, 'package');
+    const tarballPath = join(packageDirectory, 'rbac-fixture.tgz');
+    const manifestPath = join(packageDirectory, 'package-contract.json');
+    const tarball = Buffer.from('verified package bytes');
+    mkdirSync(packageDirectory);
+    writeFileSync(tarballPath, tarball);
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        name: '@nestarc/rbac',
+        version: '0.2.1',
+        filename: 'rbac-fixture.tgz',
+        integrity: `sha512-${createHash('sha512').update(tarball).digest('base64')}`,
+        shasum: createHash('sha1').update(tarball).digest('hex'),
+        size: tarball.length,
+        unpackedSize: 42,
+        entryCount: 1,
+        files: ['package.json'],
+      })}\n`,
+    );
+
+    try {
+      const candidate = packageCandidate.loadPackageCandidate(
+        ['--package-dir', packageDirectory],
+        fixtureRoot,
+      );
+      expect(candidate.manifest.filename).toBe('rbac-fixture.tgz');
+      expect(candidate.tarballPath).toBe(tarballPath);
+      expect(packageCandidate.parseOption([], '--manifest')).toBeUndefined();
+      expect(() => packageCandidate.parseOption(['--manifest'], '--manifest')).toThrow(
+        /requires a value/,
+      );
+      expect(() =>
+        packageCandidate.loadPackageCandidate(
+          ['--package-dir', packageDirectory, '--manifest', manifestPath],
+          fixtureRoot,
+        ),
+      ).toThrow(/either/);
+
+      writeFileSync(tarballPath, 'tampered bytes');
+      expect(() =>
+        packageCandidate.loadPackageCandidate(['--manifest', manifestPath], fixtureRoot),
+      ).toThrow(/do not match/);
+
+      writeFileSync(
+        manifestPath,
+        `${JSON.stringify({
+          schemaVersion: 1,
+          name: '@nestarc/rbac',
+          version: '0.2.1',
+          filename: '../unsafe.tgz',
+          integrity: 'sha512-fixture',
+          shasum: 'fixture',
+          size: 1,
+          unpackedSize: 1,
+          entryCount: 0,
+          files: [],
+        })}\n`,
+      );
+      expect(() =>
+        packageCandidate.loadPackageCandidate(['--manifest', manifestPath], fixtureRoot),
+      ).toThrow(/Unsafe/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('pins advisory overrides to the affected parent tool versions', () => {
@@ -135,6 +310,9 @@ describe('package exports', () => {
     const releaseWorkflowPath = fileURLToPath(
       new URL('../../.github/workflows/release.yml', import.meta.url),
     );
+    const verificationWorkflowPath = fileURLToPath(
+      new URL('../../.github/workflows/verification.yml', import.meta.url),
+    );
     const releaseTargetRunnerPath = fileURLToPath(
       new URL('../../scripts/verify-release-target.cjs', import.meta.url),
     );
@@ -142,6 +320,7 @@ describe('package exports', () => {
       scripts: Record<string, string>;
     };
     const releaseWorkflow = readFileSync(releaseWorkflowPath, 'utf8');
+    const verificationWorkflow = readFileSync(verificationWorkflowPath, 'utf8');
     const releaseTargetRunner = readFileSync(releaseTargetRunnerPath, 'utf8');
 
     expect(packageJson.scripts['verify:release-target']).toContain(
@@ -151,14 +330,14 @@ describe('package exports', () => {
     expect(releaseTargetRunner).toContain('refs/remotes/origin/main');
     expect(releaseWorkflow).toContain('fetch-depth: 0');
     expect(releaseWorkflow).toContain('RELEASE_TARGET_COMMITISH');
-    expect(releaseWorkflow).toMatch(/node-version:\n\s+- 22\n\s+- 24/);
+    expect(verificationWorkflow).toMatch(/node-version:\n\s+- 22\n\s+- 24/);
     expect(releaseWorkflow).toContain('node-version: 24');
-    expect(releaseWorkflow).toContain('Nest 10.4.22');
-    expect(releaseWorkflow).toContain('prisma-version: 5.22.0');
-    expect(releaseWorkflow).toContain('prisma-version: 6.19.3');
-    expect(releaseWorkflow).toContain('prisma-version: 7.10.0');
+    expect(verificationWorkflow).toContain('Nest 10.4.22');
+    expect(verificationWorkflow).toContain('prisma-version: 5.22.0');
+    expect(verificationWorkflow).toContain('prisma-version: 6.19.3');
+    expect(verificationWorkflow).toContain('prisma-version: 7.10.0');
     expect(releaseWorkflow).toMatch(
-      /publish:\n[\s\S]*?needs:\n\s+- release-target\n\s+- dependency-audit\n\s+- verify\n\s+- modern-consumer\n\s+- nest10-consumer\n\s+- prisma-integration/,
+      /publish:\n[\s\S]*?needs:\n\s+- release-target\n\s+- verification/,
     );
   });
 

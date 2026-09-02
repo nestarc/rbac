@@ -1,17 +1,17 @@
 'use strict';
 
 const fs = require('node:fs');
-const { createHash } = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { loadPackageCandidate } = require('./package-candidate.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 const packageJson = readJson(path.join(repositoryRoot, 'package.json'));
 const temporaryPrefix = 'rbac-nest10-consumer-';
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), temporaryPrefix));
-const packageDirectory = path.join(temporaryRoot, 'package');
 const consumerDirectory = path.join(temporaryRoot, 'consumer');
+const { manifest: pack, tarballPath } = loadPackageCandidate(process.argv.slice(2), repositoryRoot);
 const exactDependencies = {
   '@types/node': '22.20.1',
   '@nestjs/common': '10.4.22',
@@ -30,36 +30,14 @@ try {
     throw new Error('Nest 10 consumer fixture must run outside the repository tree');
   }
 
-  fs.mkdirSync(packageDirectory);
   fs.mkdirSync(consumerDirectory);
   writeJson(path.join(consumerDirectory, 'package.json'), {
     name: 'rbac-nest10-consumer',
     private: true,
   });
 
-  const packResult = spawnNpm(
-    ['pack', '--json', '--ignore-scripts', '--pack-destination', packageDirectory],
-    { cwd: repositoryRoot, encoding: 'utf8', env: process.env },
-  );
-  if (packResult.stderr) process.stderr.write(packResult.stderr);
-  assertCommandSucceeded(packResult, 'npm pack');
-
-  const [pack] = JSON.parse(packResult.stdout);
-  if (
-    pack?.name !== '@nestarc/rbac' ||
-    pack.version !== packageJson.version ||
-    !pack.filename ||
-    !pack.integrity
-  ) {
-    throw new Error('npm pack --json did not return the expected RBAC package identity');
-  }
-
-  const tarballPath = path.join(packageDirectory, pack.filename);
-  const tarballIntegrity = `sha512-${createHash('sha512')
-    .update(fs.readFileSync(tarballPath))
-    .digest('base64')}`;
-  if (tarballIntegrity !== pack.integrity) {
-    throw new Error(`Packed tarball integrity mismatch: ${tarballIntegrity} !== ${pack.integrity}`);
+  if (pack.name !== '@nestarc/rbac' || pack.version !== packageJson.version) {
+    throw new Error('Package candidate does not match the repository package identity');
   }
 
   runNpm(

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -58,26 +58,56 @@ describe('dependency audit policy', () => {
   });
 
   it('pins every workflow action and limits OIDC permission to publishing', () => {
-    const workflows = ['ci.yml', 'release.yml'].map((name) =>
-      readFileSync(
-        fileURLToPath(new URL(`../../.github/workflows/${name}`, import.meta.url)),
-        'utf8',
-      ),
-    );
+    const workflowsDirectory = fileURLToPath(new URL('../../.github/workflows/', import.meta.url));
+    const workflows = readdirSync(workflowsDirectory)
+      .filter((name) => name.endsWith('.yml'))
+      .map((name) => ({ name, contents: readFileSync(`${workflowsDirectory}/${name}`, 'utf8') }));
     const actionRefs = workflows.flatMap((workflow) =>
-      [...workflow.matchAll(/^\s*uses:\s*[^@\s]+@([^\s#]+)/gm)]
+      [...workflow.contents.matchAll(/^\s*uses:\s*[^@\s]+@([^\s#]+)/gm)]
         .map((match) => match[1])
         .filter((reference): reference is string => reference !== undefined),
     );
-    const ciWorkflow = workflows[0] ?? '';
-    const releaseWorkflow = workflows[1] ?? '';
+    const ciWorkflow = workflows.find(({ name }) => name === 'ci.yml')?.contents ?? '';
+    const releaseWorkflow = workflows.find(({ name }) => name === 'release.yml')?.contents ?? '';
+    const verificationWorkflow =
+      workflows.find(({ name }) => name === 'verification.yml')?.contents ?? '';
 
     expect(actionRefs.length).toBeGreaterThan(0);
     expect(actionRefs.every((reference) => /^[a-f0-9]{40}$/.test(reference))).toBe(true);
     expect(ciWorkflow).not.toContain('id-token: write');
+    expect(verificationWorkflow).not.toContain('id-token: write');
     expect(releaseWorkflow.match(/id-token: write/g)).toHaveLength(1);
     expect(releaseWorkflow).toMatch(
       /publish:\n[\s\S]*?permissions:\n\s+contents: read\n\s+id-token: write/,
+    );
+  });
+
+  it('reuses the verification graph and bounds every executable job', () => {
+    const ciWorkflow = readFileSync(
+      fileURLToPath(new URL('../../.github/workflows/ci.yml', import.meta.url)),
+      'utf8',
+    );
+    const releaseWorkflow = readFileSync(
+      fileURLToPath(new URL('../../.github/workflows/release.yml', import.meta.url)),
+      'utf8',
+    );
+    const verificationWorkflow = readFileSync(
+      fileURLToPath(new URL('../../.github/workflows/verification.yml', import.meta.url)),
+      'utf8',
+    );
+
+    expect(ciWorkflow).toContain('uses: ./.github/workflows/verification.yml');
+    expect(releaseWorkflow).toContain('uses: ./.github/workflows/verification.yml');
+    expect(verificationWorkflow.match(/runs-on: ubuntu-latest/g)).toHaveLength(6);
+    expect(verificationWorkflow.match(/timeout-minutes:/g)).toHaveLength(6);
+    expect(releaseWorkflow.match(/runs-on: ubuntu-latest/g)).toHaveLength(2);
+    expect(releaseWorkflow.match(/timeout-minutes:/g)).toHaveLength(2);
+    expect(verificationWorkflow.match(/run: npm run build/g)).toHaveLength(1);
+    expect(verificationWorkflow).toMatch(
+      /Generate modern Prisma client\n\s+if: matrix\.client == 'modern'/,
+    );
+    expect(verificationWorkflow).toMatch(
+      /Generate legacy Prisma client\n\s+if: matrix\.client == 'legacy'/,
     );
   });
 

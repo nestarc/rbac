@@ -3,6 +3,7 @@
 /node_modules
 /build
 /coverage
+/artifacts
 /tmp
 /test/integration/generated
 *.tsbuildinfo

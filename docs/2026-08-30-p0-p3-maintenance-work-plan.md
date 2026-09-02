@@ -180,8 +180,8 @@ Node 지원 정책은 [Node.js 공식 release 표](https://nodejs.org/en/about/p
 | 20A | `RBAC-M20A` | P3 | `DONE` | M | `RBAC-M01`, `RBAC-M02`, `RBAC-M05`, `RBAC-M08`, `RBAC-M16` | Guard behavior-preserving 분해 |
 | 20B | `RBAC-M20B` | P3 | `DONE` | M | `RBAC-M20A`, `RBAC-M03`, `RBAC-M04`, `RBAC-M06`, `RBAC-M07`, `RBAC-M14` | service behavior-preserving 분해 |
 | 20C | `RBAC-M20C` | P3 | `DONE` | M | `RBAC-M20B`, `RBAC-M03`, `RBAC-M07`, `RBAC-M15` | Prisma adapter behavior-preserving 분해 |
-| 21 | `RBAC-M21` | P3 | `BLOCKED` | S | `RBAC-M11`, `RBAC-M19A`, `RBAC-M19B`, `RBAC-M22` | reusable workflow/timeout/중복 build 정리 |
-| 22 | `RBAC-M22` | P3 | `READY` | S | `RBAC-M11` | tarball allowlist·size·subpath·provenance contract |
+| 21 | `RBAC-M21` | P3 | `DONE` | S | `RBAC-M11`, `RBAC-M19A`, `RBAC-M19B`, `RBAC-M22` | reusable workflow/timeout/중복 build 정리 |
+| 22 | `RBAC-M22` | P3 | `DONE` | S | `RBAC-M11` | tarball allowlist·size·subpath·provenance contract |
 | 23A | `RBAC-M23A` | P3 | `DECISION` | S | 없음 | Nest 12 stable 호환성 스파이크 |
 | 23B | `RBAC-M23B` | P3 | `BLOCKED` | S | `EXT-PRISMA8-STABLE` | Prisma 8 stable 호환성 스파이크 |
 
@@ -604,17 +604,31 @@ P0 세 건은 각각 한 세션/한 PR로 진행한다. 독립 검증을 마치�
 
 ### `RBAC-M21` — workflow hygiene
 
-- 상태: `P3 / BLOCKED (RBAC-M22)`
-- reusable workflow, job timeout, concurrency, 중복 build/Prisma generate를 정리한다.
-- 검증 graph를 바꾸지 않는 refactor로 한정한다.
+- 상태: `P3 / DONE`
+
+완료 조건:
+
+- [x] CI와 release의 dependency audit, Node 22/24 source verify, modern/Nest 10 consumer, Prisma 5/6/7 PostgreSQL lanes를 하나의 `workflow_call` reusable workflow로 통합한다.
+- [x] CI는 commit SHA, release는 검증된 release tag를 reusable workflow의 explicit checkout ref로 전달한다.
+- [x] 모든 실제 runner job에 5–20분의 명시적 timeout을 두고 CI/release의 event별 concurrency와 cancel 정책을 유지한다.
+- [x] Node 24 verify의 `dist`를 package job이 재사용해 package용 추가 build를 제거하고 consumer/publish에서는 build 또는 pack을 반복하지 않는다. Node 22/24 각각의 source build는 runtime compatibility 증거이므로 유지한다.
+- [x] Prisma integration은 각 matrix lane에서 선택된 modern 또는 legacy client만 한 번 generate한다.
+- [x] reusable workflow 전체 성공이 release publish의 단일 compatibility dependency가 되며 M11/M19/M22 검증 graph와 최소 권한을 보존한다.
+
+결정: CI/release orchestration만 얇게 남기고 실제 검증 graph는 `.github/workflows/verification.yml`이 소유한다. artifact 전달용 upload/download action도 검토한 v4 full commit SHA로 pin하고 Dependabot의 기존 Actions group이 추적한다.
 
 ### `RBAC-M22` — package contract
 
-- 상태: `P3 / READY`
-- 한 번 생성한 `.tgz`를 root, prisma, testing, tenancy, api-keys, audit-log CJS/ESM/types fixture가 소비하고, 검증한 바로 그 파일을 `npm publish <file>`에 전달한다.
-- `npm pack --json` allowlist, size budget, docs link와 tarball→published integrity를 검사한다.
-- optional peer 미설치 root import와 CJS/ESM parity를 유지한다.
-- npm `0.2.1`에 이미 있는 provenance를 보존하고, 게시한 `.tgz`/subject와 attestation이 연결되는지 검증한다.
+- 상태: `P3 / DONE`
+
+완료 조건:
+
+- [x] `npm pack --json --ignore-scripts`를 한 번 실행해 `.tgz`와 byte identity manifest를 만들고 SHA-512, SHA-1, file count, unpacked size를 즉시 대조한다.
+- [x] package allowlist와 required files, 압축 300,000 bytes/해제 1,500,000 bytes 예산, 모든 export target과 packed Markdown의 local link target을 검사한다. 최종 artifact는 79 files, 263,287 bytes, unpacked 1,252,279 bytes다.
+- [x] 동일한 tarball을 exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2 consumer와 Nest 10.4.22 consumer가 사용한다. root, prisma, testing, tenancy, api-keys, audit-log의 CJS/ESM/runtime/types와 7개 shipped example source를 검증한다.
+- [x] optional Prisma/Nestarc peer를 설치하지 않은 Nest 10 consumer의 root CJS/ESM/types import를 유지한다.
+- [x] release는 manifest로 다시 검증한 exact file path를 `npm publish <file> --provenance`에 전달하고, registry의 integrity/shasum/file count/unpacked size와 SLSA provenance v1 attestation을 재조회한다.
+- [x] 공개 `0.2.1` registry metadata의 SLSA provenance v1 attestation을 baseline으로 확인하고, integrity/provenance mismatch unit contract를 추가했다. 새 tarball의 실제 post-publish 조회는 다음 release job에서 수행한다.
 
 ### `RBAC-M23A` — Nest 12 stable compatibility
 
@@ -806,17 +820,18 @@ Tenancy ecosystem: published exact tuple E2E
 - [x] `RBAC-M20A`: Guard source resolution, requirement evaluation, audit formatting 내부 seam과 HTTP/public golden 보존.
 - [x] `RBAC-M20B`: service validation/canonicalization, decision construction, mutation event support 내부 seam과 service contract 보존.
 - [x] `RBAC-M20C`: Prisma mapping/query/mutation-error 내부 seam과 indexed lookup/real PostgreSQL contract 보존.
-- [ ] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
+- [x] `RBAC-M22`: 모든 public subpath, pack-once/publish-same-tarball integrity, 기존 provenance 보존 검증.
+- [x] `RBAC-M21`: CI/release reusable verification graph, timeout/concurrency, build/generate 중복 제거.
 
 향후 gate를 현재 P0 patch의 선행 조건으로 소급 적용하지 않는다.
 
 ## 10. 다음 세션 권장 시작점
 
-1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M20A/B/C working tree/PR 상태를 기록한다.
-2. 완료된 `RBAC-M01`–`RBAC-M20C`를 반복하지 않고 실행 가능한 다음 항목 `RBAC-M22`를 선택한다.
-3. 한 번 생성한 tarball의 allowlist/size와 모든 public subpath CJS/ESM/types를 고정한 뒤 release가 검증한 같은 파일을 publish하도록 연결한다.
+1. 시작 명령으로 fetch한 뒤 최신 `origin/main` commit과 현재 RBAC-M22/M21 working tree/PR 상태를 기록한다.
+2. 완료된 `RBAC-M01`–`RBAC-M22`를 반복하지 않는다. 다음 로컬 후보는 `RBAC-M23A` Nest 12 stable compatibility 결정 스파이크다.
+3. M23A는 exact Nest 12 packed consumer 결과와 semver ADR을 먼저 만들며 peer range 변경은 별도 합의 전 수행하지 않는다.
 4. M19 risk register의 review date는 exclusive deadline이다. Dependabot parent-tool/Prisma PR에서는 audit path와 M12 override 제거 가능성을 함께 재검토한다.
-5. `RBAC-M21`은 M19A/B가 끝났지만 `RBAC-M22` pack-once/package contract 전까지 계속 blocked다.
+5. `RBAC-M23B`는 Prisma 8 stable과 공식 migration contract가 나올 때까지 계속 blocked다.
 
 세 P0를 한 PR에 묶지 않는다. dependency/toolchain/refactor도 P0 PR에 넣지 않는다. 단, 독립 PR들이 모두 검증됐다면 release 운영상 `RBAC-M01`과 `RBAC-M02`가 한 patch version에 포함될 수 있다.
 
@@ -851,6 +866,8 @@ Tenancy ecosystem: published exact tuple E2E
 | 2026-09-02 | `RBAC-M20A` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | Guard 453→66줄, source/evaluation/audit 내부 seam; Guard golden 91/91, 전체 326/326 PASS | `RBAC-M20B` service behavior-preserving 분해 |
 | 2026-09-02 | `RBAC-M20B` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | service 1,157→668줄, input/decision/mutation-support 내부 seam; focused 125/125와 전체 326/326 PASS | `RBAC-M20C` Prisma adapter behavior-preserving 분해 |
 | 2026-09-02 | `RBAC-M20C` | `DONE` | `main@f2013b7` | uncommitted combined M20 working tree | Prisma adapter 787→529줄, mapper/query/mutation-error 내부 seam; PG16 36/36, final 329/329, coverage/build/packed consumer PASS | `RBAC-M22` package contract 시작 (`RBAC-M21`은 계속 blocked) |
+| 2026-09-02 | `RBAC-M22` | `DONE` | `main@04568b3` | uncommitted combined M22/M21 working tree | pack-once 79 files/263,287 bytes, allowlist/size/docs/export contract, 6 public subpath CJS/ESM/types, exact modern/Nest 10 consumers와 provenance registry contract PASS | `RBAC-M21` workflow hygiene 시작 |
+| 2026-09-02 | `RBAC-M21` | `DONE` | `main@04568b3 + RBAC-M22 working tree` | uncommitted combined M22/M21 working tree | CI/release reusable graph, all runner timeouts, concurrency 보존, Node 24 dist 재사용과 per-lane Prisma generate; focused workflow/package contract PASS | `RBAC-M23A` exact Nest 12 compatibility 결정 스파이크 |
 
 ### 2026-09-01 RBAC-M01 인계
 
@@ -1214,4 +1231,32 @@ Commands and exact results: npm run prisma:generate PASS with Prisma 7.10.0; ini
 Unverified paths and reason: Prisma 5.22.0/6.19.3 real-DB lanes와 Node 22/Nest 10 packed lanes는 로컬에서 재실행하지 않았다. public Prisma types/delegate surface/schema/migration은 바뀌지 않았고 Prisma 7 real DB, indexed query, build와 modern packed artifact로 move-only 최종 상태를 확인했다. 실제 PR/CI run은 만들지 않았다.
 External PR/release evidence: 없음. 검증용 PostgreSQL 16 컨테이너는 persistent volume 없이 제거했고, 현재 결과는 commit/PR/release 전 working tree다.
 Next exact action: RBAC-M22에서 pack-once allowlist/size/all-subpath CJS/ESM/types와 publish-same-tarball/provenance contract를 구현한다. RBAC-M21은 RBAC-M22 완료 전까지 BLOCKED다.
+```
+
+### 2026-09-02 RBAC-M22 인계
+
+```text
+Task: RBAC-M22
+State: DONE
+Start ref / end ref: main@04568b3 / main@04568b3 + uncommitted combined RBAC-M22/M21 working tree
+Changed files: .github/package-contract.json, .github/workflows/verification.yml, .github/workflows/release.yml, .gitignore, docs/compatibility.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, package.json, scripts/package-candidate.cjs, scripts/prepare-package.cjs, scripts/verify-package-artifact.cjs, scripts/verify-published-package.cjs, scripts/verify-modern-consumer.cjs, scripts/verify-nest10-consumer.cjs, test/unit/package-smoke.spec.ts
+Contract decision: Node 24 verify가 만든 dist에서 npm pack --json --ignore-scripts를 정확히 한 번 실행하고 tarball과 manifest를 rbac-package artifact로 묶는다. package.json files와 별도의 allowlist/required path, 300,000/1,500,000 byte 압축/해제 예산, 모든 export target과 packed Markdown local link를 검증한다. modern Node 22/24 및 Nest 10 consumer와 release publish는 이 artifact만 다운로드하며 consumer lockfile과 manifest가 같은 SHA-512 bytes를 요구한다. publish는 manifest가 해석한 exact path만 npm publish <file> --provenance에 전달하고 registry integrity/shasum/file metadata/SLSA provenance v1을 재조회한다.
+Commands and exact results: baseline npm run typecheck PASS; baseline npm test PASS (17 files, 329 tests); npm run package:prepare PASS (79 files, 263,287 bytes, unpacked 1,252,279 bytes, SHA-512 mUrJt5...fTwiBw==); npm run package:verify PASS; final same-artifact npm run test:consumer:modern:artifact PASS with exact Nest 11.2.1/Prisma 7.10.0/API Keys 0.3.2, six public subpath CJS/ESM/types and 7 example sources; same-artifact npm run test:consumer:nest10:artifact PASS with exact Nest 10.4.22 and no optional Prisma/Nestarc peers; published metadata mismatch/provenance unit contract PASS; existing npm @nestarc/rbac@0.2.1 registry metadata reports SLSA provenance v1; final lint/typecheck/test/coverage/build/audit results are recorded in the following combined M21 handoff.
+Unverified paths and reason: 새 artifact는 version 0.2.1이지만 공개 0.2.1과 다른 post-release working-tree bytes이므로 실제 npm publish와 그 뒤 registry equality check는 실행하지 않았다. 해당 check는 다음 새 version release job이 수행한다.
+External PR/release evidence: 없음. 공개 npm 0.2.1의 dist.attestations.provenance.predicateType=https://slsa.dev/provenance/v1을 read-only 조회했으며 저장소 설정, PR, release, publish는 변경하지 않았다.
+Next exact action: RBAC-M21에서 M22 package graph를 유지한 채 CI/release reusable workflow, timeout, build/generate 중복을 정리한다.
+```
+
+### 2026-09-02 RBAC-M21 인계
+
+```text
+Task: RBAC-M21
+State: DONE
+Start ref / end ref: main@04568b3 + RBAC-M22 working tree / main@04568b3 + uncommitted combined RBAC-M22/M21 working tree
+Changed files: .github/workflows/ci.yml, .github/workflows/release.yml, .github/workflows/verification.yml, docs/compatibility.md, docs/2026-08-30-p0-p3-maintenance-work-plan.md, test/unit/dependency-audit-policy.spec.ts, test/unit/package-smoke.spec.ts
+Contract decision: CI와 release가 같은 workflow_call verification graph를 사용하고 호출자가 exact commit/tag checkout ref를 전달한다. dependency audit, Node 22/24 verify, package, modern/Nest 10 consumer, Prisma 5/6/7 lanes와 release-target→verification→publish ordering은 유지한다. 모든 실제 runner job에 5–20분 timeout을 추가하고 CI cancel/release non-cancel concurrency를 유지한다. Node 24 dist upload를 package가 재사용해 추가 build를 없애며 consumer/publish의 build/pack도 제거한다. Prisma DB matrix는 선택한 modern 또는 legacy client만 lane당 한 번 generate한다. 새 upload/download actions는 v4 full SHA로 pin한다.
+Commands and exact results: reusable workflow/package focused contract PASS (2 files, 19 tests); CI/release/verification YAML safe parse PASS; all external Action refs 40-character SHA 및 publish-only id-token contract PASS; final npm run lint PASS; npm run typecheck PASS; npm test PASS (17 files, 333 tests); fresh npm run test:coverage PASS (16 files, 323 tests; statements 93.10%, branches 86.93%, functions 96.56%, lines 94.36%); npm run build PASS; npm run verify:dependency-audit PASS (production 0, approved full findings 2, tracked overrides 2); changed code/workflow Prettier와 git diff --check PASS.
+Unverified paths and reason: GitHub-hosted workflow_call 실행, artifact upload/download, PostgreSQL matrix, npm trusted publish는 commit되지 않은 로컬 workflow에서 실행할 수 없다. package consumers는 실제 동일 artifact로 실행했고 workflow/YAML/graph contracts로 CI와 release 구성을 검증했다.
+External PR/release evidence: 없음. GitHub API로 actions/upload-artifact v4=ea165f8d65b6e75b540449e92b4886f43607fa02, actions/download-artifact v4=d3f86a106a0bac45b974a628896c90dbdf5c8093를 read-only 확인했으며 PR/release/publish는 만들지 않았다.
+Next exact action: RBAC-M23A에서 exact Nest 12 stable strict packed consumer를 실행하고 peer range/semver 결정을 ADR로 작성한다. peer 범위 변경은 별도 합의 전 수행하지 않는다.
 ```
