@@ -38,9 +38,12 @@ npm install -D prisma
 The adapter is required by Prisma 7 direct database clients. Prisma 5 and 6
 consumers can keep their existing engine-based `PrismaClient` setup.
 
-For focused setup notes, see [docs/installation.md](docs/installation.md).
+Detailed documentation links below point to archived references. The local
+`docs/` directory is no longer tracked or included in the npm package.
+
+For focused setup notes, see [docs/installation.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/installation.md).
 The tested runtime, framework, database-client, and optional integration matrix is
-documented in [docs/compatibility.md](docs/compatibility.md). Peer ranges describe
+documented in [docs/compatibility.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/compatibility.md). Peer ranges describe
 install compatibility; the exact combinations listed there are the combinations
 continuously or explicitly verified by this repository.
 
@@ -56,11 +59,11 @@ checks that the release tag, target, package version, and `main` ancestry agree.
 
 ## Maintenance Status
 
-The repository's
-[canonical maintenance queue](https://github.com/nestarc/rbac/blob/main/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
-is the source of truth for current work. Older PRDs, specifications, and execution
-plans are retained as historical design records; their status labels and unchecked
-boxes are not active backlog.
+The
+[archived maintenance plan](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/2026-08-30-p0-p3-maintenance-work-plan.md)
+records earlier work. PRDs, specifications, and execution plans remain in Git
+history as design records; their status labels and unchecked boxes are not
+active backlog.
 
 ## Quickstart
 
@@ -151,7 +154,7 @@ preset changes the missing-metadata, missing-tenant, and write-validation defaul
 
 Adopt the preset incrementally and test existing public routes and data before
 turning it on application-wide. See the
-[0.2 migration guide](docs/migration-0.2.0.md#adopt-strict-options).
+[0.2 migration guide](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/migration-0.2.0.md#adopt-strict-options).
 
 ## Protecting Routes
 
@@ -172,7 +175,7 @@ export class ReportsController {
 
 Use `@Can()` or `@RequirePermissions()` for permissions, `@RequireRole()` for role
 keys, and `@SkipRbac()` for health checks or public routes. See
-[docs/guards.md](docs/guards.md).
+[docs/guards.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/guards.md).
 
 The 0.2.x `RbacGuard`, route/parameter decorator pipeline, built-in resource
 declarations, and default/integration resolvers support Nest HTTP requests only.
@@ -181,7 +184,7 @@ not make the complete Guard work on GraphQL, RPC, or WebSockets. For another
 transport, extract its carrier values in application-owned code and call
 `RbacService.can()` or `assertCan()`. Those transports remain unverified and are
 not package-supported Guard integrations. See the
-[transport contract ADR](docs/adr/0003-http-transport-contract.md).
+[transport contract ADR](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/adr/0003-http-transport-contract.md).
 
 The default HTTP subject resolver reconciles valid `request.rbacSubject`,
 `request.user`, and API-key identities by exact `(type, id, tenantId)`. Conflicting
@@ -189,7 +192,7 @@ sources fail closed before authorization. `request.user.type` remains a supporte
 custom namespace for compatibility and defaults to `user` only when absent;
 configure `subjectResolver` when the application requires a fixed namespace.
 Subject type is part of identity, so equal IDs in different namespaces never share
-role bindings. See [the subject source policy](docs/guards.md#subject-sources-and-namespaces).
+role bindings. See [the subject source policy](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/guards.md#subject-sources-and-namespaces).
 
 ## Tenant-Aware Checks
 
@@ -199,7 +202,7 @@ authoritative: its string or explicit global `null` result must agree with every
 populated HTTP source, while `undefined` falls back to consistent HTTP sources.
 Conflicts deny before authorization. When `tenant.requiredByDefault` is true,
 protected routes also deny if no tenant can be resolved. See
-[the tenant source policy](docs/guards.md#tenant-modes) for global checks and the
+[the tenant source policy](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/guards.md#tenant-modes) for global checks and the
 deprecated `legacy-fallback` migration option.
 
 ```ts
@@ -345,7 +348,7 @@ through your migration workflow.
 Prisma 7 applications should keep their `prisma-client` generator and datasource
 URL in `prisma.config.ts`, then create the generated client with the driver adapter
 for their database. `PrismaRbacStorage` accepts both that client and the legacy
-Prisma 5/6 `@prisma/client` shape. See [docs/prisma.md](docs/prisma.md) for the
+Prisma 5/6 `@prisma/client` shape. See [docs/prisma.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/prisma.md) for the
 separate, copyable Prisma 5/6 and Prisma 7 setup and verification procedures.
 
 ```ts
@@ -370,7 +373,7 @@ export class AppModule {}
 ```
 
 Do not use `npm run test:prisma` alone as database evidence: without a configured
-database URL the suite is intentionally skipped. See [docs/prisma.md](docs/prisma.md)
+database URL the suite is intentionally skipped. See [docs/prisma.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/prisma.md)
 for the complete PostgreSQL URL → generate → migrate → test sequence and the
 required `skip 0` check.
 
@@ -432,12 +435,12 @@ await expectAllowed(rbac, {
 });
 ```
 
-See [docs/testing.md](docs/testing.md).
+See [docs/testing.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/testing.md).
 
 `RbacService.can()` returns the producer-accurate `RbacServiceDecision` type. Its
 `details` are always present for server-side diagnostics and auditing, but HTTP
 error responses expose only a stable message and error code. See the
-[public decision and error contract](docs/adr/0002-public-decision-error-contract.md)
+[public decision and error contract](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/adr/0002-public-decision-error-contract.md)
 for the produced reason set, compatibility types, and deprecated dormant APIs.
 
 ## Change Events
@@ -469,9 +472,9 @@ credentials or establish tenant membership. The boundaries are:
 | Storage results       | A custom `RbacStorage` must query the requested subject and omit revoked rows; secure transport and side effects remain adapter concerns.                                   | Effective rows are rechecked for tenant/global scope, finite expiry, resource shape, canonical identifiers, and permission shape before use. The effective-row interface has no subject or `revokedAt`, so RBAC cannot independently prove those two facts. |
 
 These checks apply to both plain and strict options. Detailed HTTP source behavior
-is in [docs/guards.md](docs/guards.md); API-key and tenancy integration behavior is
-in [docs/integrations.md](docs/integrations.md); custom storage limits are in
-[docs/prisma.md](docs/prisma.md#storage-trust-boundary).
+is in [docs/guards.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/guards.md); API-key and tenancy integration behavior is
+in [docs/integrations.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/integrations.md); custom storage limits are in
+[docs/prisma.md](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/prisma.md#storage-trust-boundary).
 
 ## Security Notes
 

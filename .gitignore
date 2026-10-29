@@ -6,6 +6,7 @@
 /artifacts
 /tmp
 /test/integration/generated
+/docs/
 *.tsbuildinfo
 *.tgz
 

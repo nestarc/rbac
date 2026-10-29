@@ -14,7 +14,9 @@ supported line.
 
 Package security support is separate from the Node.js, NestJS, Prisma, and
 PostgreSQL versions exercised by this repository. See
-[Compatibility and support](docs/compatibility.md) for those exact contracts.
+[Archived compatibility and support](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/compatibility.md)
+for the archived contracts; the [README](README.md#installation) lists the
+maintained test matrix.
 
 ## Reporting a Vulnerability
 
@@ -71,8 +73,8 @@ The following boundaries are security-sensitive:
   effect or reconstruct provenance that the storage interface does not return.
   Protect the backing store and treat adapter changes as security-sensitive.
 
-See [Guards](docs/guards.md) and [Integrations](docs/integrations.md) for the full
-runtime contracts. Reports about behavior outside these documented boundaries,
+See [Guards](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/guards.md) and [Integrations](https://github.com/nestarc/rbac/blob/7f88c621f32f6af52bd87bf929ae8416eae878ca/docs/integrations.md) for the full
+archived runtime contracts. Reports about behavior outside these documented boundaries,
 unsupported release lines, or vulnerabilities wholly in an application or
 third-party dependency may be redirected to the responsible project, while any
 RBAC contribution to the impact will still be assessed.

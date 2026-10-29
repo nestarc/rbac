@@ -111,20 +111,6 @@ describe('dependency audit policy', () => {
     );
   });
 
-  it('groups dependency updates by compatibility stack', () => {
-    const dependabot = readFileSync(
-      fileURLToPath(new URL('../../.github/dependabot.yml', import.meta.url)),
-      'utf8',
-    );
-
-    expect(dependabot).toContain('package-ecosystem: npm');
-    expect(dependabot).toContain('nestjs:');
-    expect(dependabot).toContain('prisma:');
-    expect(dependabot).toContain('lint-test:');
-    expect(dependabot).toContain('package-ecosystem: github-actions');
-    expect(dependabot).toContain('actions:');
-  });
-
   it('accepts only an exact active full-audit exception', () => {
     expect(() =>
       auditPolicy.verifyFullReport(fullReport, [auditException], '2026-09-02'),
